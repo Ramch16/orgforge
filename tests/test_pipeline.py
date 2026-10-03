@@ -33,8 +33,10 @@ def test_brief_to_shipped_product(co):
     assert tests.returncode == 0
     log = subprocess.run(["git", "log", "--oneline"], cwd=ws, capture_output=True, text=True).stdout
     assert "[core]" in log and "signed off" in log
-    tasks = co.pipeline.overview()[0]["tasks"]
-    assert [t["status"] for t in tasks] == ["done", "done"]
+    all_tickets = co.pipeline.overview()[0]["tasks"]
+    assert {t["status"] for t in all_tickets} == {"done"}            # stage work and build work alike
+    tasks = [t for t in all_tickets if t["origin"] == "plan"]
+    assert [t["key"] for t in tasks] == ["core", "extras"]
     assert co.org.agent("Nadia")["score"] > 90 and co.org.agent("Tomas")["score"] > 90   # scored by the humans
     assert co.org.agent("Elin")["score"] > 90                                            # designer shares the CEO gate
     checkers = {r["reviewer"] for r in co.db.all("SELECT reviewer FROM reviews WHERE task_id=?", tasks[0]["id"])}
@@ -58,7 +60,7 @@ def test_failing_work_is_reworked_escalated_and_the_agent_replaced(make_company)
     decide_next(co, "ceo")
     project = decide_next(co, "cto")
     assert project["stage"] == "escalation"
-    task = co.pipeline.overview()[0]["tasks"][0]
+    task = next(t for t in co.pipeline.overview()[0]["tasks"] if t["key"] == "core")
     assert task["status"] == "failed" and task["attempts"] == 3      # first try + two reworks
     assert "Security Engineer" in task["feedback"] and "Code Reviewer" in task["feedback"]
 
@@ -72,7 +74,7 @@ def test_failing_work_is_reworked_escalated_and_the_agent_replaced(make_company)
 
     # CTO sends the task back; the seat's new holder picks it up and passes.
     decide_next(co, "cto", "rejected", "Start over and follow the design.")
-    task = co.pipeline.overview()[0]["tasks"][0]
+    task = next(t for t in co.pipeline.overview()[0]["tasks"] if t["key"] == "core")
     assert task["status"] == "done" and task["assignee_id"] == successor["id"]
 
 

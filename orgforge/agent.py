@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from .config import Settings
 from .db import DB
 from .org import Org
+from .tickets import TICKET_RULES, TICKET_TOOL_SPECS, TicketError
 from .tools import ToolError, Workspace, tool_schema
 
 
@@ -16,6 +17,7 @@ class RunResult:
     text: str = ""
     plan: list[dict] | None = None
     review: dict | None = None
+    transfer: dict | None = None
     completed: bool = False
     turns: int = 0
     tool_log: list[str] = field(default_factory=list)
@@ -24,8 +26,9 @@ class RunResult:
 class AgentRuntime:
     def __init__(self, db: DB, settings: Settings, org: Org, provider) -> None:
         self.db, self.s, self.org, self.provider = db, settings, org, provider
+        self.tickets = None                 # set by Company; every agent on a project can use the tracker
 
-    def _system(self, agent: dict, role: dict) -> str:
+    def _system(self, agent: dict, role: dict, on_project: bool = False) -> str:
         parts = [
             f"You are {agent['name']}, {role['title']} at {self.s.company}, a software company staffed by AI "
             f"agents and led by two people: {self.s.ceo_name} (CEO) and {self.s.cto_name} (CTO).",
@@ -37,6 +40,8 @@ class AgentRuntime:
             "- Your work is reviewed and scored, and the score decides whether you keep this seat.\n"
             "- When you are finished, reply with a short plain summary: what you did, and anything left open.",
         ]
+        if on_project and self.tickets:
+            parts.append(TICKET_RULES)
         if agent["lessons"]:
             parts.append("Feedback on record for this seat:\n" + agent["lessons"])
         return "\n\n".join(parts)
@@ -48,13 +53,16 @@ class AgentRuntime:
         if depth >= self.s.max_delegation_depth:
             names = [n for n in names if n != "delegate"]
         tools = [tool_schema(n) for n in names]
+        if project_id and self.tickets:
+            names = names + [n for n in TICKET_TOOL_SPECS if n not in names]
+            tools += [{"name": n, **TICKET_TOOL_SPECS[n]} for n in TICKET_TOOL_SPECS]
         meta = {**(meta or {}), "role": role["id"], "kind": role["kind"], "agent": agent["name"]}
         messages: list[dict] = [{"role": "user", "content": instructions}]
         result = RunResult()
 
         for turn in range(1, self.s.max_turns + 1):
             result.turns = turn
-            resp = self.provider.complete(model=agent["model"], system=self._system(agent, role), messages=messages,
+            resp = self.provider.complete(model=agent["model"], system=self._system(agent, role, bool(project_id)), messages=messages,
                                           tools=tools, max_tokens=self.s.max_tokens, meta=meta)
             self.db.run("UPDATE agents SET input_tokens=input_tokens+?, output_tokens=output_tokens+? WHERE id=?",
                         resp.input_tokens, resp.output_tokens, agent["id"])
@@ -91,6 +99,11 @@ class AgentRuntime:
         return result
 
     def _execute(self, agent, name, args, ws, result, project_id, meta, depth) -> str:
+        if name in TICKET_TOOL_SPECS and self.tickets:
+            try:
+                return self.tickets.agent_tool(agent, name, args, project_id, meta.get("ticket_id"), result)
+            except TicketError as exc:
+                raise ToolError(str(exc)) from exc
         if name == "submit_plan":
             tasks = args.get("tasks") or []
             if not tasks:
@@ -112,6 +125,11 @@ class AgentRuntime:
                 raise ToolError(f"Nobody available in role '{args['role']}'. Staffed roles: {', '.join(roles)}.")
             self.db.log("delegate", f"{agent['name']} delegated to {colleague['name']}: {args['instructions'][:120]}",
                         project_id, actor=agent["name"])
+            if meta.get("ticket_id"):
+                from .tickets import note
+                note(self.db, meta["ticket_id"], agent["name"], f"Asked {colleague['name']} "
+                     f"({self.tickets.where(colleague['role']) if self.tickets else colleague['role']}) for help: "
+                     f"{args['instructions'][:300]}", kind="handoff")
             sub = self.run(colleague, f"{agent['name']} asks for your help.\n\n{args['instructions']}", ws,
                            project_id=project_id, meta={k: v for k, v in meta.items() if k == "task_key"},
                            depth=depth + 1)

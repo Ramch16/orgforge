@@ -39,6 +39,7 @@ class Company:
         self.runtime = AgentRuntime(self.db, self.s, self.org, provider or _LazyProvider(self.s.provider))
         self.pipeline = Pipeline(self.db, self.s, self.org, self.perf, self.runtime)
         self.tickets = Tickets(self.db, self.pipeline)
+        self.runtime.tickets = self.tickets
         if create:
             self.org.seed()
 

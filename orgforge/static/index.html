@@ -76,6 +76,8 @@
   .history div { padding: .4rem 0; border-bottom: 1px solid var(--line); font-size: .88rem; }
   .history pre { white-space: pre-wrap; font: inherit; margin: .15rem 0 0; }
   .history .comment { border-left: 3px solid var(--cobalt); padding-left: .55rem; }
+  .history .transfer, .history .handoff { border-left: 3px solid var(--warn); padding-left: .55rem; }
+  .dept { font-size: .78rem; color: var(--soft); display: block; margin-bottom: .2rem; }
   tr[data-ticket] { cursor: pointer; } tr[data-ticket]:hover td { color: var(--cobalt); }
 </style>
 </head>
@@ -114,7 +116,7 @@
           <button class="primary" id="t-new">New ticket</button></div>
         <div class="filters">
           <select id="f-project" aria-label="Project"></select>
-          <select id="f-type" aria-label="Type"></select>
+          <select id="f-dept" aria-label="Department"></select>
           <input id="f-text" placeholder="Search tickets" aria-label="Search tickets">
           <label class="muted row" style="flex-wrap:nowrap"><input type="checkbox" id="f-cancelled" style="width:auto"> Cancelled</label>
         </div>
@@ -277,10 +279,11 @@ function options(el, items, keep = true) {
 function renderTickets() {
   const m = state.ticket_meta;
   options($("f-project"), [["", "All projects"], ...state.projects.map(p => [p.id, p.name])]);
-  options($("f-type"), [["", "All types"], ...m.types.map(t => [t, t[0].toUpperCase() + t.slice(1)])]);
-  const project = $("f-project").value, type = $("f-type").value, text = $("f-text").value.trim().toLowerCase();
+  const depts = [...new Set(state.tickets.map(t => t.department).filter(Boolean))].sort();
+  options($("f-dept"), [["", "All departments"], ...depts.map(d => [d, d])]);
+  const project = $("f-project").value, dept = $("f-dept").value, text = $("f-text").value.trim().toLowerCase();
   const showCancelled = $("f-cancelled").checked;
-  const shown = state.tickets.filter(t => (!project || String(t.project_id) === project) && (!type || t.type === type)
+  const shown = state.tickets.filter(t => (!project || String(t.project_id) === project) && (!dept || t.department === dept)
     && (showCancelled || t.status !== "cancelled")
     && (!text || `${t.ticket} ${t.title} ${t.assignee || ""}`.toLowerCase().includes(text)));
   const sig = JSON.stringify([shown, project]);
@@ -292,6 +295,7 @@ function renderTickets() {
       <button class="ticket is-${t.status}" data-ticket="${t.id}">
         <span class="row" style="justify-content:space-between"><span class="key">${esc(t.ticket)}</span><span class="prio ${t.priority}">${esc(t.priority)}</span></span>
         <span class="t-title">${esc(t.title)}</span>
+        <span class="dept">${esc(t.department)}</span>
         <span class="row muted" style="justify-content:space-between"><span>${esc(t.type)}${project ? "" : ` · ${esc(t.project)}`}</span>
         <span>${esc(t.assignee || "")}${t.comments ? ` · ${t.comments} 💬` : ""}</span></span>
       </button>`).join("")}</div>`;
@@ -303,7 +307,7 @@ async function loadTicket(id) {
   const sig = JSON.stringify(t);
   if ($("ticket-dlg").open && openTicketId === t.id && sig === ticketShown) return;
   openTicketId = t.id; ticketShown = sig;
-  const m = state.ticket_meta, editable = ["backlog", "todo"].includes(t.status), closed = ["done", "cancelled"].includes(t.status);
+  const m = state.ticket_meta, editable = ["backlog", "todo"].includes(t.status) && t.origin !== "stage", closed = ["done", "cancelled"].includes(t.status);
   const statusField = editable
     ? `<select id="d-status">${["backlog", "todo", "cancelled"].map(s => `<option value="${s}" ${s === t.status ? "selected" : ""}>${esc(m.statuses[s])}</option>`).join("")}</select>`
     : `<span class="chip ${t.status}">${esc(t.status_label)}</span> <span class="muted">${closed ? "" : "The team owns this status."}</span>`;
@@ -314,12 +318,14 @@ async function loadTicket(id) {
       <button class="quiet" id="d-close" aria-label="Close">Close</button></div>
     ${editable ? `<label class="field"><span>Title</span><input id="d-title" value="${esc(t.title)}"></label>` : `<h2 style="margin:.4rem 0">${esc(t.title)}</h2>`}
     <div class="grid2"><div class="field"><span>Status</span>${statusField}</div><div class="field"><span>Priority</span>${prioField}</div></div>
-    <p class="muted">Role ${esc(t.role)} · ${t.assignee ? `assigned to ${esc(t.assignee)}` : "unassigned"} · reported by ${esc(t.reporter)} · ${esc(t.created_at.slice(0, 16).replace("T", " "))}${t.attempts ? ` · sent back ${t.attempts}×` : ""}</p>
+    ${editable && t.origin !== "stage" ? `<label class="field"><span>Owner (transfer to another department)</span><select id="d-role">${
+      m.roles.map(r => `<option value="${esc(r.id)}" ${r.id === t.role ? "selected" : ""}>${esc(r.department)} · ${esc(r.title)}</option>`).join("")}</select></label>` : ""}
+    <p class="muted">${esc(t.department)} · ${esc(t.role)} · ${t.assignee ? `assigned to ${esc(t.assignee)}` : "unassigned"} · reported by ${esc(t.reporter)} · ${esc(t.created_at.slice(0, 16).replace("T", " "))}${t.attempts ? ` · sent back ${t.attempts}×` : ""}</p>
     ${editable ? `<label class="field"><span>Description</span><textarea id="d-desc" rows="5">${esc(t.description)}</textarea></label>`
                : `<div class="field"><span>Description</span><pre style="white-space:pre-wrap;font:inherit;margin:0">${esc(t.description) || '<span class="muted">None</span>'}</pre></div>`}
     ${closed ? "" : `<button id="d-save">Save changes</button>`}
     <p id="d-error" class="muted" style="color:var(--bad)"></p>
-    <div class="history">${t.history.map(h => `<div class="${h.kind}"><span class="muted">${esc(h.created_at.slice(0, 16).replace("T", " "))} · ${esc(h.author)}${h.kind === "comment" ? " commented" : ""}</span><pre>${esc(h.body)}</pre></div>`).join("") || '<span class="muted">No history yet.</span>'}</div>
+    <div class="history">${t.history.map(h => `<div class="${h.kind}"><span class="muted">${esc(h.created_at.slice(0, 16).replace("T", " "))} · ${esc(h.author)}${({ comment: " commented", transfer: " transferred", handoff: " handed off" })[h.kind] || ""}</span><pre>${esc(h.body)}</pre></div>`).join("") || '<span class="muted">No history yet.</span>'}</div>
     <label class="field"><span>Comment</span><textarea id="d-comment" placeholder="The agent who works this ticket next will read your comment."></textarea></label>
     <button class="primary" id="d-comment-go">Comment</button>`;
   for (const [field, value] of Object.entries(ticketDrafts[t.id] || {})) if ($(field)) $(field).value = value;
@@ -343,12 +349,13 @@ document.addEventListener("click", e => {
   else if (id === "d-save") ticketAct(async () => {
     const body = { priority: $("d-priority")?.value };
     if ($("d-status")) Object.assign(body, { status: $("d-status").value, title: $("d-title").value, description: $("d-desc").value });
+    if ($("d-role")) body.role = $("d-role").value;
     await api(`/api/tickets/${openTicketId}`, body);
-    for (const f of ["d-title", "d-desc", "d-status", "d-priority"]) delete (ticketDrafts[openTicketId] || {})[f];
+    for (const f of ["d-title", "d-desc", "d-status", "d-priority", "d-role"]) delete (ticketDrafts[openTicketId] || {})[f];
   });
 });
 document.addEventListener("input", e => {
-  if (openTicketId && ["d-title", "d-desc", "d-status", "d-priority", "d-comment"].includes(e.target.id))
+  if (openTicketId && ["d-title", "d-desc", "d-status", "d-priority", "d-role", "d-comment"].includes(e.target.id))
     (ticketDrafts[openTicketId] ||= {})[e.target.id] = e.target.value;
 });
 $("ticket-dlg").addEventListener("close", () => { openTicketId = null; ticketShown = ""; });
@@ -360,7 +367,7 @@ $("t-new").onclick = () => {
   options($("n-type"), m.types.map(t => [t, t[0].toUpperCase() + t.slice(1)]));
   options($("n-priority"), m.priorities.map(p => [p, p[0].toUpperCase() + p.slice(1)]));
   if (!$("n-priority").dataset.init) { $("n-priority").value = "medium"; $("n-priority").dataset.init = 1; }
-  options($("n-role"), [["", "Whoever built most of it"], ...m.roles.map(r => [r.id, r.title])]);
+  options($("n-role"), [["", "Engineering (whoever built most of it)"], ...m.roles.map(r => [r.id, `${r.department} · ${r.title}`])]);
   $("n-error").textContent = "";
   $("new-dlg").showModal();
 };
@@ -374,7 +381,7 @@ $("n-save").onclick = async () => {
     await refresh(true); await loadTicket(t.id);
   } catch (e) { if (e.message !== "unauthorized") $("n-error").textContent = e.message; }
 };
-["f-project", "f-type", "f-cancelled"].forEach(id => $(id).onchange = renderTickets);
+["f-project", "f-dept", "f-cancelled"].forEach(id => $(id).onchange = renderTickets);
 $("f-text").oninput = renderTickets;
 
 document.addEventListener("input", e => { if (e.target.dataset.draft) drafts[e.target.dataset.draft] = e.target.value; });

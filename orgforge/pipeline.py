@@ -22,7 +22,7 @@ from .config import Settings
 from .db import DB, now
 from .org import Org
 from .performance import Performance
-from .tickets import PRIORITY_ORDER, ticket_key, note
+from .tickets import PRIORITY_ORDER, note, ticket_key, where
 from .tools import Workspace
 from .validation import CONTRACT, CONTRACT_GUIDE, validate_plan, verify_product
 
@@ -70,6 +70,33 @@ class Pipeline:
             "INSERT INTO approvals (project_id, kind, required_role, title, summary, payload, created_at) "
             "VALUES (?,?,?,?,?,?,?)", pid, kind, role, title, summary[:6000], json.dumps(payload), now())
 
+    def _stage_ticket(self, pid: int, key: str, title: str, agent: dict, description: str,
+                      reporter: str = "OrgForge", handoff: str = "") -> int:
+        """Open (or reopen) the ticket for one department's stage work and assign it."""
+        t, ts = self.db.one("SELECT * FROM tasks WHERE project_id=? AND key=?", pid, key), now()
+        if t:
+            self.db.run("UPDATE tasks SET status='in_progress', role=?, assignee_id=?, updated_at=? WHERE id=?",
+                        agent["role"], agent["id"], ts, t["id"])
+            note(self.db, t["id"], agent["name"], "Started again.")
+            return t["id"]
+        tid = self.db.run(
+            "INSERT INTO tasks (project_id, key, title, description, role, assignee_id, status, type, priority, origin, "
+            "reporter, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", pid, key, title, description,
+            agent["role"], agent["id"], "in_progress", "story", "high", "stage", reporter, ts, ts)
+        note(self.db, tid, reporter, (f"Handed over from {handoff} to " if handoff else "Assigned to ")
+             + f"{agent['name']}, {where(self.db, agent['role'])}.", kind="handoff" if handoff else "change")
+        return tid
+
+    def _stage_status(self, pid: int, keys: str, status: str, author: str, body: str, kind: str = "change",
+                      only: tuple[str, ...] = ()) -> None:
+        """Move this project's stage tickets matching a key pattern and record why."""
+        sql = "SELECT id FROM tasks WHERE project_id=? AND origin='stage' AND key LIKE ?"
+        if only:
+            sql += f" AND status IN ({','.join('?' * len(only))})"
+        for t in self.db.all(sql, pid, keys, *only):
+            self.db.run("UPDATE tasks SET status=?, updated_at=? WHERE id=?", status, now(), t["id"])
+            note(self.db, t["id"], author, body, kind=kind)
+
     @staticmethod
     def _read(ws: Workspace, path: str) -> str:
         target = ws.resolve(path)
@@ -96,7 +123,7 @@ class Pipeline:
         if not lock.acquire(blocking=False):
             return self.project(pid)          # already running in another thread
         try:
-            self.db.run("UPDATE tasks SET status='todo' WHERE project_id=? AND status IN ('in_progress', 'in_review')", pid)
+            self.db.run("UPDATE tasks SET status='todo' WHERE project_id=? AND status IN ('in_progress', 'in_review') AND origin!='stage'", pid)
             steps = {"prd": self._prd, "architecture": self._architecture, "build": self._build}
             while (stage := self.project(pid)["stage"]) in steps:
                 steps[stage](self.project(pid))
@@ -122,10 +149,13 @@ class Pipeline:
         if p["feedback"]:
             ask += f"\n\nThe CEO sent the previous version back. Revise docs/PRD.md to address this:\n{p['feedback']}"
         self.db.log("work", f"{pm['name']} is writing the requirements.", p["id"], actor=pm["name"])
-        res = self.runtime.run(pm, ask, ws, project_id=p["id"])
+        prd_ticket = self._stage_ticket(p["id"], "stage-requirements", f"Requirements for {p['name']}", pm,
+                                        p["brief"], reporter=self.s.ceo_name)
+        res = self.runtime.run(pm, ask, ws, project_id=p["id"], meta={"ticket_id": prd_ticket})
         if not self._read(ws, "docs/PRD.md"):
             ws.write_file("docs/PRD.md", res.text or p["brief"])
         ws.commit(f"Requirements ({pm['name']})")
+        note(self.db, prd_ticket, pm["name"], "Requirements written to docs/PRD.md.\n" + (res.text or "")[:1500])
         authors = [pm["id"]]
         for role in self.org.staffed_roles("designer"):
             designer = self.org.pick(role=role["id"])
@@ -133,9 +163,17 @@ class Pipeline:
             if p["feedback"]:
                 ask += f"\n\nThe CEO sent the previous version back. Address this where it concerns the design:\n{p['feedback']}"
             self.db.log("work", f"{designer['name']} is designing the user experience.", p["id"], actor=designer["name"])
-            self.runtime.run(designer, ask, ws, project_id=p["id"])
+            note(self.db, prd_ticket, pm["name"], f"Handed to {designer['name']}, {where(self.db, role['id'])}, "
+                 "for the user experience design.", kind="handoff")
+            design_ticket = self._stage_ticket(p["id"], f"stage-design-{role['id']}", f"UX design for {p['name']}",
+                                               designer, "Design the user experience from docs/PRD.md into docs/DESIGN.md.",
+                                               reporter=pm["name"], handoff=where(self.db, pm["role"]))
+            design = self.runtime.run(designer, ask, ws, project_id=p["id"], meta={"ticket_id": design_ticket})
             ws.commit(f"UX design ({designer['name']})")
+            note(self.db, design_ticket, designer["name"], "Design written to docs/DESIGN.md.\n" + (design.text or "")[:1500])
             authors.append(designer["id"])
+        self._stage_status(p["id"], "stage-requirements", "in_review", pm["name"], f"Submitted to {self._boss('ceo')} for approval.", kind="handoff")
+        self._stage_status(p["id"], "stage-design-%", "in_review", "OrgForge", f"Submitted to {self._boss('ceo')} with the requirements.", kind="handoff", only=("in_progress",))
         summary = self._read(ws, "docs/PRD.md")
         if design := self._read(ws, "docs/DESIGN.md"):
             summary += f"\n\n----- docs/DESIGN.md -----\n{design}"
@@ -163,7 +201,11 @@ class Pipeline:
                "run/deploy setup, automated tests and user documentation.\n" + CONTRACT_GUIDE)
         if p["feedback"]:
             ask += f"\n\nThe CTO sent the previous design back. Address this:\n{p['feedback']}"
-        meta = {"builder_roles": [r["id"] for r in roles]}
+        arch_ticket = self._stage_ticket(p["id"], "stage-architecture", f"Architecture and build plan for {p['name']}",
+                                         architect, "Design the system in docs/ARCHITECTURE.md, write product.json and "
+                                         "submit the build plan.", reporter=self.s.cto_name,
+                                         handoff="Product and Design (approved requirements)")
+        meta = {"builder_roles": [r["id"] for r in roles], "ticket_id": arch_ticket}
         self.db.log("work", f"{architect['name']} is designing the system.", p["id"], actor=architect["name"])
         res = self.runtime.run(architect, ask, ws, project_id=p["id"], meta=meta)
         if not res.plan:
@@ -178,8 +220,8 @@ class Pipeline:
         except ValueError as exc:
             raise PipelineError(str(exc)) from exc
         self.db.run("DELETE FROM ticket_comments WHERE task_id IN (SELECT id FROM tasks WHERE project_id=? "
-                    "AND status!='done' AND origin!='human')", p["id"])
-        self.db.run("DELETE FROM tasks WHERE project_id=? AND status!='done' AND origin!='human'", p["id"])
+                    "AND status!='done' AND origin IN ('plan', 'pipeline'))", p["id"])
+        self.db.run("DELETE FROM tasks WHERE project_id=? AND status!='done' AND origin IN ('plan', 'pipeline')", p["id"])
         valid, keys = {r["id"] for r in roles}, set()
         for i, t in enumerate(res.plan, 1):
             key = re.sub(r"[^a-z0-9_-]+", "-", str(t.get("key") or f"task-{i}").lower()).strip("-") or f"task-{i}"
@@ -195,9 +237,14 @@ class Pipeline:
                 "INSERT INTO tasks (project_id, key, title, description, role, depends_on, status, reporter, "
                 "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)", p["id"], t["key"], t.get("title", t["key"]),
                 t.get("description", ""), role, json.dumps(deps), "todo", architect["name"], ts, ts)
-            note(self.db, tid, architect["name"], "Created from the build plan."
+            note(self.db, tid, architect["name"], f"Created from the build plan for {where(self.db, role)}."
                  + (f" Depends on: {', '.join(deps)}." if deps else ""))
         ws.commit(f"Architecture and plan ({architect['name']})")
+        built = self.db.all("SELECT id FROM tasks WHERE project_id=? AND origin='plan' AND status='todo' ORDER BY id", p["id"])
+        self._stage_status(p["id"], "stage-architecture", "in_review", architect["name"],
+                           f"Plan submitted: {len(built)} build ticket(s) for Engineering "
+                           f"({', '.join(ticket_key(t['id']) for t in built)}). Sent to {self._boss('cto')} for approval.",
+                           kind="handoff")
         plan_text = "\n".join(f"- [{t['key']}] {t.get('title', '')} ({t.get('role', '')})" for t in res.plan)
         self._approval(p["id"], "architecture", "cto", f"Design and plan for {p['name']}",
                        f"Plan ({len(res.plan)} tasks):\n{plan_text}\n\n"
@@ -208,7 +255,7 @@ class Pipeline:
         self._stage(p["id"], "architecture_approval", "")
 
     def _next_task(self, pid: int) -> dict | None:
-        tasks = self.db.all(f"SELECT * FROM tasks WHERE project_id=? ORDER BY {PRIORITY_ORDER}, id", pid)
+        tasks = self.db.all(f"SELECT * FROM tasks WHERE project_id=? AND origin!='stage' ORDER BY {PRIORITY_ORDER}, id", pid)
         done = {t["key"] for t in tasks if t["status"] in ("done", "cancelled")}
         for t in tasks:
             if t["status"] == "todo" and all(d in done for d in json.loads(t["depends_on"])):
@@ -227,8 +274,8 @@ class Pipeline:
                                {"task_id": task["id"]})
                 self._stage(p["id"], "escalation")
                 return
-        stuck = self.db.all("SELECT key FROM tasks WHERE project_id=? AND status NOT IN ('done', 'cancelled', 'backlog')",
-                            p["id"])
+        stuck = self.db.all("SELECT key FROM tasks WHERE project_id=? AND origin!='stage' "
+                            "AND status NOT IN ('done', 'cancelled', 'backlog')", p["id"])
         if stuck:
             raise PipelineError("Tasks cannot start because their dependencies never finish: "
                                 + ", ".join(t["key"] for t in stuck))
@@ -236,14 +283,19 @@ class Pipeline:
         qa = self.org.pick(kind="qa")
         if qa:
             self.db.log("work", f"{qa['name']} is running the release check.", p["id"], actor=qa["name"])
+            qa_ticket = self._stage_ticket(p["id"], "stage-release-qa", f"Release QA for {p['name']}", qa,
+                                           "Check the whole product against docs/PRD.md and report in docs/QA_REPORT.md.",
+                                           handoff="Engineering (all build tickets done)")
             integration = self.runtime.run(qa, "All build tasks are complete. Check the product as a whole against docs/PRD.md: "
                              "install it, run the full test suite and try the main flows. Write what you ran and "
                              "what you found to docs/QA_REPORT.md, including anything that does not work. "
                              "Finish by calling submit_review; request_changes if any required flow fails.",
-                             ws, project_id=p["id"], meta={"purpose": "integration"})
+                             ws, project_id=p["id"], meta={"purpose": "integration", "ticket_id": qa_ticket})
             ws.commit(f"Release check ({qa['name']})")
             if not integration.completed or not integration.review or integration.review["verdict"] != "approve" or not self._read(ws, "docs/QA_REPORT.md"):
                 release_findings.append("Integration QA: " + ((integration.review or {}).get("notes") or "No completed approval verdict."))
+            self._stage_status(p["id"], "stage-release-qa", "done", qa["name"], self._verdict(integration.review)
+                               + ("" if not release_findings else " Repair work goes back to Engineering."), kind="comment")
         else:
             release_findings.append("No QA agent is staffed to validate the full product.")
         if release_findings:
@@ -254,6 +306,9 @@ class Pipeline:
             return
         if open_findings:
             self._release_failure(p, ["UNRESOLVED AUDIT FINDINGS", *open_findings])
+            return
+        if self._next_task(p["id"]):
+            self.db.log("work", "The team filed new tickets during the release checks; building those first.", p["id"])
             return
         if not self._contract_unchanged(p, ws):
             return
@@ -279,12 +334,17 @@ class Pipeline:
         for role in self.org.staffed_roles("auditor"):
             auditor = self.org.pick(role=role["id"])
             self.db.log("work", f"{auditor['name']} is running the {role['title'].lower()} audit.", pid, actor=auditor["name"])
+            audit_ticket = self._stage_ticket(pid, f"stage-audit-{role['id']}", f"{role['title']} audit for {p['name']}",
+                                              auditor, f"Audit the product and report in docs/audits/{role['id']}.md.",
+                                              handoff="Quality (release QA passed)")
             res = self.runtime.run(
                 auditor, f"All build tasks for \"{p['name']}\" are complete. Audit the whole product in the workspace "
                 f"against docs/PRD.md and docs/ARCHITECTURE.md. Write your report to docs/audits/{role['id']}.md, "
                 "then finish by calling submit_review. Use request_changes only for findings that must be fixed "
-                "before release, and list exactly what to fix.", ws, project_id=pid)
+                "before release, and list exactly what to fix.", ws, project_id=pid, meta={"ticket_id": audit_ticket})
             ws.commit(f"{role['title']} audit ({auditor['name']})")
+            self._stage_status(pid, f"stage-audit-{role['id']}", "done", auditor["name"], self._verdict(res.review),
+                               kind="comment")
             if not res.completed or not res.review or res.review["verdict"] != "approve" or not self._read(ws, f"docs/audits/{role['id']}.md"):
                 findings.append((role, auditor, (res.review or {}).get("notes") or "Audit did not produce a completed approval verdict."))
         if not findings:
@@ -294,10 +354,13 @@ class Pipeline:
         if len(rounds) >= self.s.max_rework:
             return [f"{role['title']}: {notes}" for role, _, notes in findings]
         for role, auditor, notes in findings:
-            self._fix_task(pid, f"Fix {role['title'].lower()} audit findings",
+            fix = self._fix_task(pid, f"Fix {role['title'].lower()} audit findings",
                            f"{auditor['name']} ({role['title']}) audited the product and requires these fixes "
                            f"before release:\n{notes}\n\nFull report: docs/audits/{role['id']}.md",
                            key=f"audit-{len(rounds) + 1}-{role['id']}", reporter=auditor["name"])
+            self._stage_status(pid, f"stage-audit-{role['id']}", "done", auditor["name"],
+                               f"Filed {ticket_key(fix)} for {where(self.db, self._fix_role(pid))} to fix the findings.",
+                               kind="handoff")
         self.db.log("work", f"Audits raised {len(findings)} fix task(s).", pid)
         return None
 
@@ -364,15 +427,31 @@ class Pipeline:
             if task["feedback"]:
                 ask += f"\n\nYour previous attempt was sent back. Fix these findings:\n{task['feedback']}"
             comments = self.db.all("SELECT author, body FROM (SELECT * FROM ticket_comments WHERE task_id=? "
-                                   "AND kind='comment' ORDER BY id DESC LIMIT 10) ORDER BY id", task["id"])
+                                   "AND kind IN ('comment', 'transfer') ORDER BY id DESC LIMIT 12) ORDER BY id", task["id"])
+            bosses = {self.s.ceo_name: "CEO", self.s.cto_name: "CTO"}
             if comments:
-                ask += ("\n\nComments on this ticket from the CEO and CTO (follow them):\n"
-                        + "\n".join(f"- {c['author']}: {c['body']}" for c in comments))
-            meta = {"task_key": task["key"]}
+                ask += ("\n\nRecent comments and transfers on this ticket. Instructions from the CEO or CTO "
+                        "override everything else:\n"
+                        + "\n".join(f"- {c['author']}{' (' + bosses[c['author']] + ')' if c['author'] in bosses else ''}: "
+                                     f"{c['body']}" for c in comments))
+            ask += (f"\n\nThis is ticket {ticket_key(task['id'])}, owned by {where(self.db, task['role'])}. Log your "
+                    "progress on it, file tickets for anything outside it, and transfer it if another department "
+                    "should own it.")
+            meta = {"task_key": task["key"], "ticket_id": task["id"]}
             res = self.runtime.run(agent, ask, ws, project_id=pid, meta=meta)
+
+            if res.transfer:                    # the agent handed the ticket to another department
+                if ws.changed_files() != "(no uncommitted changes)":
+                    ws.commit(f"[{task['key']}] work so far, before transfer ({agent['name']})")
+                self.db.run("UPDATE tasks SET status='todo', role=?, assignee_id=NULL, attempts=0, result=?, "
+                            "updated_at=? WHERE id=?", res.transfer["role"], res.text, now(), task["id"])
+                if res.text:
+                    note(self.db, task["id"], agent["name"], res.text[:2000], kind="comment")
+                return True
 
             changed = ws.changed_files()
             self.db.run("UPDATE tasks SET status='in_review', updated_at=? WHERE id=?", now(), task["id"])
+            note(self.db, task["id"], agent["name"], "Submitted for review.\n" + (res.text or "")[:1500])
             findings, approved = [], res.completed
             if not res.completed:
                 findings.append("Builder did not finish within its turn budget.")
@@ -381,6 +460,8 @@ class Pipeline:
                 if not checker:
                     continue
                 source = "qa" if check_role["kind"] == "qa" else "peer"
+                note(self.db, task["id"], agent["name"], f"Handed to {checker['name']}, "
+                     f"{where(self.db, check_role['id'])}, for review.", kind="handoff")
                 check = self.runtime.run(
                     checker,
                     f"As {check_role['title']}, check task [{task['key']}] \"{task['title']}\" in project "
@@ -389,6 +470,7 @@ class Pipeline:
                     "Requirements are in docs/PRD.md and the design in docs/ARCHITECTURE.md. "
                     "Finish by calling submit_review.",
                     ws, project_id=pid, meta={**meta, "author": agent["name"]})
+                note(self.db, task["id"], checker["name"], self._verdict(check.review), kind="comment")
                 if not check.review:
                     self.db.log("warn", f"{checker['name']} gave no verdict on [{task['key']}].", pid)
                     approved = False
@@ -410,17 +492,29 @@ class Pipeline:
                 self.db.run("UPDATE tasks SET status='done', result=?, updated_at=? WHERE id=?",
                             res.text, now(), task["id"])
                 self.db.log("work", f"[{task['key']}] passed review.", pid, actor=agent["name"])
-                note(self.db, task["id"], agent["name"], "Passed review. Done.\n" + (res.text or "")[:2000])
+                note(self.db, task["id"], agent["name"], "Passed review. Done.")
                 return True
             attempts = task["attempts"] + 1
             failed = attempts > self.s.max_rework
             self.db.run("UPDATE tasks SET status=?, attempts=?, feedback=?, result=?, updated_at=? WHERE id=?",
                         "failed" if failed else "todo", attempts, "\n".join(findings), res.text, now(), task["id"])
             self.db.log("work", f"[{task['key']}] sent back ({attempts}).", pid, actor=agent["name"])
-            note(self.db, task["id"], "Review", f"Sent back ({attempts}):\n" + "\n".join(findings)
-                 + ("\nEscalated to the CTO." if failed else ""))
+            note(self.db, task["id"], "OrgForge", (f"Escalated to {self._boss('cto')} after {attempts} attempts:\n"
+                 if failed else f"Sent back to {agent['name']}, {where(self.db, task['role'])} (attempt {attempts}):\n")
+                 + "\n".join(findings), kind="handoff")
             if failed:
                 return False
+
+    def _boss(self, role: str) -> str:
+        name = self.s.human(role)
+        return name if name.upper() == role.upper() else f"{name} ({role.upper()})"
+
+    @staticmethod
+    def _verdict(review: dict | None) -> str:
+        if not review:
+            return "No verdict submitted."
+        word = "Approved" if review["verdict"] == "approve" else "Changes requested"
+        return f"{word} ({review['score']:.0f}/100). {review['notes']}".strip()
 
     def _fix_role(self, pid: int) -> str:
         staffed = [r["id"] for r in self._builder_roles()]
@@ -431,7 +525,7 @@ class Pipeline:
                               "AND key NOT LIKE 'audit-%' GROUP BY role ORDER BY n DESC, MIN(id)", pid)
         return next((r["role"] for r in by_work if r["role"] in staffed), staffed[0])
 
-    def _fix_task(self, pid: int, title: str, feedback: str, key: str | None = None, reporter: str = "OrgForge") -> None:
+    def _fix_task(self, pid: int, title: str, feedback: str, key: str | None = None, reporter: str = "OrgForge") -> int:
         role = self._fix_role(pid)
         if not key:
             n = self.db.one("SELECT COUNT(*) AS n FROM tasks WHERE project_id=? AND key LIKE 'fix-%'", pid)["n"] + 1
@@ -440,7 +534,8 @@ class Pipeline:
         tid = self.db.run("INSERT INTO tasks (project_id, key, title, description, role, status, type, priority, origin, "
                           "reporter, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                           pid, key, title, feedback, role, "todo", "bug", "high", "pipeline", reporter, ts, ts)
-        note(self.db, tid, reporter, "Filed automatically from a failed check or a sent-back decision.")
+        note(self.db, tid, reporter, f"Filed for {where(self.db, role)} from a failed check or a sent-back decision.")
+        return tid
 
     # ---- human decisions -------------------------------------------------
     def decide(self, approval_id: int, role: str, decision: str, feedback: str = "") -> dict:
@@ -476,6 +571,11 @@ class Pipeline:
                     self.perf.record(author, HUMAN_APPROVED if ok else HUMAN_REJECTED, source="human", reviewer=who,
                                      notes=feedback or f"{a['title']} approved.", project_id=pid)
                     self.perf.evaluate(author)
+            keys = ("stage-requirements", "stage-design-%") if kind == "prd" else ("stage-architecture",)
+            for key in keys:
+                self._stage_status(pid, key, "done" if ok else "todo", who,
+                                   f"Approved by {who}." if ok else f"Sent back by {who}: {feedback}",
+                                   kind="change" if ok else "comment", only=("in_review",))
             if kind == "prd":
                 self._stage(pid, "architecture" if ok else "prd", "" if ok else feedback)
             else:

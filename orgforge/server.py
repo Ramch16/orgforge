@@ -59,6 +59,7 @@ class TicketChange(BaseModel):
     priority: str | None = None
     title: str | None = None
     description: str | None = None
+    role: str | None = None
 
 
 class Comment(BaseModel):
@@ -112,7 +113,7 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
             "approvals": co.pipeline.inbox(),
             "tickets": co.tickets.search(),
             "ticket_meta": {"types": TYPES, "priorities": PRIORITIES, "statuses": STATUS_LABELS,
-                            "roles": [{"id": r["id"], "title": r["title"]} for r in co.pipeline._builder_roles()]},
+                            "roles": co.tickets.work_roles()},
             "events": co.events(60)[::-1],
         }
 
@@ -152,7 +153,7 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
     @app.post("/api/tickets/{ref}")
     def change_ticket(ref: str, body: TicketChange, role: str = Depends(auth)) -> dict:
         t = guard(lambda: co.tickets.update(ref, co.s.human(role), status=body.status, priority=body.priority,
-                                            title=body.title, description=body.description))
+                                            title=body.title, description=body.description, role=body.role or None))
         run_in_background(t["project_id"])
         return t
 

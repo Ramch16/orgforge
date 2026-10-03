@@ -74,7 +74,7 @@ class MockProvider:
         self.fail_audits_once, self._failed = set(fail_audits_once or ()), set()
         env = os.environ.get("ORGFORGE_MOCK_BAD_AGENTS", "")
         self.bad_agents = set(bad_agents or ()) | {n.strip() for n in env.split(",") if n.strip()}
-        self._n = 0
+        self._n, self._filed = 0, False
 
     def _call(self, name: str, **inp) -> dict:
         self._n += 1
@@ -130,9 +130,11 @@ class MockProvider:
                 f"    def test_it(self):\n        self.assertEqual({key}(), '{key} ok')\n"
             )
             return [
-                [self._call("write_file", path=f"src/{key}.py", content=code),
+                [self._call("comment_ticket", body=f"Starting: implementing {key} with unit tests."),
+                 self._call("write_file", path=f"src/{key}.py", content=code),
                  self._call("write_file", path=f"tests/test_{key}.py", content=test)],
-                [self._call("run_command", command="python -m unittest discover -s tests")],
+                [self._call("run_command", command="python -m unittest discover -s tests"),
+                 self._call("comment_ticket", body="Ran the test suite; all tests pass.")],
             ]
         if kind in ("reviewer", "qa"):
             if purpose == "integration":
@@ -145,7 +147,13 @@ class MockProvider:
                      else self._call("run_command", command="python -m unittest discover -s tests"))
             verdict = dict(score=30, verdict="request_changes", notes="Does not meet the acceptance criteria.") \
                 if bad else dict(score=88, verdict="approve", notes="Meets the task. Tests pass.")
-            return [[first], [self._call("submit_review", **verdict)]]
+            first = [first]
+            if kind == "reviewer" and key == "core" and not bad and step == 0 and not self._filed:
+                self._filed = True              # one follow-up per company run, filed for Engineering
+                first.append(self._call("create_ticket", title="Add a usage example for the core module",
+                                        description="README should show calling core() and its output.",
+                                        type="task", priority="low", role="backend_engineer"))
+            return [first, [self._call("submit_review", **verdict)]]
         return []
 
     def complete(self, *, model, system, messages, tools, max_tokens, meta=None) -> LLMResponse:

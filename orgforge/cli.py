@@ -101,7 +101,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--no-run", action="store_true"); who(p)
     p = tk.add_parser("update", help="Change status, priority, title or description"); p.add_argument("ticket")
     p.add_argument("--status", choices=("backlog", "todo", "cancelled")); p.add_argument("--priority", choices=PRIORITIES)
-    p.add_argument("--title"); p.add_argument("--description"); p.add_argument("--no-run", action="store_true"); who(p)
+    p.add_argument("--title"); p.add_argument("--description")
+    p.add_argument("--role", help="Transfer to this role (and its department)")
+    p.add_argument("--no-run", action="store_true"); who(p)
     p = tk.add_parser("comment", help="Comment on a ticket; the agent who works it next will read it")
     p.add_argument("ticket"); p.add_argument("text"); who(p)
 
@@ -184,8 +186,8 @@ def _dispatch(args) -> int:
 
 def _print_ticket_row(t: dict) -> None:
     who = t["assignee"] or "-"
-    print(f"  {t['ticket']:<7} {t['status_label']:<12} {t['priority']:<7} {t['type']:<6} {who:<10} "
-          f"P{t['project_id']} {t['title']}" + (f"  ({t['comments']} comments)" if t.get("comments") else ""))
+    print(f"  {t['ticket']:<7} {t['status_label']:<12} {t['priority']:<7} {t['type']:<6} {t['department'][:22]:<22} "
+          f"{who:<10} P{t['project_id']} {t['title']}" + (f"  ({t['comments']} comments)" if t.get("comments") else ""))
 
 
 def _ticket(co: Company, args, role: str) -> None:
@@ -206,16 +208,16 @@ def _ticket(co: Company, args, role: str) -> None:
         print(f"Filed {t['ticket']}.")
     elif cmd == "update":
         t = co.tickets.update(args.ticket, by, status=args.status, priority=args.priority,
-                              title=args.title, description=args.description)
+                              title=args.title, description=args.description, role=args.role)
     else:
         t = co.tickets.comment(args.ticket, by, args.text)
     print(f"\n{t['ticket']}  {t['title']}\n  {t['type']} · {t['priority']} priority · {t['status_label']} · "
-          f"project {t['project_id']} ({t['project']}) · {t['role']} · {t['assignee'] or 'unassigned'} · "
+          f"project {t['project_id']} ({t['project']}) · {co.tickets.where(t['role'])} · {t['assignee'] or 'unassigned'} · "
           f"reported by {t['reporter']}")
     if t["description"]:
         print("\n  " + t["description"].replace("\n", "\n  "))
     for h in t["history"]:
-        label = "commented" if h["kind"] == "comment" else ""
+        label = {"comment": "commented", "transfer": "transferred", "handoff": "handed off"}.get(h["kind"], "")
         print(f"\n  {h['created_at'][:16].replace('T', ' ')}  {h['author']} {label}\n    "
               + h["body"].replace("\n", "\n    "))
     if cmd in ("new", "update") and t["status"] == "todo" and not args.no_run:

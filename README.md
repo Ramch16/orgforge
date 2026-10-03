@@ -172,26 +172,44 @@ it beyond your machine.
 
 ## Tickets
 
-Every piece of work is a ticket (`T-12`) on the dashboard's board: Backlog,
-To do, In progress, In review, Needs CTO and Done. Build-plan tasks, audit
-fixes and send-back fixes become tickets automatically, and each ticket keeps
-its history: who started it, review findings, escalations and decisions.
+The whole company works through an internal, Jira-style ticket tracker. Every
+piece of work is a ticket (`T-12`) on the dashboard board: Backlog, To do,
+In progress, In review, Needs CTO and Done, filterable by project and
+department.
 
-The CEO and CTO can file tickets (task, bug or story; urgent, high, medium or
-low priority), comment, change priority, and move tickets between backlog,
-to do and cancelled. Agents own the working statuses. The team picks up to-do
-tickets highest priority first, and the agent working a ticket reads its
-comments. Backlog tickets wait for triage and do not block a release. A to-do
-ticket on a product that is releasing or already ready for deployment sends it
-back to build, withdraws pending release approvals, and runs the release checks
-again.
+- **Each department's stage work is a ticket.** Requirements (Product), UX
+  design (Design), architecture and plan (Engineering), release QA (Quality)
+  and every audit (Security, Compliance, Platform). Each ticket records who
+  handed it over to whom, when it went to the CEO or CTO, and their decision.
+- **Build work is tickets.** That includes plan tasks, audit fixes and fixes
+  after work is sent back. Each records the agent's progress, every handoff to
+  a reviewer in another department, each reviewer's verdict, send-backs and
+  escalations.
+- **Agents log as they work.** Every agent on a project has ticket tools. They
+  comment progress, decisions and blockers, file tickets for bugs or follow-up
+  work they find, and transfer a ticket to the role or department that should
+  own it. Agent-filed tickets are picked up by the team. Past 10 open, or 25 in
+  total per project, they wait in the backlog for the CEO or CTO to triage.
+  Agents can transfer a ticket at most 4 times, and their tickets never reopen
+  a product that is releasing.
+- **The CEO and CTO triage.** You can file tickets (task, bug or story; urgent
+  to low), comment, change priority, transfer a ticket to another department,
+  and move it between backlog, to do and cancelled. The pipeline owns the
+  working statuses. The agent working a ticket reads its comments, and CEO or
+  CTO instructions take precedence.
+
+The team works to-do tickets highest priority first. Backlog tickets do not
+block a release. Tickets filed during the release checks are built before the
+release goes to the CTO. A to-do ticket you file on a product that is
+releasing, or already ready for deployment, sends it back to build, withdraws
+pending release approvals, and runs the release checks again.
 
 ```bash
 orgforge ticket new 1 "Greeting crashes on empty name" --type bug --priority urgent --todo
 orgforge ticket list --project 1
 orgforge ticket comment T-5 "Add a regression test" --as cto
-orgforge ticket update T-5 --priority high
-orgforge ticket show T-5
+orgforge ticket update T-5 --role ux_designer        # transfer to Design
+orgforge ticket show T-5                             # full history and handoffs
 ```
 
 ## Performance, firing and rehiring
@@ -300,7 +318,7 @@ Each role gets only the tools listed for it.
 | `orgforge/org.py`         | Departments, roles, hire, fire, replace, rehire    |
 | `orgforge/performance.py` | Scores and HR policy                               |
 | `orgforge/pipeline.py`    | Stages, task loop, human decisions                 |
-| `orgforge/tickets.py`     | Ticket tracker: filing, triage, comments, history  |
+| `orgforge/tickets.py`     | Ticket tracker and the agents' ticket tools        |
 | `orgforge/agent.py`       | One agent run: prompt and tool loop                |
 | `orgforge/tools.py`       | Workspace file and command tools                   |
 | `orgforge/llm.py`         | Anthropic provider and offline mock                |
