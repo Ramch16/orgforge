@@ -49,6 +49,13 @@ A minimal contract looks like:
 }
 ```
 
+The CTO approves `product.json` together with the design, and OrgForge pins that
+exact file. Agents cannot quietly weaken it later: if `product.json` differs from
+the approved version when the checks are about to run, the release stops and the
+CTO sees a diff. Approving accepts the new checks; sending back restores the
+approved file and passes the feedback to the team. Projects designed before
+0.3.1 have no pinned contract, so the CTO reviews their `product.json` once.
+
 Commands must terminate, fail with a nonzero exit status on errors, and exercise
 real behavior. For a web product, include browser and API checks; for a library,
 include representative usage checks. Server checks must start their own test

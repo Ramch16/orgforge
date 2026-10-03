@@ -170,7 +170,7 @@ function render() {
   const order = state.stages.map(s => s.id);
   $("projects").innerHTML = state.projects.map(p => {
     const at = order.indexOf(p.stage);
-    const track = state.stages.filter(s => !["escalation", "release_blocked"].includes(s.id)).map(s => {
+    const track = state.stages.filter(s => !["escalation", "contract_review", "release_blocked"].includes(s.id)).map(s => {
       const i = order.indexOf(s.id);
       return `<span title="${esc(s.label)}" class="${p.stage === "done" || i < at ? "past" : i === at ? "now" : ""}"></span>`;
     }).join("");

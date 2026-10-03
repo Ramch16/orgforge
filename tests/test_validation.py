@@ -147,9 +147,52 @@ def test_executable_failure_blocks_release(co):
     p = start_build(co)
     ws = co.pipeline.workspace(p)
     contract(ws, 'python -c "raise SystemExit(9)"')
+    assert decide_next(co, 'cto')['stage'] == 'contract_review'
     assert decide_next(co, 'cto')['stage'] == 'release_blocked'
     report = json.loads(ws.resolve('docs/VERIFICATION.json').read_text())
     assert not report['passed'] and 'exit code 9' in report['checks'][0]['output']
+
+
+def approve_design_then_edit_contract(co, command):
+    p = start_build(co)
+    ws = co.pipeline.workspace(p)
+    approved = ws.resolve('product.json').read_text()
+    [approval] = co.pipeline.inbox('cto')
+    co.pipeline.decide(approval['id'], 'cto', 'approved')
+    contract(ws, command)                   # an agent rewrites the checks mid-build
+    return p, ws, approved
+
+
+def test_weakened_contract_goes_to_cto_and_rejection_restores_it(co):
+    p, ws, approved = approve_design_then_edit_contract(co, 'true')
+    assert co.pipeline.advance(p['id'])['stage'] == 'contract_review'
+    [approval] = co.pipeline.inbox('cto')
+    assert approval['kind'] == 'contract' and '"command": "true"' in approval['summary']
+    with pytest.raises(PipelineError):
+        co.pipeline.decide(approval['id'], 'cto', 'rejected')    # feedback is required
+    assert decide_next(co, 'cto', 'rejected', 'Keep the real checks')['stage'] == 'release_approval'
+    assert ws.resolve('product.json').read_text() == approved
+    assert co.db.one("SELECT COUNT(*) AS n FROM tasks WHERE title LIKE '%acceptance checks%'")['n'] == 1
+    report = json.loads(ws.resolve('docs/VERIFICATION.json').read_text())
+    assert [c['id'] for c in report['checks']] == ['unit-tests', 'core-flow']
+
+
+def test_cto_can_accept_changed_contract(co):
+    p, ws, _ = approve_design_then_edit_contract(co, 'python -c "print(1)"')
+    assert co.pipeline.advance(p['id'])['stage'] == 'contract_review'
+    assert decide_next(co, 'cto')['stage'] == 'release_approval'
+    report = json.loads(ws.resolve('docs/VERIFICATION.json').read_text())
+    assert [c['id'] for c in report['checks']] == ['flow'] and report['passed']
+    assert co.pipeline._approved_contract(p['id']) == ws.resolve('product.json').read_text()
+
+
+def test_design_approved_without_pinned_contract_needs_cto_review(co):
+    p = start_build(co)
+    [approval] = co.pipeline.inbox('cto')
+    co.db.run("UPDATE approvals SET payload='{}' WHERE id=?", approval['id'])   # designed before 0.3.1
+    co.pipeline.decide(approval['id'], 'cto', 'approved')
+    assert co.pipeline.advance(p['id'])['stage'] == 'contract_review'
+    assert decide_next(co, 'cto')['stage'] == 'release_approval'
 
 
 def test_exhausted_builder_cannot_pass_even_when_reviewers_approve(co, monkeypatch):

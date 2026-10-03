@@ -11,6 +11,7 @@ human decision; `decide()` records the decision and moves the stage on.
 """
 from __future__ import annotations
 
+import difflib
 import json
 import re
 import threading
@@ -22,11 +23,12 @@ from .db import DB, now
 from .org import Org
 from .performance import Performance
 from .tools import Workspace
-from .validation import CONTRACT_GUIDE, validate_plan, verify_product
+from .validation import CONTRACT, CONTRACT_GUIDE, validate_plan, verify_product
 
 STAGES = ["prd", "prd_approval", "architecture", "architecture_approval", "build",
-          "escalation", "release_blocked", "release_approval", "signoff", "done"]
+          "escalation", "contract_review", "release_blocked", "release_approval", "signoff", "done"]
 STAGE_LABELS = {
+    "contract_review": "Acceptance checks changed, with CTO",
     "release_blocked": "Release checks need attention",
     "prd": "Writing requirements", "prd_approval": "Requirements with CEO",
     "architecture": "Designing", "architecture_approval": "Design with CTO",
@@ -193,8 +195,11 @@ class Pipeline:
         ws.commit(f"Architecture and plan ({architect['name']})")
         plan_text = "\n".join(f"- [{t['key']}] {t.get('title', '')} ({t.get('role', '')})" for t in res.plan)
         self._approval(p["id"], "architecture", "cto", f"Design and plan for {p['name']}",
-                       f"Plan ({len(res.plan)} tasks):\n{plan_text}\n\n{self._read(ws, 'docs/ARCHITECTURE.md')}",
-                       {"agent_ids": [architect["id"]], "file": "docs/ARCHITECTURE.md"})
+                       f"Plan ({len(res.plan)} tasks):\n{plan_text}\n\n"
+                       f"Acceptance checks ({CONTRACT}):\n{self._read(ws, CONTRACT) or '(none written)'}\n\n"
+                       f"{self._read(ws, 'docs/ARCHITECTURE.md')}",
+                       {"agent_ids": [architect["id"]], "file": "docs/ARCHITECTURE.md",
+                        "contract": self._read(ws, CONTRACT) or None})
         self._stage(p["id"], "architecture_approval", "")
 
     def _next_task(self, pid: int) -> dict | None:
@@ -244,6 +249,8 @@ class Pipeline:
         if open_findings:
             self._release_failure(p, ["UNRESOLVED AUDIT FINDINGS", *open_findings])
             return
+        if not self._contract_unchanged(p, ws):
+            return
         verification = verify_product(ws)
         ws.commit("Executable product verification")
         if not verification["passed"]:
@@ -287,6 +294,26 @@ class Pipeline:
                            key=f"audit-{len(rounds) + 1}-{role['id']}")
         self.db.log("work", f"Audits raised {len(findings)} fix task(s).", pid)
         return None
+
+    def _approved_contract(self, pid: int) -> str | None:
+        """The product.json text the CTO last approved, with the design or as a later change."""
+        row = self.db.one("SELECT payload FROM approvals WHERE project_id=? AND status='approved' "
+                          "AND kind IN ('architecture', 'contract') ORDER BY id DESC LIMIT 1", pid)
+        return json.loads(row["payload"]).get("contract") if row else None
+
+    def _contract_unchanged(self, p: dict, ws: Workspace) -> bool:
+        """Agents may not rewrite the acceptance checks the CTO approved; any change goes back to the CTO."""
+        approved, current = self._approved_contract(p["id"]), self._read(ws, CONTRACT) or None
+        if current == approved:
+            return True
+        diff = "\n".join(difflib.unified_diff((approved or "").splitlines(), (current or "").splitlines(),
+                                              "approved/product.json", "current/product.json", lineterm=""))
+        self._approval(p["id"], "contract", "cto", f"Acceptance checks changed for {p['name']}",
+                       "The team changed product.json after you approved it. Approve to accept the new checks. "
+                       "Send back to restore the approved checks and pass your feedback to the team.\n\n" + diff,
+                       {"contract": current, "approved": approved})
+        self._stage(p["id"], "contract_review")
+        return False
 
     def _release_failure(self, p: dict, findings: list[str]) -> None:
         pid = p["id"]
@@ -439,6 +466,18 @@ class Pipeline:
             else:
                 self.db.run("UPDATE tasks SET status='todo', attempts=0, feedback=?, updated_at=? WHERE id=?",
                             f"Guidance from the CTO: {feedback}\n{task['feedback']}", now(), task["id"])
+            self._stage(pid, "build")
+        elif kind == "contract":
+            if not ok:
+                ws = self.workspace(self.project(pid))
+                if payload.get("approved") is None:
+                    ws.resolve(CONTRACT).unlink(missing_ok=True)
+                else:
+                    ws.write_file(CONTRACT, payload["approved"])
+                ws.commit(f"Restore the CTO-approved {CONTRACT}")
+                self._fix_task(pid, "Address the CTO's feedback on the acceptance checks",
+                               f"The CTO rejected your changes to {CONTRACT}, which has been restored to the approved "
+                               f"version. Do not edit {CONTRACT} again unless the CTO asks.\n{feedback}")
             self._stage(pid, "build")
         elif kind == "release_blocked":
             self.db.run("UPDATE tasks SET key='retried-' || key || '-' || id WHERE project_id=? AND key LIKE 'verify-%'", pid)
