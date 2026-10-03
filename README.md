@@ -17,6 +17,72 @@ brief ─► requirements + UX design ─► CEO ─► architecture + plan ─�
                         fails: rework (max_rework times) ─► escalate to CTO                     then the audits run again
 ```
 
+## Verified product delivery (0.3)
+
+OrgForge now requires executable acceptance evidence before release. It remains
+an AI-assisted development system: it cannot guarantee every idea is feasible,
+that generated tests are sufficient, or that a product is production ready.
+
+The architect specifies a `product.json` contract and plans implementation,
+end-to-end tests, installation instructions and operational documentation.
+After the build, integration QA must submit an explicit approval and report;
+every staffed auditor must also complete an approval and report. The pipeline
+then executes the contract's checks itself and saves their actual output in
+`docs/VERIFICATION.json`. Failures create repair tasks. After `max_rework`
+repair rounds, the release is blocked and needs CTO guidance; approval cannot
+bypass this gate. Send it back with guidance to start another repair cycle.
+
+A minimal contract looks like:
+
+```json
+{
+  "name": "Example product",
+  "setup": "Install Python 3.11+ and the dependencies in requirements.txt",
+  "run": "python app.py",
+  "checks": [
+    {
+      "id": "main-user-journey",
+      "requirement": "A user can create, save, and reopen an item",
+      "command": "python -m unittest tests.test_user_journey"
+    }
+  ]
+}
+```
+
+Commands must terminate, fail with a nonzero exit status on errors, and exercise
+real behavior. For a web product, include browser and API checks; for a library,
+include representative usage checks. Server checks must start their own test
+instance and clean up afterward. The command timeout and sandbox policy apply.
+`README.md` and `docs/OPERATIONS.md` must be present and nonempty. Agents choose
+the appropriate language and framework; this contract is runtime independent.
+Humans must review that its checks cover the brief and are not trivial success
+commands. Passing selected checks is evidence, not proof of universal correctness.
+
+The verified Git revision is pinned to release approvals. Editing the product
+after verification invalidates approval; send it back to build and verify again.
+A completed product is labeled **Ready for deployment**, not as already deployed.
+Export its signed-off source, documentation and evidence with:
+
+```bash
+orgforge export 1 --output ../product-release.zip
+```
+
+Export refuses unfinished or modified releases, existing output files, and
+output paths within the product workspace. Cloud deployment still requires a
+chosen hosting target, credentials, and product-specific configuration.
+
+Other reliability changes: missing review verdicts and exhausted agent runs
+fail closed; invalid or cyclic plans are rejected before task creation;
+interrupted in-progress tasks can resume within a single running company process;
+Git errors now stop work instead of silently succeeding. Do not run multiple
+OrgForge processes against the same company workspace concurrently.
+
+Existing companies gain the new gates when they next run a build. Older pending
+release approvals lack verification metadata: reject them with instructions to
+add `product.json` and delivery documentation, then rebuild. Previously signed-off
+products are not retroactively certified by this upgrade. Mock mode exercises
+orchestration using a scripted library; it does not validate AI coding quality.
+
 ## Install
 
 Python 3.11+ and git.
@@ -72,7 +138,7 @@ orgforge log
 ```
 
 The product is built in `workspaces/<id>-<name>/`, a normal git repository with
-one commit per completed task and a `release` tag at sign-off.
+one commit per completed task and a `release` tag at sign-off. This marks a local verified release, not a deployment.
 
 To try everything without an API key, set `ORGFORGE_PROVIDER=mock`. Scripted
 agents run the full flow offline. `ORGFORGE_MOCK_BAD_AGENTS=Ife,Kenji` makes

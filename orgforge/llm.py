@@ -7,6 +7,7 @@ To add another vendor, implement `complete()` with the same signature.
 from __future__ import annotations
 
 import os
+import json
 import re
 from dataclasses import dataclass, field
 
@@ -110,7 +111,16 @@ class MockProvider:
                 [self._call("write_file", path="docs/ARCHITECTURE.md",
                             content="# Architecture\n\nPython package in `src/`, tests in `tests/`.\n"
                                     "Run tests with `python -m unittest discover -s tests`.\n")],
-                [self._call("submit_plan", tasks=tasks)],
+                [self._call("write_file", path="product.json", content=json.dumps({
+                    "name": "Demo library", "setup": "Python 3.11+; no dependencies",
+                    "run": "PYTHONPATH=src python -c 'from core import core; print(core())'",
+                    "checks": [{"id": "unit-tests", "requirement": "Core and supporting modules work",
+                                "command": "python -m unittest discover -s tests"},
+                               {"id": "core-flow", "requirement": "The core module returns its result",
+                                "command": "PYTHONPATH=src python -c 'from core import core; assert core() == \"core ok\"'"}]})),
+                 self._call("write_file", path="README.md", content="# Demo library\nPython 3.11+. Run `PYTHONPATH=src python -c 'from core import core; print(core())'`.\n"),
+                 self._call("write_file", path="docs/OPERATIONS.md", content="# Operations\nLocal library. No credentials, migrations, or services required. Install Python 3.11+.\n"),
+                 self._call("submit_plan", tasks=tasks)],
             ]
         if kind == "builder":
             code = f'def {key}():\n    return "{key} ok"\n'
@@ -128,7 +138,8 @@ class MockProvider:
             if purpose == "integration":
                 return [[self._call("run_command", command="python -m unittest discover -s tests")],
                         [self._call("write_file", path="docs/QA_REPORT.md",
-                                    content="# QA report\n\nRan the unit test suite. All tests passed.\n")]]
+                                    content="# QA report\n\nRan the unit test suite. All tests passed.\n")],
+                        [self._call("submit_review", score=90, verdict="approve", notes="Demo integration check passed.")]]
             bad = meta.get("author") in self.bad_agents
             first = (self._call("list_files", path=".") if kind == "reviewer"
                      else self._call("run_command", command="python -m unittest discover -s tests"))

@@ -25,7 +25,7 @@ DENIED = [
 ]
 
 
-class ToolError(Exception):
+class ToolError(RuntimeError):
     pass
 
 
@@ -195,6 +195,8 @@ class Workspace:
             ["git", "-c", "user.name=OrgForge", "-c", "user.email=orgforge@localhost", *args],
             cwd=self.root, capture_output=True, text=True,
         )
+        if proc.returncode:
+            raise ToolError(f"Git {args[0]} failed: {_clip(proc.stderr)}")
         return (proc.stdout + proc.stderr).strip()
 
     def init_repo(self) -> None:

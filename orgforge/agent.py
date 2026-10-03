@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 
 from .config import Settings
@@ -15,6 +16,7 @@ class RunResult:
     text: str = ""
     plan: list[dict] | None = None
     review: dict | None = None
+    completed: bool = False
     turns: int = 0
     tool_log: list[str] = field(default_factory=list)
 
@@ -66,6 +68,7 @@ class AgentRuntime:
 
             if not resp.tool_calls:
                 result.text = resp.text
+                result.completed = True
                 return result
 
             messages.append({"role": "assistant", "content": resp.content})
@@ -92,10 +95,15 @@ class AgentRuntime:
             tasks = args.get("tasks") or []
             if not tasks:
                 raise ToolError("The plan has no tasks.")
+            from .validation import validate_plan
+            validate_plan(tasks, {a["role"] for a in self.org.staff(kind="builder")})
             result.plan = tasks
             return f"Plan received: {len(tasks)} task(s)."
         if name == "submit_review":
-            result.review = {"score": float(args["score"]), "verdict": args["verdict"], "notes": args.get("notes", "")}
+            score = float(args["score"])
+            if not math.isfinite(score) or not 0 <= score <= 100 or args["verdict"] not in ("approve", "request_changes"):
+                raise ToolError("Review needs a score from 0 to 100 and approve or request_changes.")
+            result.review = {"score": score, "verdict": args["verdict"], "notes": args.get("notes", "")}
             return "Review received."
         if name == "delegate":
             colleague = self.org.pick(role=args["role"], project_id=project_id, exclude=agent["id"])

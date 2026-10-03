@@ -161,7 +161,7 @@ function render() {
       <pre>${esc(a.summary)}</pre>
       ${mine ? `<textarea data-draft="${a.id}" placeholder="What should change? Required to send back.">${esc(drafts[a.id] || "")}</textarea>
       <div class="row" style="margin-top:.5rem">
-        <button class="primary" data-decide="approved" data-id="${a.id}">Approve</button>
+        ${a.kind === "release_blocked" ? `<span class="muted">Checks must pass before release. Send repair guidance to retry.</span>` : `<button class="primary" data-decide="approved" data-id="${a.id}">Approve</button>`}
         <button data-decide="rejected" data-id="${a.id}">Send back</button>
       </div>` : ""}
     </div>`;
@@ -170,7 +170,7 @@ function render() {
   const order = state.stages.map(s => s.id);
   $("projects").innerHTML = state.projects.map(p => {
     const at = order.indexOf(p.stage);
-    const track = state.stages.filter(s => s.id !== "escalation").map(s => {
+    const track = state.stages.filter(s => !["escalation", "release_blocked"].includes(s.id)).map(s => {
       const i = order.indexOf(s.id);
       return `<span title="${esc(s.label)}" class="${p.stage === "done" || i < at ? "past" : i === at ? "now" : ""}"></span>`;
     }).join("");

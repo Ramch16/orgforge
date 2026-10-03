@@ -76,6 +76,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("new", help="Start a project from a brief")
     p.add_argument("name"); p.add_argument("--brief"); p.add_argument("--brief-file"); p.add_argument("--no-run", action="store_true")
     p = sub.add_parser("run", help="Continue a project until it needs a decision"); p.add_argument("project", type=int)
+    p = sub.add_parser("export", help="Package a signed-off product as a zip")
+    p.add_argument("project", type=int); p.add_argument("--output", required=True)
     sub.add_parser("status", help="Projects and tasks")
     p = sub.add_parser("inbox", help="Decisions waiting for you"); who(p)
     for name in ("approve", "reject"):
@@ -131,6 +133,9 @@ def _dispatch(args) -> int:
             _advance(co, project["id"])
     elif args.cmd == "run":
         _advance(co, args.project)
+    elif args.cmd == "export":
+        from .delivery import export_product
+        print(export_product(co.pipeline, args.project, Path(args.output)))
     elif args.cmd == "status":
         _print_status(co)
     elif args.cmd == "inbox":

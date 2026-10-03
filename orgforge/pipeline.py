@@ -22,14 +22,16 @@ from .db import DB, now
 from .org import Org
 from .performance import Performance
 from .tools import Workspace
+from .validation import CONTRACT_GUIDE, validate_plan, verify_product
 
 STAGES = ["prd", "prd_approval", "architecture", "architecture_approval", "build",
-          "escalation", "release_approval", "signoff", "done"]
+          "escalation", "release_blocked", "release_approval", "signoff", "done"]
 STAGE_LABELS = {
+    "release_blocked": "Release checks need attention",
     "prd": "Writing requirements", "prd_approval": "Requirements with CEO",
     "architecture": "Designing", "architecture_approval": "Design with CTO",
     "build": "Building", "escalation": "Escalated to CTO",
-    "release_approval": "Release with CTO", "signoff": "Sign-off with CEO", "done": "Shipped",
+    "release_approval": "Release with CTO", "signoff": "Sign-off with CEO", "done": "Ready for deployment",
 }
 HUMAN_APPROVED, HUMAN_REJECTED = 92, 35
 
@@ -67,7 +69,7 @@ class Pipeline:
 
     @staticmethod
     def _read(ws: Workspace, path: str) -> str:
-        target = ws.root / path
+        target = ws.resolve(path)
         return target.read_text(errors="replace") if target.is_file() else ""
 
     # ---- projects --------------------------------------------------------
@@ -91,6 +93,7 @@ class Pipeline:
         if not lock.acquire(blocking=False):
             return self.project(pid)          # already running in another thread
         try:
+            self.db.run("UPDATE tasks SET status='todo' WHERE project_id=? AND status='in_progress'", pid)
             steps = {"prd": self._prd, "architecture": self._architecture, "build": self._build}
             while (stage := self.project(pid)["stage"]) in steps:
                 steps[stage](self.project(pid))
@@ -111,7 +114,8 @@ class Pipeline:
             self._stage(p["id"], "architecture", "")
             return
         ask = (f"The CEO's brief for a new product, \"{p['name']}\":\n\n{p['brief']}\n\n"
-               "Write the requirements document to docs/PRD.md.")
+               "Write the requirements document to docs/PRD.md. Include numbered, testable acceptance criteria, "
+               "main user journeys, error cases, data persistence, required integrations, and explicit exclusions.")
         if p["feedback"]:
             ask += f"\n\nThe CEO sent the previous version back. Revise docs/PRD.md to address this:\n{p['feedback']}"
         self.db.log("work", f"{pm['name']} is writing the requirements.", p["id"], actor=pm["name"])
@@ -153,7 +157,7 @@ class Pipeline:
                "technical design to docs/ARCHITECTURE.md.\n"
                "Finish by calling submit_plan with the build tasks. Assign each task to one of these roles:\n"
                f"{role_list}\nUse only the roles this product needs. Where the team has them, include tasks for "
-               "run/deploy setup, automated tests and user documentation.")
+               "run/deploy setup, automated tests and user documentation.\n" + CONTRACT_GUIDE)
         if p["feedback"]:
             ask += f"\n\nThe CTO sent the previous design back. Address this:\n{p['feedback']}"
         meta = {"builder_roles": [r["id"] for r in roles]}
@@ -166,6 +170,10 @@ class Pipeline:
         if not res.plan:
             raise PipelineError(f"{architect['name']} did not submit a build plan. Run the project again to retry.")
 
+        try:
+            validate_plan(res.plan, {r["id"] for r in roles})
+        except ValueError as exc:
+            raise PipelineError(str(exc)) from exc
         self.db.run("DELETE FROM tasks WHERE project_id=? AND status!='done'", p["id"])
         valid, keys = {r["id"] for r in roles}, set()
         for i, t in enumerate(res.plan, 1):
@@ -213,25 +221,42 @@ class Pipeline:
         if stuck:
             raise PipelineError("Tasks cannot start because their dependencies never finish: "
                                 + ", ".join(t["key"] for t in stuck))
+        release_findings = []
         qa = self.org.pick(kind="qa")
         if qa:
             self.db.log("work", f"{qa['name']} is running the release check.", p["id"], actor=qa["name"])
-            self.runtime.run(qa, "All build tasks are complete. Check the product as a whole against docs/PRD.md: "
+            integration = self.runtime.run(qa, "All build tasks are complete. Check the product as a whole against docs/PRD.md: "
                              "install it, run the full test suite and try the main flows. Write what you ran and "
-                             "what you found to docs/QA_REPORT.md, including anything that does not work.",
+                             "what you found to docs/QA_REPORT.md, including anything that does not work. "
+                             "Finish by calling submit_review; request_changes if any required flow fails.",
                              ws, project_id=p["id"], meta={"purpose": "integration"})
             ws.commit(f"Release check ({qa['name']})")
+            if not integration.completed or not integration.review or integration.review["verdict"] != "approve" or not self._read(ws, "docs/QA_REPORT.md"):
+                release_findings.append("Integration QA: " + ((integration.review or {}).get("notes") or "No completed approval verdict."))
+        else:
+            release_findings.append("No QA agent is staffed to validate the full product.")
+        if release_findings:
+            self._release_failure(p, release_findings)
+            return
         open_findings = self._audit(p, ws)
         if open_findings is None:
-            return                              # audits raised fix tasks; the build loop runs again
-        report = self._read(ws, "docs/QA_REPORT.md") or "No QA report was produced."
+            return
         if open_findings:
-            report = ("UNRESOLVED AUDIT FINDINGS (the team could not clear these):\n"
-                      + "\n".join(f"- {f}" for f in open_findings) + "\n\n" + report)
+            self._release_failure(p, ["UNRESOLVED AUDIT FINDINGS", *open_findings])
+            return
+        verification = verify_product(ws)
+        ws.commit("Executable product verification")
+        if not verification["passed"]:
+            release_findings.extend(verification["errors"])
+            release_findings.extend(f"Check {c['id']}: {c['output']}" for c in verification["checks"] if not c["passed"])
+            self._release_failure(p, release_findings)
+            return
+        report = self._read(ws, "docs/QA_REPORT.md") or "No QA report was produced."
         audits = sorted((ws.root / "docs" / "audits").glob("*.md")) if (ws.root / "docs" / "audits").is_dir() else []
+        report += "\n\nExecutable acceptance checks passed. Evidence: docs/VERIFICATION.json"
         if audits:
             report += "\n\nAudit reports: " + ", ".join(f"docs/audits/{a.name}" for a in audits)
-        self._approval(p["id"], "release", "cto", f"Release {p['name']}", report, {})
+        self._approval(p["id"], "release", "cto", f"Release {p['name']}", report, {"verified_head": ws.git("rev-parse", "HEAD")})
         self._stage(p["id"], "release_approval")
 
     def _audit(self, p: dict, ws: Workspace) -> list[str] | None:
@@ -247,8 +272,8 @@ class Pipeline:
                 "then finish by calling submit_review. Use request_changes only for findings that must be fixed "
                 "before release, and list exactly what to fix.", ws, project_id=pid)
             ws.commit(f"{role['title']} audit ({auditor['name']})")
-            if res.review and res.review["verdict"] != "approve":
-                findings.append((role, auditor, res.review["notes"]))
+            if not res.completed or not res.review or res.review["verdict"] != "approve" or not self._read(ws, f"docs/audits/{role['id']}.md"):
+                findings.append((role, auditor, (res.review or {}).get("notes") or "Audit did not produce a completed approval verdict."))
         if not findings:
             return []
         rounds = {t["key"].split("-")[1] for t in self.db.all(
@@ -262,6 +287,19 @@ class Pipeline:
                            key=f"audit-{len(rounds) + 1}-{role['id']}")
         self.db.log("work", f"Audits raised {len(findings)} fix task(s).", pid)
         return None
+
+    def _release_failure(self, p: dict, findings: list[str]) -> None:
+        pid = p["id"]
+        rounds = self.db.one("SELECT COUNT(*) AS n FROM tasks WHERE project_id=? AND key LIKE 'verify-%'", pid)["n"]
+        feedback = "\n".join(findings)
+        if rounds < self.s.max_rework:
+            self._fix_task(pid, "Repair product acceptance failures", feedback + "\n" + CONTRACT_GUIDE,
+                           key=f"verify-{rounds + 1}")
+            self.db.log("work", "Product verification failed; repair task created.", pid)
+        else:
+            self._approval(pid, "release_blocked", "cto", f"Release checks failed for {p['name']}", feedback,
+                           {})
+            self._stage(pid, "release_blocked")
 
     def _assignee(self, task: dict, pid: int) -> dict | None:
         """Rework stays with the same seat (or its new holder); new work goes to whoever is free."""
@@ -294,7 +332,9 @@ class Pipeline:
             res = self.runtime.run(agent, ask, ws, project_id=pid, meta=meta)
 
             changed = ws.changed_files()
-            findings, approved = [], True
+            findings, approved = [], res.completed
+            if not res.completed:
+                findings.append("Builder did not finish within its turn budget.")
             for check_role in self.org.staffed_roles("reviewer", "qa"):
                 checker = self.org.pick(role=check_role["id"], exclude=agent["id"])
                 if not checker:
@@ -310,7 +350,12 @@ class Pipeline:
                     ws, project_id=pid, meta={**meta, "author": agent["name"]})
                 if not check.review:
                     self.db.log("warn", f"{checker['name']} gave no verdict on [{task['key']}].", pid)
+                    approved = False
+                    findings.append(f"{checker['name']} gave no verdict.")
                     continue
+                if not check.completed:
+                    approved = False
+                    findings.append(f"{checker['name']} did not complete the review.")
                 rv = check.review
                 self.perf.record(agent["id"], rv["score"], source=source, reviewer=checker["name"], notes=rv["notes"],
                                  task_id=task["id"], project_id=pid)
@@ -365,6 +410,12 @@ class Pipeline:
             raise PipelineError("Say what needs to change when you reject, so the team can act on it.")
         who, ok, pid = self.s.human(role), decision == "approved", a["project_id"]
         payload = json.loads(a["payload"])
+        if ok and a["kind"] == "release_blocked":
+            raise PipelineError("Failed release checks cannot be approved. Reject with repair guidance to retry.")
+        if ok and a["kind"] in ("release", "signoff"):
+            ws = self.workspace(self.project(pid))
+            if ws.changed_files() != "(no uncommitted changes)" or ws.git("rev-parse", "HEAD") != payload.get("verified_head"):
+                raise PipelineError("Product changed after verification. Reject with guidance to rebuild and recheck.")
         self.db.run("UPDATE approvals SET status=?, feedback=?, decided_by=?, decided_at=? WHERE id=?",
                     decision, feedback, who, now(), approval_id)
         self.db.log("decision", f"{a['title']}: {decision}" + (f" — {feedback}" if feedback else ""), pid, actor=who)
@@ -389,11 +440,15 @@ class Pipeline:
                 self.db.run("UPDATE tasks SET status='todo', attempts=0, feedback=?, updated_at=? WHERE id=?",
                             f"Guidance from the CTO: {feedback}\n{task['feedback']}", now(), task["id"])
             self._stage(pid, "build")
+        elif kind == "release_blocked":
+            self.db.run("UPDATE tasks SET key='retried-' || key || '-' || id WHERE project_id=? AND key LIKE 'verify-%'", pid)
+            self._fix_task(pid, "Repair blocked release", feedback)
+            self._stage(pid, "build")
         elif kind == "release":
             if ok:
                 name = self.project(pid)["name"]
                 self._approval(pid, "signoff", "ceo", f"Sign off {name}",
-                               "The CTO approved the release. Review the product in its workspace and sign off.", {})
+                               "The CTO approved the release. Review the product in its workspace and sign off.", payload)
                 self._stage(pid, "signoff")
             else:
                 self._fix_task(pid, "Address the CTO's release feedback", feedback)
@@ -404,7 +459,7 @@ class Pipeline:
                 ws.commit("Release signed off by the CEO")
                 ws.git("tag", "-f", "release")
                 self._stage(pid, "done")
-                self.db.log("project", "Shipped.", pid, actor=who)
+                self.db.log("project", "Verified release ready for deployment.", pid, actor=who)
             else:
                 self._fix_task(pid, "Address the CEO's sign-off feedback", feedback)
                 self._stage(pid, "build")
