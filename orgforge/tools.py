@@ -3,12 +3,17 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
+import threading
 from pathlib import Path
 
 MAX_OUTPUT = 12_000
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".pytest_cache", "dist", "build"}
 SECRET_ENV = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL", re.I)
+# Agents work in parallel git worktrees that share one object store. Git bookkeeping is
+# quick next to agent work, so it is serialised rather than risking ref-lock races.
+_GIT_LOCK = threading.RLock()
 
 # Commands refused even inside the workspace. This is a seatbelt, not a
 # sandbox: use sandbox.mode: docker for real isolation.
@@ -191,10 +196,11 @@ class Workspace:
 
     # Git bookkeeping is done by the company, not by agents.
     def git(self, *args: str) -> str:
-        proc = subprocess.run(
-            ["git", "-c", "user.name=OrgForge", "-c", "user.email=orgforge@localhost", *args],
-            cwd=self.root, capture_output=True, text=True,
-        )
+        with _GIT_LOCK:
+            proc = subprocess.run(
+                ["git", "-c", "user.name=OrgForge", "-c", "user.email=orgforge@localhost", *args],
+                cwd=self.root, capture_output=True, text=True,
+            )
         if proc.returncode:
             raise ToolError(f"Git {args[0]} failed: {_clip(proc.stderr)}")
         return (proc.stdout + proc.stderr).strip()
@@ -207,5 +213,39 @@ class Workspace:
         return self.git("status", "--porcelain") or "(no uncommitted changes)"
 
     def commit(self, message: str) -> None:
-        self.git("add", "-A")
-        self.git("commit", "-q", "-m", message, "--allow-empty")
+        with _GIT_LOCK:
+            self.git("add", "-A")
+            self.git("commit", "-q", "-m", message, "--allow-empty")
+
+    # ---- parallel work: one git worktree per ticket ------------------------
+    def add_worktree(self, path: Path, branch: str) -> None:
+        """A separate working copy of the current main code on its own branch."""
+        with _GIT_LOCK:
+            self.remove_worktree(path, branch)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self.git("worktree", "add", "-q", "-b", branch, str(path), "HEAD")
+
+    def remove_worktree(self, path: Path, branch: str) -> None:
+        with _GIT_LOCK:
+            if path.exists():
+                try:
+                    self.git("worktree", "remove", "--force", str(path))
+                except ToolError:
+                    shutil.rmtree(path, ignore_errors=True)
+            self.git("worktree", "prune")
+            if self.git("branch", "--list", branch):
+                self.git("branch", "-D", branch)
+
+    def merge(self, branch: str, message: str) -> list[str]:
+        """Merge a ticket branch into the current branch. Returns conflicting files (merge undone) or []."""
+        with _GIT_LOCK:
+            try:
+                self.git("merge", "--no-ff", "-m", message, branch)
+                return []
+            except ToolError:
+                conflicts = self.git("diff", "--name-only", "--diff-filter=U").splitlines()
+                try:
+                    self.git("merge", "--abort")
+                except ToolError:
+                    pass                        # the merge never started, so there is nothing to undo
+                return conflicts or ["(merge failed)"]

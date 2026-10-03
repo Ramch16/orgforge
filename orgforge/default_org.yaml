@@ -30,6 +30,11 @@ sandbox:
 pipeline:
   max_rework: 2                  # times a task is sent back before escalating to the CTO
   max_delegation_depth: 2        # how deep agents may delegate to other agents
+  max_parallel: 3                # tickets worked at the same time per project, each on its own git branch
+
+staffing:
+  hire_when_waiting: 3           # ask the CEO/CTO to hire when a role has this many waiting tickets per agent
+  max_per_role: 4                # never ask for more agents than this in one role
 
 hr:
   auto_fire: false               # false: firing needs CEO/CTO approval. true: automatic.

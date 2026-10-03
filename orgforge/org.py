@@ -139,10 +139,11 @@ class Org:
             f"AND r.kind IN ({marks}) ORDER BY r.kind, r.id", *kinds)
 
     def pick(self, *, role: str | None = None, kind: str | None = None, project_id: int | None = None,
-             exclude: int | None = None) -> dict | None:
+             exclude: int | set[int] | None = None) -> dict | None:
         """Choose who gets the next piece of work: spread the load, then prefer
-        agents in good standing with the best record."""
-        candidates = [a for a in self.staff(role=role, kind=kind) if a["id"] != exclude]
+        agents in good standing with the best record. `exclude` is one agent id or a set (e.g. busy agents)."""
+        skip = exclude if isinstance(exclude, (set, frozenset)) else {exclude}
+        candidates = [a for a in self.staff(role=role, kind=kind) if a["id"] not in skip]
         if not candidates:
             return None
 

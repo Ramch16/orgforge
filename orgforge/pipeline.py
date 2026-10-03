@@ -47,6 +47,7 @@ class Pipeline:
     def __init__(self, db: DB, settings: Settings, org: Org, perf: Performance, runtime: AgentRuntime) -> None:
         self.db, self.s, self.org, self.perf, self.runtime = db, settings, org, perf, runtime
         self._locks: dict[int, threading.Lock] = {}
+        self._solo: set[int] = set()            # tickets that hit a merge conflict: redo them alone
 
     # ---- helpers ---------------------------------------------------------
     def project(self, pid: int) -> dict:
@@ -254,25 +255,40 @@ class Pipeline:
                         "contract": self._read(ws, CONTRACT) or None})
         self._stage(p["id"], "architecture_approval", "")
 
-    def _next_task(self, pid: int) -> dict | None:
+    def _ready_tasks(self, pid: int) -> list[dict]:
+        """To-do tickets whose dependencies are finished, most urgent first."""
         tasks = self.db.all(f"SELECT * FROM tasks WHERE project_id=? AND origin!='stage' ORDER BY {PRIORITY_ORDER}, id", pid)
         done = {t["key"] for t in tasks if t["status"] in ("done", "cancelled")}
-        for t in tasks:
-            if t["status"] == "todo" and all(d in done for d in json.loads(t["depends_on"])):
-                return t
-        return None
+        return [t for t in tasks if t["status"] == "todo" and all(d in done for d in json.loads(t["depends_on"]))]
+
+    def _next_task(self, pid: int) -> dict | None:
+        ready = self._ready_tasks(pid)
+        return ready[0] if ready else None
 
     def _build(self, p: dict) -> None:
-        ws = self.workspace(p)
-        while task := self._next_task(p["id"]):
-            if not self._run_task(p, task, ws):
-                task = self.db.one("SELECT * FROM tasks WHERE id=?", task["id"])
-                self._approval(p["id"], "escalation", "cto",
-                               f"Task \"{task['title']}\" keeps failing review",
-                               f"Sent back {task['attempts']} time(s). Latest findings:\n{task['feedback']}\n\n"
-                               "Approve to accept the work as it stands. Reject with guidance to have it redone.",
-                               {"task_id": task["id"]})
-                self._stage(p["id"], "escalation")
+        ws, pid = self.workspace(p), p["id"]
+        if self.db.one("SELECT 1 FROM approvals WHERE project_id=? AND kind='escalation' AND status='pending'", pid):
+            self._stage(pid, "escalation")      # another failed ticket is still waiting for the CTO
+            return
+        while True:
+            self._check_staffing(pid)
+            batch = self._claim_batch(pid)
+            if not batch:
+                break
+            if len(batch) == 1:
+                self._solo.discard(batch[0]["id"])
+                failed = [] if self._run_task(p, batch[0], ws) else [batch[0]]
+            else:
+                failed = self._run_parallel(p, batch, ws)
+            if failed:
+                for task in failed:
+                    task = self.db.one("SELECT * FROM tasks WHERE id=?", task["id"])
+                    self._approval(pid, "escalation", "cto",
+                                   f"Task \"{task['title']}\" keeps failing review",
+                                   f"Sent back {task['attempts']} time(s). Latest findings:\n{task['feedback']}\n\n"
+                                   "Approve to accept the work as it stands. Reject with guidance to have it redone.",
+                                   {"task_id": task["id"]})
+                self._stage(pid, "escalation")
                 return
         stuck = self.db.all("SELECT key FROM tasks WHERE project_id=? AND origin!='stage' "
                             "AND status NOT IN ('done', 'cancelled', 'backlog')", p["id"])
@@ -396,6 +412,125 @@ class Pipeline:
             self._approval(pid, "release_blocked", "cto", f"Release checks failed for {p['name']}", feedback,
                            {})
             self._stage(pid, "release_blocked")
+
+    # ---- parallel work and staffing ----------------------------------------
+    def _claim_batch(self, pid: int) -> list[dict]:
+        """Give up to max_parallel ready tickets to distinct free agents. Returns the claimed tickets."""
+        ready, busy, batch = self._ready_tasks(pid), set(), []
+        solo = [t for t in ready if t["id"] in self._solo]
+        limit = 1 if solo else self.s.max_parallel
+        for task in solo[:1] or ready:
+            if len(batch) >= limit:
+                break
+            agent = self._free_agent(task, pid, busy)
+            if not agent:
+                continue                        # everyone who can do it is busy: it waits for the next round
+            busy.add(agent["id"])
+            self.db.run("UPDATE tasks SET assignee_id=?, updated_at=? WHERE id=?", agent["id"], now(), task["id"])
+            batch.append(self.db.one("SELECT * FROM tasks WHERE id=?", task["id"]))
+        if ready and not batch:
+            raise PipelineError(f"Nobody on staff can take task '{ready[0]['key']}'. Hire a builder.")
+        return batch
+
+    def _free_agent(self, task: dict, pid: int, busy: set[int]) -> dict | None:
+        """Rework stays with the same seat; new work goes to the least-loaded free agent in the role."""
+        if task["assignee_id"]:
+            prev = self.db.one("SELECT * FROM agents WHERE id=?", task["assignee_id"])
+            holder = prev and self.db.one("SELECT * FROM agents WHERE seat=? AND status!='fired'", prev["seat"])
+            if holder and holder["role"] == task["role"]:
+                return None if holder["id"] in busy else holder
+        agent = self.org.pick(role=task["role"], project_id=pid, exclude=busy)
+        if agent or self.org.staff(role=task["role"]):
+            return agent
+        return self.org.pick(kind="builder", project_id=pid, exclude=busy)
+
+    def _run_parallel(self, p: dict, batch: list[dict], ws: Workspace) -> list[dict]:
+        """Work several tickets at once, each in its own git worktree, merging each into main as it passes."""
+        pid, results, errors = p["id"], {}, []
+        if ws.changed_files() != "(no uncommitted changes)":
+            ws.commit("Work in progress before parallel tickets")
+        root = self.s.workspaces / ".worktrees"
+        self.db.log("work", f"Working {len(batch)} tickets in parallel: "
+                    + ", ".join(ticket_key(t["id"]) for t in batch), pid)
+
+        def work(task: dict) -> None:
+            branch, path = f"ticket/t-{task['id']}", root / f"{pid:03d}-t{task['id']}"
+            try:
+                ws.add_worktree(path, branch)
+                wt = Workspace(path, mode=self.s.sandbox_mode, docker_image=self.s.docker_image,
+                               docker_network=self.s.docker_network, timeout=self.s.command_timeout)
+                ok = self._run_task(p, task, wt)
+                if wt.changed_files() != "(no uncommitted changes)":
+                    wt.commit(f"[{task['key']}] work in progress")
+                results[task["id"]] = self._merge_ticket(p, task, ws, branch, ok)
+            except Exception as exc:            # surfaced after every thread has finished
+                errors.append(exc)
+            finally:
+                try:
+                    ws.remove_worktree(path, branch)
+                except Exception as exc:
+                    errors.append(exc)
+
+        threads = [threading.Thread(target=work, args=(t,), name=f"ticket-{t['id']}") for t in batch]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        if errors:
+            raise errors[0]
+        return [t for t in batch if results.get(t["id"]) is False]
+
+    def _merge_ticket(self, p: dict, task: dict, ws: Workspace, branch: str, ok: bool) -> bool:
+        """Merge a ticket's branch into main. A conflict sends passed work back to be redone on the latest code."""
+        current = self.db.one("SELECT * FROM tasks WHERE id=?", task["id"])
+        agent = self.org.agent(current["assignee_id"]) if current["assignee_id"] else None
+        conflicts = ws.merge(branch, f"Merge {ticket_key(task['id'])} [{task['key']}] {task['title']}")
+        if not conflicts:
+            if current["status"] == "done":
+                note(self.db, task["id"], "OrgForge", "Merged into the main code.")
+            return ok
+        files = ", ".join(conflicts[:10])
+        if current["status"] != "done":
+            note(self.db, task["id"], "OrgForge", f"This attempt could not be merged (conflicts in {files}); "
+                 "it was set aside.", kind="handoff")
+            return ok
+        # Not the agent's fault, so it does not count as a failed attempt. Redone alone, it cannot conflict again.
+        feedback = (f"Your work passed review but conflicts with changes merged meanwhile in: {files}. "
+                    "Redo it on top of the latest code; keep the other changes working.")
+        self.db.run("UPDATE tasks SET status='todo', feedback=?, updated_at=? WHERE id=?", feedback, now(), task["id"])
+        self._solo.add(task["id"])
+        note(self.db, task["id"], "OrgForge", f"Sent back to {agent['name'] if agent else 'the team'} to redo alone "
+             f"on the latest code: {feedback}", kind="handoff")
+        self.db.log("work", f"[{task['key']}] conflicted with merged work; it will be redone on its own.", p["id"])
+        return True
+
+    def _check_staffing(self, pid: int) -> None:
+        """Ask the department's boss to hire when a role's waiting work outgrows its people."""
+        waiting = self.db.all("SELECT role, COUNT(*) AS n FROM tasks WHERE status='todo' AND origin!='stage' "
+                              "GROUP BY role")
+        for row in waiting:
+            staff = self.org.staff(role=row["role"])
+            if not staff or len(staff) >= self.s.max_per_role or row["n"] < self.s.hire_when_waiting * len(staff):
+                continue
+            asks = [json.loads(a["payload"]) | {"status": a["status"]} for a in self.db.all(
+                "SELECT payload, status FROM approvals WHERE kind='hire' AND status IN ('pending', 'rejected') "
+                "ORDER BY id DESC")]
+            asks = [a for a in asks if a.get("role") == row["role"]]
+            if any(a["status"] == "pending" for a in asks):
+                continue
+            declined = next((a for a in asks if a["status"] == "rejected"), None)
+            if declined and declined.get("staff") == len(staff) and row["n"] <= declined.get("waiting", 0):
+                continue                         # declined before, and the queue has not grown since
+            role = self.org.role(row["role"])
+            boss = self.db.one("SELECT reports_to FROM departments WHERE id=?", role["department"])["reports_to"]
+            summary = (f"{row['n']} tickets are waiting for {where(self.db, role['id'])}, which has {len(staff)} "
+                       f"agent(s): {', '.join(a['name'] for a in staff)}. Each agent works one ticket at a time, and "
+                       f"the team works up to {self.s.max_parallel} tickets in parallel per project, so another "
+                       f"{role['title']} would clear this queue sooner. Each extra agent adds model cost.\n\n"
+                       "Approve to hire one more (seat and name are assigned automatically). "
+                       "Send back to keep the team as it is.")
+            self._approval(pid, "hire", boss, f"Hire another {role['title']}?", summary,
+                           {"role": role["id"], "waiting": row["n"], "staff": len(staff)})
 
     def _assignee(self, task: dict, pid: int) -> dict | None:
         """Rework stays with the same seat (or its new holder); new work goes to whoever is free."""
@@ -550,7 +685,7 @@ class Pipeline:
         if decision not in ("approved", "rejected"):
             raise PipelineError("Decision must be 'approved' or 'rejected'.")
         feedback = feedback.strip()
-        if decision == "rejected" and not feedback and a["kind"] != "hr":
+        if decision == "rejected" and not feedback and a["kind"] not in ("hr", "hire"):
             raise PipelineError("Say what needs to change when you reject, so the team can act on it.")
         who, ok, pid = self.s.human(role), decision == "approved", a["project_id"]
         payload = json.loads(a["payload"])
@@ -626,6 +761,11 @@ class Pipeline:
             else:
                 self._fix_task(pid, "Address the CEO's sign-off feedback", feedback, reporter=who)
                 self._stage(pid, "build")
+        elif kind == "hire":
+            if ok:
+                hired = self.org.hire(payload["role"], by=who)
+                self.db.log("hire", f"{who} approved hiring {hired['name']} as {payload['role']} for the workload.",
+                            pid, actor=who)
         elif kind == "hr":
             if ok:
                 self.perf.execute(payload["action"], payload["agent_id"], payload.get("reason", ""), by=who)

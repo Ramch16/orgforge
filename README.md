@@ -168,7 +168,34 @@ it beyond your machine.
 | Requirements, final sign-off          | CEO                               |
 | Design and plan, escalations, release | CTO                               |
 | Replace or reinstate an agent         | Whoever the department reports to |
+| Workload hiring requests              | Whoever the department reports to |
 | Hire, fire, rate                      | CEO anywhere; CTO in CTO departments |
+
+## Parallel work and hiring for workload
+
+The team works up to `pipeline.max_parallel` tickets at the same time per
+project (default 3). Each agent works one ticket at a time, in its own git
+worktree on a `ticket/t-<id>` branch. When a ticket passes review it is merged
+into `main`, and the project history shows a merge per ticket. If it conflicts
+with work merged meanwhile, it goes back to its agent to redo on the latest
+code, on its own so it cannot conflict again. A conflict does not count against
+the agent. Set `max_parallel: 1` to work one ticket at a time.
+
+No agent can hire. OrgForge watches the queue instead: when a role has
+`staffing.hire_when_waiting` waiting tickets per agent (default 3), it asks the
+CEO or CTO, whoever the department reports to, to hire one more, explaining
+the queue and the extra model cost. Approve and an agent is hired with the next
+free seat and name. Decline and it does not ask again for that role until the
+queue grows. It never asks past `staffing.max_per_role` agents in a role
+(default 4).
+
+```yaml
+pipeline:
+  max_parallel: 3
+staffing:
+  hire_when_waiting: 3
+  max_per_role: 4
+```
 
 ## Tickets
 
@@ -295,7 +322,9 @@ Each role gets only the tools listed for it.
 - It aims at any software product, but results depend on the model, the brief
   and your reviews. Expect to send work back. Small, clearly scoped first
   releases work best.
-- Tasks run one at a time. Parallel work is not implemented.
+- Parallel tickets share one machine. With `sandbox.mode: local` they run commands side by side, so tests
+  that bind fixed ports or write outside the workspace can clash; use `max_parallel: 1` or Docker for those.
+  Reviewers, QA and auditors may check several tickets at once.
 - Long tasks are bounded by `llm.max_turns` and the model's context window.
 - Only the Anthropic provider and the offline mock are included. Another vendor
   is one class with a `complete()` method in `orgforge/llm.py`.

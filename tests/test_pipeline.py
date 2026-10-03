@@ -7,7 +7,7 @@ from orgforge.pipeline import PipelineError
 
 
 def decide_next(co, role, decision="approved", feedback=""):
-    [approval] = [a for a in co.pipeline.inbox(role) if a["kind"] != "hr"]
+    [approval] = [a for a in co.pipeline.inbox(role) if a["kind"] not in ("hr", "hire")]
     co.pipeline.decide(approval["id"], role, decision, feedback)
     return co.pipeline.advance(approval["project_id"])
 

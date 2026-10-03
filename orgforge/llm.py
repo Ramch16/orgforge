@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import json
 import re
+import threading
 from dataclasses import dataclass, field
 
 
@@ -74,11 +75,13 @@ class MockProvider:
         self.fail_audits_once, self._failed = set(fail_audits_once or ()), set()
         env = os.environ.get("ORGFORGE_MOCK_BAD_AGENTS", "")
         self.bad_agents = set(bad_agents or ()) | {n.strip() for n in env.split(",") if n.strip()}
-        self._n, self._filed = 0, False
+        self._n, self._filed, self._lock = 0, False, threading.Lock()
 
     def _call(self, name: str, **inp) -> dict:
-        self._n += 1
-        return {"type": "tool_use", "id": f"mock_{self._n}", "name": name, "input": inp}
+        with self._lock:                        # agents may run in parallel threads
+            self._n += 1
+            n = self._n
+        return {"type": "tool_use", "id": f"mock_{n}", "name": name, "input": inp}
 
     def _script(self, meta: dict, step: int = 0) -> list[list[dict]]:
         kind, purpose = meta.get("kind"), meta.get("purpose", "")

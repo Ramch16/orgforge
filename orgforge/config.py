@@ -42,6 +42,9 @@ class Settings:
     command_timeout: int = 300
     max_rework: int = 2
     max_delegation_depth: int = 2
+    max_parallel: int = 3
+    hire_when_waiting: int = 3
+    max_per_role: int = 4
     hr: HRPolicy = field(default_factory=HRPolicy)
 
     @property
@@ -91,4 +94,8 @@ def load_settings(root: str | os.PathLike | None = None) -> Settings:
     s.command_timeout = int(sandbox.get("command_timeout", s.command_timeout))
     s.max_rework = int(pipeline.get("max_rework", s.max_rework))
     s.max_delegation_depth = int(pipeline.get("max_delegation_depth", s.max_delegation_depth))
+    s.max_parallel = max(1, int(pipeline.get("max_parallel", s.max_parallel)))
+    staffing = raw.get("staffing", {})
+    s.hire_when_waiting = max(1, int(staffing.get("hire_when_waiting", s.hire_when_waiting)))
+    s.max_per_role = max(1, int(staffing.get("max_per_role", s.max_per_role)))
     return s
