@@ -1,8 +1,10 @@
 """How a brief becomes a product.
 
-    brief -> requirements -> CEO approves -> architecture + plan -> CTO approves
-          -> build (each task: implement, peer review, QA; rework or escalate)
-          -> integration QA -> CTO approves release -> CEO signs off -> done
+    brief -> requirements + UX design -> CEO approves -> architecture + plan -> CTO approves
+          -> build (each task: implement, then every reviewer and QA role checks it;
+             rework or escalate)
+          -> release check + audits (security, performance, compliance; findings
+             become fix tasks) -> CTO approves release -> CEO signs off -> done
 
 The pipeline is a resumable state machine. `advance()` runs until it needs a
 human decision; `decide()` records the decision and moves the stage on.
@@ -117,8 +119,21 @@ class Pipeline:
         if not self._read(ws, "docs/PRD.md"):
             ws.write_file("docs/PRD.md", res.text or p["brief"])
         ws.commit(f"Requirements ({pm['name']})")
-        self._approval(p["id"], "prd", "ceo", f"Requirements for {p['name']}", self._read(ws, "docs/PRD.md"),
-                       {"agent_id": pm["id"], "file": "docs/PRD.md"})
+        authors = [pm["id"]]
+        for role in self.org.staffed_roles("designer"):
+            designer = self.org.pick(role=role["id"])
+            ask = (f"Project \"{p['name']}\". Read docs/PRD.md, then write the design to docs/DESIGN.md.")
+            if p["feedback"]:
+                ask += f"\n\nThe CEO sent the previous version back. Address this where it concerns the design:\n{p['feedback']}"
+            self.db.log("work", f"{designer['name']} is designing the user experience.", p["id"], actor=designer["name"])
+            self.runtime.run(designer, ask, ws, project_id=p["id"])
+            ws.commit(f"UX design ({designer['name']})")
+            authors.append(designer["id"])
+        summary = self._read(ws, "docs/PRD.md")
+        if design := self._read(ws, "docs/DESIGN.md"):
+            summary += f"\n\n----- docs/DESIGN.md -----\n{design}"
+        self._approval(p["id"], "prd", "ceo", f"Requirements for {p['name']}", summary,
+                       {"agent_ids": authors, "file": "docs/PRD.md"})
         self._stage(p["id"], "prd_approval", "")
 
     def _builder_roles(self) -> list[dict]:
@@ -134,9 +149,11 @@ class Pipeline:
         if not roles:
             raise PipelineError("Nobody on staff can build. Hire at least one role of kind 'builder'.")
         role_list = "\n".join(f"- {r['id']}: {r['title']}" for r in roles)
-        ask = (f"Project \"{p['name']}\". Read docs/PRD.md, then write the design to docs/ARCHITECTURE.md.\n"
+        ask = (f"Project \"{p['name']}\". Read docs/PRD.md (and docs/DESIGN.md if it exists), then write the "
+               "technical design to docs/ARCHITECTURE.md.\n"
                "Finish by calling submit_plan with the build tasks. Assign each task to one of these roles:\n"
-               f"{role_list}\nInclude tasks for run/deploy setup and user documentation where the team has those roles.")
+               f"{role_list}\nUse only the roles this product needs. Where the team has them, include tasks for "
+               "run/deploy setup, automated tests and user documentation.")
         if p["feedback"]:
             ask += f"\n\nThe CTO sent the previous design back. Address this:\n{p['feedback']}"
         meta = {"builder_roles": [r["id"] for r in roles]}
@@ -169,7 +186,7 @@ class Pipeline:
         plan_text = "\n".join(f"- [{t['key']}] {t.get('title', '')} ({t.get('role', '')})" for t in res.plan)
         self._approval(p["id"], "architecture", "cto", f"Design and plan for {p['name']}",
                        f"Plan ({len(res.plan)} tasks):\n{plan_text}\n\n{self._read(ws, 'docs/ARCHITECTURE.md')}",
-                       {"agent_id": architect["id"], "file": "docs/ARCHITECTURE.md"})
+                       {"agent_ids": [architect["id"]], "file": "docs/ARCHITECTURE.md"})
         self._stage(p["id"], "architecture_approval", "")
 
     def _next_task(self, pid: int) -> dict | None:
@@ -204,9 +221,47 @@ class Pipeline:
                              "what you found to docs/QA_REPORT.md, including anything that does not work.",
                              ws, project_id=p["id"], meta={"purpose": "integration"})
             ws.commit(f"Release check ({qa['name']})")
+        open_findings = self._audit(p, ws)
+        if open_findings is None:
+            return                              # audits raised fix tasks; the build loop runs again
         report = self._read(ws, "docs/QA_REPORT.md") or "No QA report was produced."
+        if open_findings:
+            report = ("UNRESOLVED AUDIT FINDINGS (the team could not clear these):\n"
+                      + "\n".join(f"- {f}" for f in open_findings) + "\n\n" + report)
+        audits = sorted((ws.root / "docs" / "audits").glob("*.md")) if (ws.root / "docs" / "audits").is_dir() else []
+        if audits:
+            report += "\n\nAudit reports: " + ", ".join(f"docs/audits/{a.name}" for a in audits)
         self._approval(p["id"], "release", "cto", f"Release {p['name']}", report, {})
         self._stage(p["id"], "release_approval")
+
+    def _audit(self, p: dict, ws: Workspace) -> list[str] | None:
+        """Run every staffed auditor role over the finished product. Returns None
+        if fix tasks were raised (build continues), else the findings still open."""
+        pid, findings = p["id"], []
+        for role in self.org.staffed_roles("auditor"):
+            auditor = self.org.pick(role=role["id"])
+            self.db.log("work", f"{auditor['name']} is running the {role['title'].lower()} audit.", pid, actor=auditor["name"])
+            res = self.runtime.run(
+                auditor, f"All build tasks for \"{p['name']}\" are complete. Audit the whole product in the workspace "
+                f"against docs/PRD.md and docs/ARCHITECTURE.md. Write your report to docs/audits/{role['id']}.md, "
+                "then finish by calling submit_review. Use request_changes only for findings that must be fixed "
+                "before release, and list exactly what to fix.", ws, project_id=pid)
+            ws.commit(f"{role['title']} audit ({auditor['name']})")
+            if res.review and res.review["verdict"] != "approve":
+                findings.append((role, auditor, res.review["notes"]))
+        if not findings:
+            return []
+        rounds = {t["key"].split("-")[1] for t in self.db.all(
+            "SELECT key FROM tasks WHERE project_id=? AND key LIKE 'audit-%'", pid)}
+        if len(rounds) >= self.s.max_rework:
+            return [f"{role['title']}: {notes}" for role, _, notes in findings]
+        for role, auditor, notes in findings:
+            self._fix_task(pid, f"Fix {role['title'].lower()} audit findings",
+                           f"{auditor['name']} ({role['title']}) audited the product and requires these fixes "
+                           f"before release:\n{notes}\n\nFull report: docs/audits/{role['id']}.md",
+                           key=f"audit-{len(rounds) + 1}-{role['id']}")
+        self.db.log("work", f"Audits raised {len(findings)} fix task(s).", pid)
+        return None
 
     def _assignee(self, task: dict, pid: int) -> dict | None:
         """Rework stays with the same seat (or its new holder); new work goes to whoever is free."""
@@ -228,7 +283,8 @@ class Pipeline:
                         agent["id"], now(), task["id"])
             self.db.log("work", f"{agent['name']} started [{task['key']}] {task['title']}"
                         + (f" (attempt {task['attempts'] + 1})" if task["attempts"] else ""), pid, actor=agent["name"])
-            ask = (f"Project \"{p['name']}\". Read docs/PRD.md and docs/ARCHITECTURE.md first.\n\n"
+            ask = (f"Project \"{p['name']}\". Read docs/PRD.md, docs/ARCHITECTURE.md and, if present, "
+                   "docs/DESIGN.md first.\n\n"
                    f"Your task [{task['key']}]: {task['title']}\n{task['description']}\n\n"
                    "Done means: the work is in the workspace, tests exist and pass where they apply, "
                    "and nothing that worked before is broken.")
@@ -239,14 +295,15 @@ class Pipeline:
 
             changed = ws.changed_files()
             findings, approved = [], True
-            for kind, source, what in (("reviewer", "peer", "Review the code"), ("qa", "qa", "Test the work")):
-                checker = self.org.pick(kind=kind, exclude=agent["id"])
+            for check_role in self.org.staffed_roles("reviewer", "qa"):
+                checker = self.org.pick(role=check_role["id"], exclude=agent["id"])
                 if not checker:
                     continue
+                source = "qa" if check_role["kind"] == "qa" else "peer"
                 check = self.runtime.run(
                     checker,
-                    f"{what} for task [{task['key']}] \"{task['title']}\" in project \"{p['name']}\", "
-                    f"done by {agent['name']}.\n\nTask:\n{task['description']}\n\n"
+                    f"As {check_role['title']}, check task [{task['key']}] \"{task['title']}\" in project "
+                    f"\"{p['name']}\", done by {agent['name']}.\n\nTask:\n{task['description']}\n\n"
                     f"{agent['name']}'s summary:\n{res.text}\n\nFiles changed (git status):\n{changed}\n\n"
                     "Requirements are in docs/PRD.md and the design in docs/ARCHITECTURE.md. "
                     "Finish by calling submit_review.",
@@ -259,7 +316,7 @@ class Pipeline:
                                  task_id=task["id"], project_id=pid)
                 if rv["verdict"] != "approve":
                     approved = False
-                    findings.append(f"{checker['name']} ({source}, {rv['score']:.0f}/100): {rv['notes']}")
+                    findings.append(f"{checker['name']} ({check_role['title']}, {rv['score']:.0f}/100): {rv['notes']}")
             self.perf.evaluate(agent["id"])
 
             if approved:
@@ -276,14 +333,20 @@ class Pipeline:
             if failed:
                 return False
 
-    def _fix_task(self, pid: int, title: str, feedback: str) -> None:
-        roles = self._builder_roles()
-        if not roles:
+    def _fix_task(self, pid: int, title: str, feedback: str, key: str | None = None) -> None:
+        staffed = [r["id"] for r in self._builder_roles()]
+        if not staffed:
             raise PipelineError("Nobody on staff can build. Hire a builder.")
-        n = self.db.one("SELECT COUNT(*) AS n FROM tasks WHERE project_id=? AND key LIKE 'fix-%'", pid)["n"] + 1
+        # Fixes go to the role that built most of this product (engineers, not e.g. marketing).
+        by_work = self.db.all("SELECT role, COUNT(*) AS n FROM tasks WHERE project_id=? AND key NOT LIKE 'fix-%' "
+                              "AND key NOT LIKE 'audit-%' GROUP BY role ORDER BY n DESC, MIN(id)", pid)
+        role = next((r["role"] for r in by_work if r["role"] in staffed), staffed[0])
+        if not key:
+            n = self.db.one("SELECT COUNT(*) AS n FROM tasks WHERE project_id=? AND key LIKE 'fix-%'", pid)["n"] + 1
+            key = f"fix-{n}"
         ts = now()
         self.db.run("INSERT INTO tasks (project_id, key, title, description, role, created_at, updated_at) "
-                    "VALUES (?,?,?,?,?,?,?)", pid, f"fix-{n}", title, feedback, roles[0]["id"], ts, ts)
+                    "VALUES (?,?,?,?,?,?,?)", pid, key, title, feedback, role, ts, ts)
 
     # ---- human decisions -------------------------------------------------
     def decide(self, approval_id: int, role: str, decision: str, feedback: str = "") -> dict:
@@ -308,11 +371,11 @@ class Pipeline:
 
         kind = a["kind"]
         if kind in ("prd", "architecture"):
-            author = payload.get("agent_id")
-            if author:
-                self.perf.record(author, HUMAN_APPROVED if ok else HUMAN_REJECTED, source="human", reviewer=who,
-                                 notes=feedback or f"{a['title']} approved.", project_id=pid)
-                self.perf.evaluate(author)
+            for author in payload.get("agent_ids") or [payload.get("agent_id")]:
+                if author and self.org.agent(author)["status"] != "fired":
+                    self.perf.record(author, HUMAN_APPROVED if ok else HUMAN_REJECTED, source="human", reviewer=who,
+                                     notes=feedback or f"{a['title']} approved.", project_id=pid)
+                    self.perf.evaluate(author)
             if kind == "prd":
                 self._stage(pid, "architecture" if ok else "prd", "" if ok else feedback)
             else:

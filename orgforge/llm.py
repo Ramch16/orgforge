@@ -69,7 +69,8 @@ class MockProvider:
     firing and rehiring work.
     """
 
-    def __init__(self, bad_agents: set[str] | None = None) -> None:
+    def __init__(self, bad_agents: set[str] | None = None, fail_audits_once: set[str] | None = None) -> None:
+        self.fail_audits_once, self._failed = set(fail_audits_once or ()), set()
         env = os.environ.get("ORGFORGE_MOCK_BAD_AGENTS", "")
         self.bad_agents = set(bad_agents or ()) | {n.strip() for n in env.split(",") if n.strip()}
         self._n = 0
@@ -78,13 +79,25 @@ class MockProvider:
         self._n += 1
         return {"type": "tool_use", "id": f"mock_{self._n}", "name": name, "input": inp}
 
-    def _script(self, meta: dict) -> list[list[dict]]:
+    def _script(self, meta: dict, step: int = 0) -> list[list[dict]]:
         kind, purpose = meta.get("kind"), meta.get("purpose", "")
         key = re.sub(r"[^a-z0-9_]", "_", str(meta.get("task_key", "work")).lower())
         if kind == "product":
             return [[self._call("write_file", path="docs/PRD.md",
                                 content="# Requirements\n\nA small first release that works end to end.\n\n"
                                         "## Acceptance criteria\n- The core module runs.\n- Tests pass.\n")]]
+        if kind == "designer":
+            return [[self._call("write_file", path="docs/DESIGN.md",
+                                content="# Design\n\nOne command, clear errors, no configuration.\n")]]
+        if kind == "auditor":
+            role = meta.get("role", "audit")
+            fail = role in self.fail_audits_once and role not in self._failed
+            if step == 1 and fail:
+                self._failed.add(role)
+            verdict = dict(score=40, verdict="request_changes", notes=f"{role}: one high-severity finding.") if fail \
+                else dict(score=90, verdict="approve", notes=f"{role}: no blocking findings.")
+            return [[self._call("write_file", path=f"docs/audits/{role}.md", content=f"# {role}\n\n{verdict['notes']}\n")],
+                    [self._call("submit_review", **verdict)]]
         if kind == "planner":
             roles = meta.get("builder_roles") or ["backend_engineer"]
             tasks = [
@@ -127,7 +140,7 @@ class MockProvider:
     def complete(self, *, model, system, messages, tools, max_tokens, meta=None) -> LLMResponse:
         meta = meta or {}
         step = sum(1 for m in messages if m["role"] == "assistant")
-        script = self._script(meta)
+        script = self._script(meta, step)
         allowed = {t["name"] for t in tools or []}
         if step < len(script):
             blocks = [b for b in script[step] if b["name"] in allowed]

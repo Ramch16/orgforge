@@ -95,6 +95,8 @@ def main(argv: list[str] | None = None) -> int:
     p = org.add_parser("rehire"); p.add_argument("agent"); p.add_argument("--note", default=""); who(p)
     p = org.add_parser("add-dept"); p.add_argument("id"); p.add_argument("--name"); p.add_argument("--reports-to", choices=["ceo", "cto"], default="cto")
     p = org.add_parser("remove-dept"); p.add_argument("id")
+    p = org.add_parser("sync", help="Add departments, roles and seats this company is missing")
+    p.add_argument("--from", dest="source", help="Org file to add from (default: the built-in full company)"); who(p)
     p = org.add_parser("add-role"); p.add_argument("id"); p.add_argument("--dept", required=True)
     p.add_argument("--kind", choices=KINDS, required=True); p.add_argument("--title")
     p.add_argument("--tools", default="read_file,write_file,replace_in_file,list_files,run_command", help=f"Comma-separated: {', '.join(TOOL_SPECS)}")
@@ -187,6 +189,13 @@ def _org(co: Company, args, role: str) -> None:
     elif cmd == "remove-dept":
         co.org.remove_department(args.id)
         print(f"Department {args.id} closed.")
+    elif cmd == "sync":
+        import yaml
+        from .config import DEFAULT_ORG
+        raw = yaml.safe_load(Path(args.source or DEFAULT_ORG).read_text()) or {}
+        added = co.org.sync(raw, by=by)
+        for what, items in added.items():
+            print(f"Added {len(items)} {what}" + (f": {', '.join(items)}" if items else ""))
     elif cmd == "add-role":
         co.org.add_role(args.id, args.dept, args.kind, [t.strip() for t in args.tools.split(",") if t.strip()],
                         args.prompt, title=args.title)

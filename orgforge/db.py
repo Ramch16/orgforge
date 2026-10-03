@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS roles (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   department TEXT NOT NULL REFERENCES departments(id),
-  kind TEXT NOT NULL CHECK (kind IN ('product','planner','builder','reviewer','qa')),
+  kind TEXT NOT NULL,
   tools TEXT NOT NULL,
   prompt TEXT NOT NULL
 );
@@ -115,6 +115,25 @@ class DB:
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA busy_timeout=5000")
         self.conn.executescript(SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Companies created before 0.2 limited role kinds in the table itself. Lift that."""
+        sql = self.conn.execute("SELECT sql FROM sqlite_master WHERE name='roles'").fetchone()["sql"]
+        if "CHECK (kind IN" not in sql:
+            return
+        self.conn.executescript("""
+            PRAGMA legacy_alter_table=ON;
+            BEGIN;
+            ALTER TABLE roles RENAME TO roles_old;
+            CREATE TABLE roles (
+              id TEXT PRIMARY KEY, title TEXT NOT NULL, department TEXT NOT NULL REFERENCES departments(id),
+              kind TEXT NOT NULL, tools TEXT NOT NULL, prompt TEXT NOT NULL);
+            INSERT INTO roles SELECT id, title, department, kind, tools, prompt FROM roles_old;
+            DROP TABLE roles_old;
+            COMMIT;
+            PRAGMA legacy_alter_table=OFF;
+        """)
 
     def run(self, sql: str, *args) -> int:
         with self.lock:

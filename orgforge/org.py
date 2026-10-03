@@ -7,7 +7,7 @@ from .config import Settings
 from .db import DB, now
 from .tools import TOOL_SPECS
 
-KINDS = ("product", "planner", "builder", "reviewer", "qa")
+KINDS = ("product", "designer", "planner", "builder", "reviewer", "qa", "auditor")
 NAME_POOL = [
     "Amara", "Bao", "Carmen", "Dmitri", "Elif", "Farid", "Greta", "Hana", "Idris", "Jonas",
     "Kavya", "Leon", "Malia", "Noor", "Oskar", "Paloma", "Quinn", "Rafael", "Sana", "Teo",
@@ -38,6 +38,27 @@ class Org:
             self.hire(seat["role"], name=seat.get("name"), seat=seat.get("seat"), model=seat.get("model"), by="setup")
         self.db.log("org", f"{self.s.company} opened with {len(raw.get('seats', []))} agents.")
         return True
+
+    def sync(self, raw: dict, by: str = "ceo") -> dict:
+        """Add whatever an org file defines that this company lacks: departments,
+        roles, and seats that have never been filled. Nothing existing is changed."""
+        added = {"departments": [], "roles": [], "agents": []}
+        for d in raw.get("departments", []):
+            if not self.db.one("SELECT 1 FROM departments WHERE id=?", d["id"]):
+                self.add_department(d["id"], d.get("name", d["id"].title()), d.get("reports_to", "cto"))
+                added["departments"].append(d["id"])
+        for role_id, r in (raw.get("roles") or {}).items():
+            if not self.db.one("SELECT 1 FROM roles WHERE id=?", role_id):
+                self.add_role(role_id, r["department"], r["kind"], r.get("tools", []), r.get("prompt", ""), title=r.get("title"))
+                added["roles"].append(role_id)
+        for seat in raw.get("seats", []):
+            if seat.get("seat") and not self.db.one("SELECT 1 FROM agents WHERE seat=?", seat["seat"]):
+                name = seat.get("name")
+                if name and self.db.one("SELECT 1 FROM agents WHERE name=?", name):
+                    name = None
+                a = self.hire(seat["role"], name=name, seat=seat["seat"], model=seat.get("model"), by=by)
+                added["agents"].append(a["name"])
+        return added
 
     # ---- departments and roles ------------------------------------------
     def add_department(self, dept_id: str, name: str, reports_to: str, log: bool = True) -> None:
@@ -109,6 +130,13 @@ class Org:
         sql = ("SELECT a.* FROM agents a JOIN roles r ON r.id=a.role WHERE a.status!='fired'"
                + (" AND a.role=?" if role else "") + (" AND r.kind=?" if kind else ""))
         return self.db.all(sql, *[v for v in (role, kind) if v])
+
+    def staffed_roles(self, *kinds: str) -> list[dict]:
+        """Roles of the given kinds that currently have at least one agent."""
+        marks = ",".join("?" * len(kinds))
+        return self.db.all(
+            f"SELECT DISTINCT r.* FROM roles r JOIN agents a ON a.role=r.id WHERE a.status!='fired' "
+            f"AND r.kind IN ({marks}) ORDER BY r.kind, r.id", *kinds)
 
     def pick(self, *, role: str | None = None, kind: str | None = None, project_id: int | None = None,
              exclude: int | None = None) -> dict | None:
