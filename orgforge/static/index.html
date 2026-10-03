@@ -27,12 +27,12 @@
   textarea { resize: vertical; min-height: 4.5rem; }
   header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 1.1rem 1.5rem; border-bottom: 1px solid var(--line); }
   header p { margin: 0; color: var(--soft); }
-  main { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; gap: 1.5rem; padding: 1.5rem; align-items: start; }
-  @media (max-width: 880px) { main { grid-template-columns: 1fr; } }
+  main { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); gap: 1.5rem; padding: 1.5rem; align-items: start; }
+  @media (max-width: 880px) { main { grid-template-columns: minmax(0, 1fr); } }
   #decisions { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow: auto; }
   @media (max-width: 880px) { #decisions { position: static; max-height: none; } }
   section { margin-bottom: 1.75rem; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: .9rem 1rem; margin-bottom: .8rem; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: .9rem 1rem; margin-bottom: .8rem; overflow-x: auto; }
   .decision { border-left: 5px solid var(--cobalt); }
   .decision.other { border-left-color: var(--line); }
   .decision pre { white-space: pre-wrap; font: inherit; font-size: .88rem; color: var(--soft); max-height: 14rem; overflow: auto; margin: .5rem 0; }
@@ -56,6 +56,27 @@
   #signin { max-width: 380px; margin: 12vh auto; }
   #error { color: var(--bad); min-height: 1.4rem; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+  .in_review, .backlog, .cancelled { color: var(--soft); } .in_review { color: var(--cobalt); }
+  .board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(200px, 1fr); gap: .6rem; overflow-x: auto; padding-bottom: .4rem; }
+  .col { background: var(--wash); border-radius: 8px; padding: .5rem; min-height: 6rem; }
+  .col h3 { font-size: .82rem; color: var(--soft); text-transform: uppercase; letter-spacing: .04em; margin: .1rem .2rem .5rem; }
+  .ticket { display: block; width: 100%; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: .5rem .6rem; margin-bottom: .45rem; }
+  .ticket:hover { border-color: var(--cobalt); }
+  .ticket .t-title { display: block; margin: .15rem 0 .3rem; line-height: 1.3; }
+  .ticket.is-cancelled .t-title { text-decoration: line-through; color: var(--soft); }
+  .key { font-size: .78rem; font-weight: 650; color: var(--soft); font-variant-numeric: tabular-nums; }
+  .prio { font-size: .76rem; font-weight: 650; text-transform: uppercase; letter-spacing: .03em; }
+  .prio.urgent { color: var(--bad); } .prio.high { color: var(--warn); } .prio.medium, .prio.low { color: var(--soft); }
+  .filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: .5rem; margin-bottom: .7rem; }
+  @media (max-width: 620px) { .filters { grid-template-columns: 1fr 1fr; } }
+  dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); width: min(680px, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); padding: 1.1rem 1.2rem; }
+  dialog::backdrop { background: rgb(10 15 20 / .45); }
+  .field { margin: .55rem 0; } .field > span:first-child { display: block; font-size: .8rem; color: var(--soft); margin-bottom: .15rem; }
+  .history { border-top: 1px solid var(--line); margin-top: .8rem; padding-top: .5rem; max-height: 18rem; overflow: auto; }
+  .history div { padding: .4rem 0; border-bottom: 1px solid var(--line); font-size: .88rem; }
+  .history pre { white-space: pre-wrap; font: inherit; margin: .15rem 0 0; }
+  .history .comment { border-left: 3px solid var(--cobalt); padding-left: .55rem; }
+  tr[data-ticket] { cursor: pointer; } tr[data-ticket]:hover td { color: var(--cobalt); }
 </style>
 </head>
 <body>
@@ -89,6 +110,17 @@
         <div id="projects"></div>
       </section>
       <section>
+        <div class="row" style="justify-content:space-between;margin-bottom:.7rem"><h2 style="margin:0">Tickets</h2>
+          <button class="primary" id="t-new">New ticket</button></div>
+        <div class="filters">
+          <select id="f-project" aria-label="Project"></select>
+          <select id="f-type" aria-label="Type"></select>
+          <input id="f-text" placeholder="Search tickets" aria-label="Search tickets">
+          <label class="muted row" style="flex-wrap:nowrap"><input type="checkbox" id="f-cancelled" style="width:auto"> Cancelled</label>
+        </div>
+        <div class="board" id="board"></div>
+      </section>
+      <section>
         <h2>People</h2>
         <div id="people"></div>
         <div class="card">
@@ -108,6 +140,24 @@
     </div>
   </main>
 </div>
+
+<dialog id="new-dlg">
+  <h2>New ticket</h2>
+  <label class="field"><span>Project</span><select id="n-project"></select></label>
+  <label class="field"><span>Title</span><input id="n-title" placeholder="What needs doing?"></label>
+  <label class="field"><span>Description</span><textarea id="n-desc" placeholder="Details and acceptance criteria. The agent reads this."></textarea></label>
+  <div class="grid2">
+    <label class="field"><span>Type</span><select id="n-type"></select></label>
+    <label class="field"><span>Priority</span><select id="n-priority"></select></label>
+    <label class="field"><span>Assign to role</span><select id="n-role"></select></label>
+    <label class="field"><span>Status</span><select id="n-status"><option value="backlog">Backlog (triage later)</option><option value="todo">To do (team starts it)</option></select></label>
+  </div>
+  <p class="muted">A to-do ticket on a released or releasing product sends it back to build and re-runs the release checks.</p>
+  <p id="n-error" class="muted" style="color:var(--bad)"></p>
+  <div class="row"><button class="primary" id="n-save">File ticket</button><button id="n-cancel">Cancel</button></div>
+</dialog>
+
+<dialog id="ticket-dlg"><div id="ticket-body"></div></dialog>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -145,6 +195,7 @@ async function refresh(force) {
   $("signin").hidden = true; $("app").hidden = false;
   if (busy && !force) return;             // don't redraw under someone typing
   render();
+  if (openTicketId && !force) loadTicket(openTicketId).catch(() => {});
 }
 
 function render() {
@@ -174,9 +225,9 @@ function render() {
       const i = order.indexOf(s.id);
       return `<span title="${esc(s.label)}" class="${p.stage === "done" || i < at ? "past" : i === at ? "now" : ""}"></span>`;
     }).join("");
-    const tasks = p.tasks.length ? `<table><tr><th>Task</th><th>Owner</th><th>Status</th></tr>${p.tasks.map(t =>
-      `<tr><td>${esc(t.title)}${t.attempts ? ` <span class="muted">sent back ${t.attempts}×</span>` : ""}</td>
-       <td>${esc(t.assignee || "")}</td><td><span class="chip ${t.status}">${esc(t.status.replace("_", " "))}</span></td></tr>`).join("")}</table>` : "";
+    const tasks = p.tasks.length ? `<table><tr><th>Ticket</th><th>Task</th><th>Owner</th><th>Status</th></tr>${p.tasks.map(t =>
+      `<tr data-ticket="${t.id}"><td class="key">T-${t.id}</td><td>${esc(t.title)}${t.attempts ? ` <span class="muted">sent back ${t.attempts}×</span>` : ""}</td>
+       <td>${esc(t.assignee || "")}</td><td><span class="chip ${t.status}">${esc(state.ticket_meta.statuses[t.status] || t.status)}</span></td></tr>`).join("")}</table>` : "";
     return `<div class="card">
       <div class="row" style="justify-content:space-between"><h3>${esc(p.name)}</h3><span class="muted">${esc(p.stage_label)}</span></div>
       <div class="track">${track}</div>
@@ -210,7 +261,121 @@ function render() {
 
   $("log").innerHTML = state.events.map(e =>
     `<div><span class="muted">${esc(e.ts.slice(11, 19))} ${esc(e.actor)}</span> ${esc(e.message)}</div>`).join("") || "Nothing yet.";
+  renderTickets();
 }
+
+const COLUMNS = ["backlog", "todo", "in_progress", "in_review", "failed", "done"];
+let openTicketId = null, ticketShown = "", boardShown = "";
+const ticketDrafts = {};                  // unsaved edits survive the 4-second refresh
+
+function options(el, items, keep = true) {
+  const was = el.value;
+  el.innerHTML = items.map(([v, label]) => `<option value="${esc(v)}">${esc(label)}</option>`).join("");
+  if (keep && items.some(([v]) => String(v) === was)) el.value = was;
+}
+
+function renderTickets() {
+  const m = state.ticket_meta;
+  options($("f-project"), [["", "All projects"], ...state.projects.map(p => [p.id, p.name])]);
+  options($("f-type"), [["", "All types"], ...m.types.map(t => [t, t[0].toUpperCase() + t.slice(1)])]);
+  const project = $("f-project").value, type = $("f-type").value, text = $("f-text").value.trim().toLowerCase();
+  const showCancelled = $("f-cancelled").checked;
+  const shown = state.tickets.filter(t => (!project || String(t.project_id) === project) && (!type || t.type === type)
+    && (showCancelled || t.status !== "cancelled")
+    && (!text || `${t.ticket} ${t.title} ${t.assignee || ""}`.toLowerCase().includes(text)));
+  const sig = JSON.stringify([shown, project]);
+  if (sig === boardShown) return;          // unchanged: keep the DOM so clicks and focus are not lost
+  boardShown = sig;
+  $("board").innerHTML = COLUMNS.map(c => {
+    const cards = shown.filter(t => t.status === c || (c === "done" && t.status === "cancelled"));
+    return `<div class="col"><h3>${esc(m.statuses[c])} · ${cards.length}</h3>${cards.map(t => `
+      <button class="ticket is-${t.status}" data-ticket="${t.id}">
+        <span class="row" style="justify-content:space-between"><span class="key">${esc(t.ticket)}</span><span class="prio ${t.priority}">${esc(t.priority)}</span></span>
+        <span class="t-title">${esc(t.title)}</span>
+        <span class="row muted" style="justify-content:space-between"><span>${esc(t.type)}${project ? "" : ` · ${esc(t.project)}`}</span>
+        <span>${esc(t.assignee || "")}${t.comments ? ` · ${t.comments} 💬` : ""}</span></span>
+      </button>`).join("")}</div>`;
+  }).join("");
+}
+
+async function loadTicket(id) {
+  const t = await api(`/api/tickets/${id}`);
+  const sig = JSON.stringify(t);
+  if ($("ticket-dlg").open && openTicketId === t.id && sig === ticketShown) return;
+  openTicketId = t.id; ticketShown = sig;
+  const m = state.ticket_meta, editable = ["backlog", "todo"].includes(t.status), closed = ["done", "cancelled"].includes(t.status);
+  const statusField = editable
+    ? `<select id="d-status">${["backlog", "todo", "cancelled"].map(s => `<option value="${s}" ${s === t.status ? "selected" : ""}>${esc(m.statuses[s])}</option>`).join("")}</select>`
+    : `<span class="chip ${t.status}">${esc(t.status_label)}</span> <span class="muted">${closed ? "" : "The team owns this status."}</span>`;
+  const prioField = closed ? `<span class="prio ${t.priority}">${esc(t.priority)}</span>`
+    : `<select id="d-priority">${m.priorities.map(p => `<option ${p === t.priority ? "selected" : ""}>${p}</option>`).join("")}</select>`;
+  $("ticket-body").innerHTML = `
+    <div class="row" style="justify-content:space-between"><span class="key">${esc(t.ticket)} · ${esc(t.type)} · ${esc(t.project)}</span>
+      <button class="quiet" id="d-close" aria-label="Close">Close</button></div>
+    ${editable ? `<label class="field"><span>Title</span><input id="d-title" value="${esc(t.title)}"></label>` : `<h2 style="margin:.4rem 0">${esc(t.title)}</h2>`}
+    <div class="grid2"><div class="field"><span>Status</span>${statusField}</div><div class="field"><span>Priority</span>${prioField}</div></div>
+    <p class="muted">Role ${esc(t.role)} · ${t.assignee ? `assigned to ${esc(t.assignee)}` : "unassigned"} · reported by ${esc(t.reporter)} · ${esc(t.created_at.slice(0, 16).replace("T", " "))}${t.attempts ? ` · sent back ${t.attempts}×` : ""}</p>
+    ${editable ? `<label class="field"><span>Description</span><textarea id="d-desc" rows="5">${esc(t.description)}</textarea></label>`
+               : `<div class="field"><span>Description</span><pre style="white-space:pre-wrap;font:inherit;margin:0">${esc(t.description) || '<span class="muted">None</span>'}</pre></div>`}
+    ${closed ? "" : `<button id="d-save">Save changes</button>`}
+    <p id="d-error" class="muted" style="color:var(--bad)"></p>
+    <div class="history">${t.history.map(h => `<div class="${h.kind}"><span class="muted">${esc(h.created_at.slice(0, 16).replace("T", " "))} · ${esc(h.author)}${h.kind === "comment" ? " commented" : ""}</span><pre>${esc(h.body)}</pre></div>`).join("") || '<span class="muted">No history yet.</span>'}</div>
+    <label class="field"><span>Comment</span><textarea id="d-comment" placeholder="The agent who works this ticket next will read your comment."></textarea></label>
+    <button class="primary" id="d-comment-go">Comment</button>`;
+  for (const [field, value] of Object.entries(ticketDrafts[t.id] || {})) if ($(field)) $(field).value = value;
+  if (!$("ticket-dlg").open) $("ticket-dlg").showModal();
+}
+
+async function ticketAct(fn) {
+  try { await fn(); await loadTicket(openTicketId); await refresh(true); }
+  catch (e) { if (e.message !== "unauthorized" && $("d-error")) $("d-error").textContent = e.message; }
+}
+
+document.addEventListener("click", e => {
+  const row = e.target.closest("[data-ticket]");
+  if (row) return act(() => loadTicket(row.dataset.ticket));
+  const id = e.target.id;
+  if (id === "d-close") $("ticket-dlg").close();
+  else if (id === "d-comment-go") ticketAct(async () => {
+    await api(`/api/tickets/${openTicketId}/comments`, { body: $("d-comment").value });
+    delete (ticketDrafts[openTicketId] || {})["d-comment"];
+  });
+  else if (id === "d-save") ticketAct(async () => {
+    const body = { priority: $("d-priority")?.value };
+    if ($("d-status")) Object.assign(body, { status: $("d-status").value, title: $("d-title").value, description: $("d-desc").value });
+    await api(`/api/tickets/${openTicketId}`, body);
+    for (const f of ["d-title", "d-desc", "d-status", "d-priority"]) delete (ticketDrafts[openTicketId] || {})[f];
+  });
+});
+document.addEventListener("input", e => {
+  if (openTicketId && ["d-title", "d-desc", "d-status", "d-priority", "d-comment"].includes(e.target.id))
+    (ticketDrafts[openTicketId] ||= {})[e.target.id] = e.target.value;
+});
+$("ticket-dlg").addEventListener("close", () => { openTicketId = null; ticketShown = ""; });
+$("t-new").onclick = () => {
+  const m = state.ticket_meta;
+  if (!state.projects.length) { $("error").textContent = "Start a project before filing tickets."; return; }
+  options($("n-project"), state.projects.map(p => [p.id, p.name]));
+  if ($("f-project").value) $("n-project").value = $("f-project").value;
+  options($("n-type"), m.types.map(t => [t, t[0].toUpperCase() + t.slice(1)]));
+  options($("n-priority"), m.priorities.map(p => [p, p[0].toUpperCase() + p.slice(1)]));
+  if (!$("n-priority").dataset.init) { $("n-priority").value = "medium"; $("n-priority").dataset.init = 1; }
+  options($("n-role"), [["", "Whoever built most of it"], ...m.roles.map(r => [r.id, r.title])]);
+  $("n-error").textContent = "";
+  $("new-dlg").showModal();
+};
+$("n-cancel").onclick = () => $("new-dlg").close();
+$("n-save").onclick = async () => {
+  try {
+    const t = await api("/api/tickets", { project_id: Number($("n-project").value), title: $("n-title").value,
+      description: $("n-desc").value, type: $("n-type").value, priority: $("n-priority").value,
+      status: $("n-status").value, role: $("n-role").value || null });
+    $("n-title").value = ""; $("n-desc").value = ""; $("new-dlg").close();
+    await refresh(true); await loadTicket(t.id);
+  } catch (e) { if (e.message !== "unauthorized") $("n-error").textContent = e.message; }
+};
+["f-project", "f-type", "f-cancelled"].forEach(id => $(id).onchange = renderTickets);
+$("f-text").oninput = renderTickets;
 
 document.addEventListener("input", e => { if (e.target.dataset.draft) drafts[e.target.dataset.draft] = e.target.value; });
 document.addEventListener("click", e => {

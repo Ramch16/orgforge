@@ -9,6 +9,7 @@ from pathlib import Path
 from .company import Company
 from .org import KINDS, OrgError
 from .pipeline import PipelineError
+from .tickets import PRIORITIES, STATUSES, TYPES, TicketError
 from .tools import TOOL_SPECS
 
 
@@ -89,6 +90,21 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("serve", help="Start the dashboard")
     p.add_argument("--host", default="127.0.0.1"); p.add_argument("--port", type=int, default=4700)
 
+    tk = sub.add_parser("ticket", help="Internal ticket tracker").add_subparsers(dest="ticket_cmd")
+    p = tk.add_parser("list", help="Tickets, highest priority first")
+    p.add_argument("--project", type=int); p.add_argument("--status", choices=STATUSES)
+    p = tk.add_parser("show", help="A ticket with its full history"); p.add_argument("ticket")
+    p = tk.add_parser("new", help="File a ticket"); p.add_argument("project", type=int); p.add_argument("title")
+    p.add_argument("--description", default=""); p.add_argument("--type", choices=TYPES, default="task")
+    p.add_argument("--priority", choices=PRIORITIES, default="medium"); p.add_argument("--role")
+    p.add_argument("--todo", action="store_true", help="Ready for the team now (default: backlog)")
+    p.add_argument("--no-run", action="store_true"); who(p)
+    p = tk.add_parser("update", help="Change status, priority, title or description"); p.add_argument("ticket")
+    p.add_argument("--status", choices=("backlog", "todo", "cancelled")); p.add_argument("--priority", choices=PRIORITIES)
+    p.add_argument("--title"); p.add_argument("--description"); p.add_argument("--no-run", action="store_true"); who(p)
+    p = tk.add_parser("comment", help="Comment on a ticket; the agent who works it next will read it")
+    p.add_argument("ticket"); p.add_argument("text"); who(p)
+
     org = sub.add_parser("org", help="Org chart, hiring and firing").add_subparsers(dest="org_cmd")
     p = org.add_parser("show"); p.add_argument("--all", action="store_true", help="Include former agents")
     p = org.add_parser("hire"); p.add_argument("--role", required=True); p.add_argument("--name"); p.add_argument("--model"); who(p)
@@ -107,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     try:
         return _dispatch(args)
-    except (OrgError, PipelineError, PermissionError, RuntimeError) as exc:
+    except (OrgError, PipelineError, TicketError, PermissionError, RuntimeError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
@@ -161,7 +177,49 @@ def _dispatch(args) -> int:
         serve(co, args.host, args.port)
     elif args.cmd == "org":
         _org(co, args, role)
+    elif args.cmd == "ticket":
+        _ticket(co, args, role)
     return 0
+
+
+def _print_ticket_row(t: dict) -> None:
+    who = t["assignee"] or "-"
+    print(f"  {t['ticket']:<7} {t['status_label']:<12} {t['priority']:<7} {t['type']:<6} {who:<10} "
+          f"P{t['project_id']} {t['title']}" + (f"  ({t['comments']} comments)" if t.get("comments") else ""))
+
+
+def _ticket(co: Company, args, role: str) -> None:
+    cmd = args.ticket_cmd or "list"
+    by = co.s.human(role)
+    if cmd == "list":
+        tickets = co.tickets.search(getattr(args, "project", None), getattr(args, "status", None))
+        if not tickets:
+            print("No tickets.")
+        for t in tickets:
+            _print_ticket_row(t)
+        return
+    if cmd == "show":
+        t = co.tickets.get(args.ticket)
+    elif cmd == "new":
+        t = co.tickets.create(args.project, args.title, args.description, by, type=args.type, priority=args.priority,
+                              status="todo" if args.todo else "backlog", role=args.role)
+        print(f"Filed {t['ticket']}.")
+    elif cmd == "update":
+        t = co.tickets.update(args.ticket, by, status=args.status, priority=args.priority,
+                              title=args.title, description=args.description)
+    else:
+        t = co.tickets.comment(args.ticket, by, args.text)
+    print(f"\n{t['ticket']}  {t['title']}\n  {t['type']} · {t['priority']} priority · {t['status_label']} · "
+          f"project {t['project_id']} ({t['project']}) · {t['role']} · {t['assignee'] or 'unassigned'} · "
+          f"reported by {t['reporter']}")
+    if t["description"]:
+        print("\n  " + t["description"].replace("\n", "\n  "))
+    for h in t["history"]:
+        label = "commented" if h["kind"] == "comment" else ""
+        print(f"\n  {h['created_at'][:16].replace('T', ' ')}  {h['author']} {label}\n    "
+              + h["body"].replace("\n", "\n    "))
+    if cmd in ("new", "update") and t["status"] == "todo" and not args.no_run:
+        _advance(co, t["project_id"])
 
 
 def _org(co: Company, args, role: str) -> None:

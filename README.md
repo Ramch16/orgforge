@@ -159,7 +159,7 @@ orgforge serve --host 0.0.0.0 --port 4700
 ```
 
 Each of you signs in with your own token. The dashboard shows the decisions
-waiting for you, every project and task, the org chart with scores, and the
+waiting for you, every project, the ticket board, the org chart with scores, and the
 activity log. Put it behind HTTPS (a reverse proxy or a tunnel) before exposing
 it beyond your machine.
 
@@ -169,6 +169,30 @@ it beyond your machine.
 | Design and plan, escalations, release | CTO                               |
 | Replace or reinstate an agent         | Whoever the department reports to |
 | Hire, fire, rate                      | CEO anywhere; CTO in CTO departments |
+
+## Tickets
+
+Every piece of work is a ticket (`T-12`) on the dashboard's board: Backlog,
+To do, In progress, In review, Needs CTO and Done. Build-plan tasks, audit
+fixes and send-back fixes become tickets automatically, and each ticket keeps
+its history: who started it, review findings, escalations and decisions.
+
+The CEO and CTO can file tickets (task, bug or story; urgent, high, medium or
+low priority), comment, change priority, and move tickets between backlog,
+to do and cancelled. Agents own the working statuses. The team picks up to-do
+tickets highest priority first, and the agent working a ticket reads its
+comments. Backlog tickets wait for triage and do not block a release. A to-do
+ticket on a product that is releasing or already ready for deployment sends it
+back to build, withdraws pending release approvals, and runs the release checks
+again.
+
+```bash
+orgforge ticket new 1 "Greeting crashes on empty name" --type bug --priority urgent --todo
+orgforge ticket list --project 1
+orgforge ticket comment T-5 "Add a regression test" --as cto
+orgforge ticket update T-5 --priority high
+orgforge ticket show T-5
+```
 
 ## Performance, firing and rehiring
 
@@ -276,6 +300,7 @@ Each role gets only the tools listed for it.
 | `orgforge/org.py`         | Departments, roles, hire, fire, replace, rehire    |
 | `orgforge/performance.py` | Scores and HR policy                               |
 | `orgforge/pipeline.py`    | Stages, task loop, human decisions                 |
+| `orgforge/tickets.py`     | Ticket tracker: filing, triage, comments, history  |
 | `orgforge/agent.py`       | One agent run: prompt and tool loop                |
 | `orgforge/tools.py`       | Workspace file and command tools                   |
 | `orgforge/llm.py`         | Anthropic provider and offline mock                |

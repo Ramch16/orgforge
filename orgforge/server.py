@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from .company import Company
 from .org import OrgError
 from .pipeline import STAGE_LABELS, STAGES, PipelineError
+from .tickets import PRIORITIES, STATUS_LABELS, TYPES, TicketError
 
 STATIC = Path(__file__).with_name("static")
 
@@ -43,6 +44,27 @@ class Rating(BaseModel):
     note: str = ""
 
 
+class NewTicket(BaseModel):
+    project_id: int
+    title: str
+    description: str = ""
+    type: str = "task"
+    priority: str = "medium"
+    status: str = "backlog"
+    role: str | None = None
+
+
+class TicketChange(BaseModel):
+    status: str | None = None
+    priority: str | None = None
+    title: str | None = None
+    description: str | None = None
+
+
+class Comment(BaseModel):
+    body: str
+
+
 def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
     app = FastAPI(title="OrgForge", docs_url=None, redoc_url=None)
 
@@ -65,7 +87,7 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
             return fn()
         except PermissionError as exc:
             raise HTTPException(403, str(exc))
-        except (OrgError, PipelineError) as exc:
+        except (OrgError, PipelineError, TicketError) as exc:
             raise HTTPException(400, str(exc))
 
     def managed(role: str, ref: int) -> dict:
@@ -88,6 +110,9 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
             "departments": co.org.chart(include_fired=True),
             "projects": co.pipeline.overview(),
             "approvals": co.pipeline.inbox(),
+            "tickets": co.tickets.search(),
+            "ticket_meta": {"types": TYPES, "priorities": PRIORITIES, "statuses": STATUS_LABELS,
+                            "roles": [{"id": r["id"], "title": r["title"]} for r in co.pipeline._builder_roles()]},
             "events": co.events(60)[::-1],
         }
 
@@ -111,6 +136,29 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
         if approval["project_id"]:
             run_in_background(approval["project_id"])
         return approval
+
+    @app.get("/api/tickets/{ref}")
+    def ticket(ref: str, role: str = Depends(auth)) -> dict:
+        return guard(lambda: co.tickets.get(ref))
+
+    @app.post("/api/tickets")
+    def new_ticket(body: NewTicket, role: str = Depends(auth)) -> dict:
+        t = guard(lambda: co.tickets.create(body.project_id, body.title, body.description, co.s.human(role),
+                                            type=body.type, priority=body.priority, status=body.status,
+                                            role=body.role or None))
+        run_in_background(t["project_id"])
+        return t
+
+    @app.post("/api/tickets/{ref}")
+    def change_ticket(ref: str, body: TicketChange, role: str = Depends(auth)) -> dict:
+        t = guard(lambda: co.tickets.update(ref, co.s.human(role), status=body.status, priority=body.priority,
+                                            title=body.title, description=body.description))
+        run_in_background(t["project_id"])
+        return t
+
+    @app.post("/api/tickets/{ref}/comments")
+    def comment(ref: str, body: Comment, role: str = Depends(auth)) -> dict:
+        return guard(lambda: co.tickets.comment(ref, co.s.human(role), body.body))
 
     @app.post("/api/agents")
     def hire(body: Hire, role: str = Depends(auth)) -> dict:

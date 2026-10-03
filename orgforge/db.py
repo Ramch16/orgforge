@@ -62,8 +62,20 @@ CREATE TABLE IF NOT EXISTS tasks (
   attempts INTEGER NOT NULL DEFAULT 0,
   feedback TEXT NOT NULL DEFAULT '',
   result TEXT NOT NULL DEFAULT '',
+  type TEXT NOT NULL DEFAULT 'task',
+  priority TEXT NOT NULL DEFAULT 'medium',
+  origin TEXT NOT NULL DEFAULT 'plan',
+  reporter TEXT NOT NULL DEFAULT 'OrgForge',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ticket_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id INTEGER NOT NULL REFERENCES tasks(id),
+  author TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'comment',
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS reviews (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,7 +130,12 @@ class DB:
         self._migrate()
 
     def _migrate(self) -> None:
-        """Companies created before 0.2 limited role kinds in the table itself. Lift that."""
+        # 0.4 turned tasks into tickets.
+        have = {r["name"] for r in self.conn.execute("PRAGMA table_info(tasks)")}
+        for column, default in (("type", "task"), ("priority", "medium"), ("origin", "plan"), ("reporter", "OrgForge")):
+            if column not in have:
+                self.conn.execute(f"ALTER TABLE tasks ADD COLUMN {column} TEXT NOT NULL DEFAULT '{default}'")
+        # Companies created before 0.2 limited role kinds in the table itself. Lift that.
         sql = self.conn.execute("SELECT sql FROM sqlite_master WHERE name='roles'").fetchone()["sql"]
         if "CHECK (kind IN" not in sql:
             return

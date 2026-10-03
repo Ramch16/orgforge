@@ -22,6 +22,7 @@ from .config import Settings
 from .db import DB, now
 from .org import Org
 from .performance import Performance
+from .tickets import PRIORITY_ORDER, ticket_key, note
 from .tools import Workspace
 from .validation import CONTRACT, CONTRACT_GUIDE, validate_plan, verify_product
 
@@ -95,7 +96,7 @@ class Pipeline:
         if not lock.acquire(blocking=False):
             return self.project(pid)          # already running in another thread
         try:
-            self.db.run("UPDATE tasks SET status='todo' WHERE project_id=? AND status='in_progress'", pid)
+            self.db.run("UPDATE tasks SET status='todo' WHERE project_id=? AND status IN ('in_progress', 'in_review')", pid)
             steps = {"prd": self._prd, "architecture": self._architecture, "build": self._build}
             while (stage := self.project(pid)["stage"]) in steps:
                 steps[stage](self.project(pid))
@@ -176,7 +177,9 @@ class Pipeline:
             validate_plan(res.plan, {r["id"] for r in roles})
         except ValueError as exc:
             raise PipelineError(str(exc)) from exc
-        self.db.run("DELETE FROM tasks WHERE project_id=? AND status!='done'", p["id"])
+        self.db.run("DELETE FROM ticket_comments WHERE task_id IN (SELECT id FROM tasks WHERE project_id=? "
+                    "AND status!='done' AND origin!='human')", p["id"])
+        self.db.run("DELETE FROM tasks WHERE project_id=? AND status!='done' AND origin!='human'", p["id"])
         valid, keys = {r["id"] for r in roles}, set()
         for i, t in enumerate(res.plan, 1):
             key = re.sub(r"[^a-z0-9_-]+", "-", str(t.get("key") or f"task-{i}").lower()).strip("-") or f"task-{i}"
@@ -188,10 +191,12 @@ class Pipeline:
             deps = [d for d in (t.get("depends_on") or []) if d in keys and d != t["key"]]
             role = t.get("role") if t.get("role") in valid else roles[0]["id"]
             ts = now()
-            self.db.run(
-                "INSERT INTO tasks (project_id, key, title, description, role, depends_on, created_at, updated_at) "
-                "VALUES (?,?,?,?,?,?,?,?)", p["id"], t["key"], t.get("title", t["key"]), t.get("description", ""),
-                role, json.dumps(deps), ts, ts)
+            tid = self.db.run(
+                "INSERT INTO tasks (project_id, key, title, description, role, depends_on, status, reporter, "
+                "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)", p["id"], t["key"], t.get("title", t["key"]),
+                t.get("description", ""), role, json.dumps(deps), "todo", architect["name"], ts, ts)
+            note(self.db, tid, architect["name"], "Created from the build plan."
+                 + (f" Depends on: {', '.join(deps)}." if deps else ""))
         ws.commit(f"Architecture and plan ({architect['name']})")
         plan_text = "\n".join(f"- [{t['key']}] {t.get('title', '')} ({t.get('role', '')})" for t in res.plan)
         self._approval(p["id"], "architecture", "cto", f"Design and plan for {p['name']}",
@@ -203,8 +208,8 @@ class Pipeline:
         self._stage(p["id"], "architecture_approval", "")
 
     def _next_task(self, pid: int) -> dict | None:
-        tasks = self.db.all("SELECT * FROM tasks WHERE project_id=? ORDER BY id", pid)
-        done = {t["key"] for t in tasks if t["status"] == "done"}
+        tasks = self.db.all(f"SELECT * FROM tasks WHERE project_id=? ORDER BY {PRIORITY_ORDER}, id", pid)
+        done = {t["key"] for t in tasks if t["status"] in ("done", "cancelled")}
         for t in tasks:
             if t["status"] == "todo" and all(d in done for d in json.loads(t["depends_on"])):
                 return t
@@ -222,7 +227,8 @@ class Pipeline:
                                {"task_id": task["id"]})
                 self._stage(p["id"], "escalation")
                 return
-        stuck = self.db.all("SELECT key FROM tasks WHERE project_id=? AND status!='done'", p["id"])
+        stuck = self.db.all("SELECT key FROM tasks WHERE project_id=? AND status NOT IN ('done', 'cancelled', 'backlog')",
+                            p["id"])
         if stuck:
             raise PipelineError("Tasks cannot start because their dependencies never finish: "
                                 + ", ".join(t["key"] for t in stuck))
@@ -291,7 +297,7 @@ class Pipeline:
             self._fix_task(pid, f"Fix {role['title'].lower()} audit findings",
                            f"{auditor['name']} ({role['title']}) audited the product and requires these fixes "
                            f"before release:\n{notes}\n\nFull report: docs/audits/{role['id']}.md",
-                           key=f"audit-{len(rounds) + 1}-{role['id']}")
+                           key=f"audit-{len(rounds) + 1}-{role['id']}", reporter=auditor["name"])
         self.db.log("work", f"Audits raised {len(findings)} fix task(s).", pid)
         return None
 
@@ -348,6 +354,8 @@ class Pipeline:
                         agent["id"], now(), task["id"])
             self.db.log("work", f"{agent['name']} started [{task['key']}] {task['title']}"
                         + (f" (attempt {task['attempts'] + 1})" if task["attempts"] else ""), pid, actor=agent["name"])
+            note(self.db, task["id"], agent["name"], "Started work" + (f" (attempt {task['attempts'] + 1})."
+                                                                      if task["attempts"] else "."))
             ask = (f"Project \"{p['name']}\". Read docs/PRD.md, docs/ARCHITECTURE.md and, if present, "
                    "docs/DESIGN.md first.\n\n"
                    f"Your task [{task['key']}]: {task['title']}\n{task['description']}\n\n"
@@ -355,10 +363,16 @@ class Pipeline:
                    "and nothing that worked before is broken.")
             if task["feedback"]:
                 ask += f"\n\nYour previous attempt was sent back. Fix these findings:\n{task['feedback']}"
+            comments = self.db.all("SELECT author, body FROM (SELECT * FROM ticket_comments WHERE task_id=? "
+                                   "AND kind='comment' ORDER BY id DESC LIMIT 10) ORDER BY id", task["id"])
+            if comments:
+                ask += ("\n\nComments on this ticket from the CEO and CTO (follow them):\n"
+                        + "\n".join(f"- {c['author']}: {c['body']}" for c in comments))
             meta = {"task_key": task["key"]}
             res = self.runtime.run(agent, ask, ws, project_id=pid, meta=meta)
 
             changed = ws.changed_files()
+            self.db.run("UPDATE tasks SET status='in_review', updated_at=? WHERE id=?", now(), task["id"])
             findings, approved = [], res.completed
             if not res.completed:
                 findings.append("Builder did not finish within its turn budget.")
@@ -396,29 +410,37 @@ class Pipeline:
                 self.db.run("UPDATE tasks SET status='done', result=?, updated_at=? WHERE id=?",
                             res.text, now(), task["id"])
                 self.db.log("work", f"[{task['key']}] passed review.", pid, actor=agent["name"])
+                note(self.db, task["id"], agent["name"], "Passed review. Done.\n" + (res.text or "")[:2000])
                 return True
             attempts = task["attempts"] + 1
             failed = attempts > self.s.max_rework
             self.db.run("UPDATE tasks SET status=?, attempts=?, feedback=?, result=?, updated_at=? WHERE id=?",
                         "failed" if failed else "todo", attempts, "\n".join(findings), res.text, now(), task["id"])
             self.db.log("work", f"[{task['key']}] sent back ({attempts}).", pid, actor=agent["name"])
+            note(self.db, task["id"], "Review", f"Sent back ({attempts}):\n" + "\n".join(findings)
+                 + ("\nEscalated to the CTO." if failed else ""))
             if failed:
                 return False
 
-    def _fix_task(self, pid: int, title: str, feedback: str, key: str | None = None) -> None:
+    def _fix_role(self, pid: int) -> str:
         staffed = [r["id"] for r in self._builder_roles()]
         if not staffed:
             raise PipelineError("Nobody on staff can build. Hire a builder.")
         # Fixes go to the role that built most of this product (engineers, not e.g. marketing).
         by_work = self.db.all("SELECT role, COUNT(*) AS n FROM tasks WHERE project_id=? AND key NOT LIKE 'fix-%' "
                               "AND key NOT LIKE 'audit-%' GROUP BY role ORDER BY n DESC, MIN(id)", pid)
-        role = next((r["role"] for r in by_work if r["role"] in staffed), staffed[0])
+        return next((r["role"] for r in by_work if r["role"] in staffed), staffed[0])
+
+    def _fix_task(self, pid: int, title: str, feedback: str, key: str | None = None, reporter: str = "OrgForge") -> None:
+        role = self._fix_role(pid)
         if not key:
             n = self.db.one("SELECT COUNT(*) AS n FROM tasks WHERE project_id=? AND key LIKE 'fix-%'", pid)["n"] + 1
             key = f"fix-{n}"
         ts = now()
-        self.db.run("INSERT INTO tasks (project_id, key, title, description, role, created_at, updated_at) "
-                    "VALUES (?,?,?,?,?,?,?)", pid, key, title, feedback, role, ts, ts)
+        tid = self.db.run("INSERT INTO tasks (project_id, key, title, description, role, status, type, priority, origin, "
+                          "reporter, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                          pid, key, title, feedback, role, "todo", "bug", "high", "pipeline", reporter, ts, ts)
+        note(self.db, tid, reporter, "Filed automatically from a failed check or a sent-back decision.")
 
     # ---- human decisions -------------------------------------------------
     def decide(self, approval_id: int, role: str, decision: str, feedback: str = "") -> dict:
@@ -463,7 +485,9 @@ class Pipeline:
             if ok:
                 self.workspace(self.project(pid)).commit(f"[{task['key']}] accepted by the CTO")
                 self.db.run("UPDATE tasks SET status='done', updated_at=? WHERE id=?", now(), task["id"])
+                note(self.db, task["id"], who, "Accepted as it stands." + (f" {feedback}" if feedback else ""))
             else:
+                note(self.db, task["id"], who, f"Sent back to the team with guidance: {feedback}")
                 self.db.run("UPDATE tasks SET status='todo', attempts=0, feedback=?, updated_at=? WHERE id=?",
                             f"Guidance from the CTO: {feedback}\n{task['feedback']}", now(), task["id"])
             self._stage(pid, "build")
@@ -477,11 +501,11 @@ class Pipeline:
                 ws.commit(f"Restore the CTO-approved {CONTRACT}")
                 self._fix_task(pid, "Address the CTO's feedback on the acceptance checks",
                                f"The CTO rejected your changes to {CONTRACT}, which has been restored to the approved "
-                               f"version. Do not edit {CONTRACT} again unless the CTO asks.\n{feedback}")
+                               f"version. Do not edit {CONTRACT} again unless the CTO asks.\n{feedback}", reporter=who)
             self._stage(pid, "build")
         elif kind == "release_blocked":
             self.db.run("UPDATE tasks SET key='retried-' || key || '-' || id WHERE project_id=? AND key LIKE 'verify-%'", pid)
-            self._fix_task(pid, "Repair blocked release", feedback)
+            self._fix_task(pid, "Repair blocked release", feedback, reporter=who)
             self._stage(pid, "build")
         elif kind == "release":
             if ok:
@@ -490,7 +514,7 @@ class Pipeline:
                                "The CTO approved the release. Review the product in its workspace and sign off.", payload)
                 self._stage(pid, "signoff")
             else:
-                self._fix_task(pid, "Address the CTO's release feedback", feedback)
+                self._fix_task(pid, "Address the CTO's release feedback", feedback, reporter=who)
                 self._stage(pid, "build")
         elif kind == "signoff":
             if ok:
@@ -500,7 +524,7 @@ class Pipeline:
                 self._stage(pid, "done")
                 self.db.log("project", "Verified release ready for deployment.", pid, actor=who)
             else:
-                self._fix_task(pid, "Address the CEO's sign-off feedback", feedback)
+                self._fix_task(pid, "Address the CEO's sign-off feedback", feedback, reporter=who)
                 self._stage(pid, "build")
         elif kind == "hr":
             if ok:

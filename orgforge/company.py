@@ -10,6 +10,7 @@ from .llm import make_provider
 from .org import Org
 from .performance import Performance
 from .pipeline import Pipeline
+from .tickets import Tickets
 
 
 class _LazyProvider:
@@ -37,6 +38,7 @@ class Company:
         self.perf = Performance(self.db, self.s, self.org)
         self.runtime = AgentRuntime(self.db, self.s, self.org, provider or _LazyProvider(self.s.provider))
         self.pipeline = Pipeline(self.db, self.s, self.org, self.perf, self.runtime)
+        self.tickets = Tickets(self.db, self.pipeline)
         if create:
             self.org.seed()
 
