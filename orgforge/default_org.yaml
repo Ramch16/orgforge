@@ -6,8 +6,8 @@
 company: Your Software Company
 
 humans:
-  ceo: { name: CEO }   # product, budget, final sign-off
-  cto: { name: CTO }   # architecture, escalations, release
+  ceo: { name: Niki }   # product, budget, final sign-off
+  cto: { name: Lucky }   # architecture, escalations, release
 
 llm:
   provider: anthropic            # anthropic | mock (offline demo, no API key)
@@ -312,25 +312,25 @@ roles:
       error messages so the guidance matches reality.
 
 seats:
-  - { seat: pm-1,    role: product_manager,          name: Nadia }
-  - { seat: docs-1,  role: tech_writer,              name: Mei }
-  - { seat: ux-1,    role: ux_designer,              name: Elin }
-  - { seat: arch-1,  role: architect,                name: Tomas }
-  - { seat: be-1,    role: backend_engineer,         name: Ife }
-  - { seat: be-2,    role: backend_engineer,         name: Kenji }
-  - { seat: fe-1,    role: frontend_engineer,        name: Lucia }
-  - { seat: mob-1,   role: mobile_engineer,          name: Dario }
-  - { seat: db-1,    role: database_engineer,        name: Priya }
-  - { seat: data-1,  role: data_engineer,            name: Mateus }
-  - { seat: ml-1,    role: ml_engineer,              name: Yara }
-  - { seat: rev-1,   role: code_reviewer,            name: Soren }
-  - { seat: qa-1,    role: qa_engineer,              name: Anya }
-  - { seat: auto-1,  role: test_automation_engineer, name: Chidi }
-  - { seat: perf-1,  role: performance_engineer,     name: Hiro }
-  - { seat: sec-1,   role: security_engineer,        name: Leila }
-  - { seat: sec-2,   role: security_auditor,         name: Bram }
-  - { seat: ops-1,   role: devops_engineer,          name: Omar }
-  - { seat: sre-1,   role: sre,                      name: Signe }
-  - { seat: comp-1,  role: compliance_officer,       name: Aroha }
-  - { seat: mkt-1,   role: product_marketer,         name: Nico }
-  - { seat: sup-1,   role: support_specialist,       name: Tavita }
+  - { seat: pm-1,    role: product_manager,          name: Ram }
+  - { seat: docs-1,  role: tech_writer,              name: Sanjana }
+  - { seat: ux-1,    role: ux_designer,              name: Sravani }
+  - { seat: arch-1,  role: architect,                name: Sony }
+  - { seat: be-1,    role: backend_engineer,         name: Hari }
+  - { seat: be-2,    role: backend_engineer,         name: Sandy }
+  - { seat: fe-1,    role: frontend_engineer,        name: Bharadwaj }
+  - { seat: mob-1,   role: mobile_engineer,          name: Ajay }
+  - { seat: db-1,    role: database_engineer,        name: Laasya }
+  - { seat: data-1,  role: data_engineer,            name: Varshini }
+  - { seat: ml-1,    role: ml_engineer,              name: Basha }
+  - { seat: rev-1,   role: code_reviewer,            name: Pavan }
+  - { seat: qa-1,    role: qa_engineer,              name: Badri }
+  - { seat: auto-1,  role: test_automation_engineer, name: Nithin }
+  - { seat: perf-1,  role: performance_engineer,     name: Abhinav }
+  - { seat: sec-1,   role: security_engineer,        name: Mani }
+  - { seat: sec-2,   role: security_auditor,         name: Nagendra }
+  - { seat: ops-1,   role: devops_engineer,          name: Sushank }
+  - { seat: sre-1,   role: sre,                      name: Loki }
+  - { seat: comp-1,  role: compliance_officer,       name: Srujana }
+  - { seat: mkt-1,   role: product_marketer,         name: Anshu }
+  - { seat: sup-1,   role: support_specialist,       name: Venky }

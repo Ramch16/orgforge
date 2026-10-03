@@ -34,7 +34,7 @@ def test_plan_tasks_are_tickets_with_history(co):
 def test_backlog_ticket_waits_and_does_not_block_release(co):
     p = co.pipeline.create_project("Product", "Build a library")
     co.pipeline.advance(p["id"])
-    t = co.tickets.create(p["id"], "Nice to have: dark mode", "", "Ram")
+    t = co.tickets.create(p["id"], "Nice to have: dark mode", "", "Niki")
     decide_next(co, "ceo")
     assert decide_next(co, "cto")["stage"] == "release_approval"
     assert co.tickets.get(t["id"])["status"] == "backlog"
@@ -43,8 +43,8 @@ def test_backlog_ticket_waits_and_does_not_block_release(co):
 def test_todo_ticket_reopens_a_releasing_product_and_agent_reads_comments(co, monkeypatch):
     p = built(co)
     [release] = co.pipeline.inbox("cto")
-    t = co.tickets.create(p["id"], "Fix the greeting typo", "It says Helo.", "Ram", type="bug", priority="high")
-    co.tickets.comment(t["ticket"], "Ram", "Use British spelling.")
+    t = co.tickets.create(p["id"], "Fix the greeting typo", "It says Helo.", "Niki", type="bug", priority="high")
+    co.tickets.comment(t["ticket"], "Niki", "Use British spelling.")
     asks = []
     original = co.runtime.run
     def run(agent, ask, *args, **kwargs):
@@ -52,18 +52,18 @@ def test_todo_ticket_reopens_a_releasing_product_and_agent_reads_comments(co, mo
         return original(agent, ask, *args, **kwargs)
     monkeypatch.setattr(co.runtime, "run", run)
 
-    co.tickets.update(t["ticket"], "Ram", status="todo")
+    co.tickets.update(t["ticket"], "Niki", status="todo")
     assert co.pipeline.project(p["id"])["stage"] == "build"
     assert co.db.one("SELECT status FROM approvals WHERE id=?", release["id"])["status"] == "withdrawn"
     assert co.pipeline.advance(p["id"])["stage"] == "release_approval"
     assert co.tickets.get(t["id"])["status"] == "done"
-    assert any("Ram: Use British spelling." in a and "Fix the greeting typo" in a for a in asks)
+    assert any("Use British spelling." in a and "Fix the greeting typo" in a for a in asks)
 
 
 def test_urgent_ticket_is_worked_first(co):
     p = built(co)
-    low = co.tickets.create(p["id"], "Low", "", "Ram", priority="low", status="todo")
-    urgent = co.tickets.create(p["id"], "Urgent", "", "Ram", priority="urgent", status="todo")
+    low = co.tickets.create(p["id"], "Low", "", "Niki", priority="low", status="todo")
+    urgent = co.tickets.create(p["id"], "Urgent", "", "Niki", priority="urgent", status="todo")
     assert co.pipeline._next_task(p["id"])["id"] == urgent["id"]
     co.pipeline.advance(p["id"])
     started = [h["task_id"] for h in co.db.all("SELECT task_id FROM ticket_comments WHERE body LIKE 'Started%' "
@@ -77,24 +77,24 @@ def test_humans_triage_but_the_team_owns_working_statuses(co):
     decide_next(co, "ceo")                                   # plan is waiting for the CTO: tickets are to do
     core, extras = [t for t in co.tickets.search(p["id"]) if t["origin"] == "plan"]
     with pytest.raises(TicketError, match="team owns|between backlog"):
-        co.tickets.update(core["ticket"], "Ram", status="done")
+        co.tickets.update(core["ticket"], "Niki", status="done")
     with pytest.raises(TicketError, match="depend on"):
-        co.tickets.update(core["ticket"], "Ram", status="backlog")
+        co.tickets.update(core["ticket"], "Niki", status="backlog")
     with pytest.raises(TicketError, match="Unknown priority"):
-        co.tickets.update(core["ticket"], "Ram", priority="asap")
-    co.tickets.update(extras["ticket"], "Ram", priority="urgent", title="Supporting module v2")
+        co.tickets.update(core["ticket"], "Niki", priority="asap")
+    co.tickets.update(extras["ticket"], "Niki", priority="urgent", title="Supporting module v2")
     assert co.tickets.get(extras["id"])["title"] == "Supporting module v2"
-    co.tickets.update(core["ticket"], "Ram", status="cancelled")
+    co.tickets.update(core["ticket"], "Niki", status="cancelled")
     assert co.pipeline._next_task(p["id"])["key"] == "extras"   # a cancelled dependency no longer blocks
     with pytest.raises(TicketError, match="closed"):
-        co.tickets.update(core["ticket"], "Ram", priority="low")
+        co.tickets.update(core["ticket"], "Niki", priority="low")
 
 
 def test_redesign_keeps_human_tickets(co):
     p = co.pipeline.create_project("Product", "Build a library")
     co.pipeline.advance(p["id"])
     decide_next(co, "ceo")
-    mine = co.tickets.create(p["id"], "Add CSV export", "", "Ram")
+    mine = co.tickets.create(p["id"], "Add CSV export", "", "Niki")
     decide_next(co, "cto", "rejected", "Simplify the design")
     assert co.tickets.get(mine["id"])["status"] == "backlog"
     assert len([t for t in co.tickets.search(p["id"]) if t["origin"] != "stage"]) == 3
@@ -181,7 +181,7 @@ def test_every_department_logs_its_stage_work_as_tickets(co):
     assert "Handed over from Product" in design["history"][0]["body"]
 
     with pytest.raises(TicketError, match="stage work"):
-        co.tickets.update(stage["stage-requirements"]["id"], "Ram", status="cancelled")
+        co.tickets.update(stage["stage-requirements"]["id"], "Niki", status="cancelled")
     decide_next(co, "ceo", "rejected", "Add an offline mode")     # sent back, and the team revises at once
     reqs = co.tickets.get(stage["stage-requirements"]["id"])
     bodies = [h["body"] for h in reqs["history"]]
@@ -274,8 +274,8 @@ def test_agent_ticket_limits(co):
 
 def test_humans_transfer_tickets_between_departments(co, capsys):
     p = co.pipeline.create_project("Product", "Build a library")
-    t = co.tickets.create(p["id"], "Write launch copy", "", "Ram")
-    t = co.tickets.update(t["ticket"], "Ram", role="ux_designer")
+    t = co.tickets.create(p["id"], "Write launch copy", "", "Niki")
+    t = co.tickets.update(t["ticket"], "Niki", role="ux_designer")
     assert t["department"] == "Design" and t["history"][-1]["kind"] == "transfer"
     assert main(["--home", str(co.s.root), "ticket", "update", t["ticket"], "--role", "frontend_engineer"]) == 0
     assert co.tickets.get(t["id"])["department"] == "Engineering"

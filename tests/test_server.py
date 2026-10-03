@@ -32,7 +32,7 @@ def test_two_humans_each_decide_their_own_gates(co):
 def test_cto_manages_only_their_departments(co):
     client = TestClient(create_app(co, {"ceo": "ceo-token", "cto": "cto-token"}))
     cto = {"X-Token": "cto-token"}
-    pm, engineer = co.org.agent("Nadia"), co.org.agent("Ife")
+    pm, engineer = co.org.agent("Ram"), co.org.agent("Hari")
     assert client.post(f"/api/agents/{pm['id']}/fire", json={"reason": "x"}, headers=cto).status_code == 403
     assert client.post("/api/agents", json={"role": "product_manager"}, headers=cto).status_code == 403
     new = client.post(f"/api/agents/{engineer['id']}/fire", json={"reason": "x"}, headers=cto).json()

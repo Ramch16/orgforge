@@ -37,10 +37,10 @@ def test_brief_to_shipped_product(co):
     assert {t["status"] for t in all_tickets} == {"done"}            # stage work and build work alike
     tasks = [t for t in all_tickets if t["origin"] == "plan"]
     assert [t["key"] for t in tasks] == ["core", "extras"]
-    assert co.org.agent("Nadia")["score"] > 90 and co.org.agent("Tomas")["score"] > 90   # scored by the humans
-    assert co.org.agent("Elin")["score"] > 90                                            # designer shares the CEO gate
+    assert co.org.agent("Ram")["score"] > 90 and co.org.agent("Sony")["score"] > 90   # scored by the humans
+    assert co.org.agent("Sravani")["score"] > 90                                            # designer shares the CEO gate
     checkers = {r["reviewer"] for r in co.db.all("SELECT reviewer FROM reviews WHERE task_id=?", tasks[0]["id"])}
-    assert checkers == {"Soren", "Leila", "Anya"}        # code review, security review and QA on every task
+    assert checkers == {"Pavan", "Mani", "Badri"}        # code review, security review and QA on every task
 
 
 def test_rejection_needs_feedback_and_sends_work_back(co):
@@ -50,11 +50,11 @@ def test_rejection_needs_feedback_and_sends_work_back(co):
     with pytest.raises(PipelineError):
         co.pipeline.decide(approval["id"], "ceo", "rejected")
     assert decide_next(co, "ceo", "rejected", "Too vague.")["stage"] == "prd_approval"
-    assert co.org.agent("Nadia")["score"] < 40
+    assert co.org.agent("Ram")["score"] < 40
 
 
 def test_failing_work_is_reworked_escalated_and_the_agent_replaced(make_company):
-    co = make_company(bad_agents={"Ife", "Kenji"})        # both backend engineers get poor reviews
+    co = make_company(bad_agents={"Hari", "Sandy"})        # both backend engineers get poor reviews
     p = co.pipeline.create_project("Greeter", "A tiny library.")
     co.pipeline.advance(p["id"])
     decide_next(co, "ceo")

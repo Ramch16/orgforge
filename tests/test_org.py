@@ -23,9 +23,9 @@ def test_structure_is_editable(co):
 
 
 def test_replace_passes_on_lessons_and_a_stronger_model(co):
-    kenji = co.org.agent("Kenji")
-    co.perf.record(kenji["id"], 20, source="peer", reviewer="Soren", notes="No tests were written.")
-    new = co.org.replace("Kenji", "poor results")
+    kenji = co.org.agent("Sandy")
+    co.perf.record(kenji["id"], 20, source="peer", reviewer="Pavan", notes="No tests were written.")
+    new = co.org.replace("Sandy", "poor results")
     assert co.org.agent(kenji["id"])["status"] == "fired"
     assert new["seat"] == kenji["seat"] and new["generation"] == 2 and new["predecessor_id"] == kenji["id"]
     assert "No tests were written." in new["lessons"]
@@ -33,8 +33,8 @@ def test_replace_passes_on_lessons_and_a_stronger_model(co):
 
 
 def test_rehire_reinstates_and_benches_the_successor(co):
-    kenji = co.org.agent("Kenji")
-    successor = co.org.replace("Kenji", "poor results")
+    kenji = co.org.agent("Sandy")
+    successor = co.org.replace("Sandy", "poor results")
     back = co.org.rehire(kenji["id"])
     assert back["status"] == "active" and back["score"] is None and back["evals"] == 0
     assert co.org.agent(successor["id"])["status"] == "fired"
@@ -43,23 +43,23 @@ def test_rehire_reinstates_and_benches_the_successor(co):
 
 
 def test_work_goes_to_staff_in_good_standing(co):
-    ife, kenji = co.org.agent("Ife"), co.org.agent("Kenji")
+    ife, kenji = co.org.agent("Hari"), co.org.agent("Sandy")
     co.db.run("UPDATE agents SET status='probation' WHERE id=?", ife["id"])
     assert co.org.pick(role="backend_engineer")["id"] == kenji["id"]
-    co.org.fire("Kenji", "x")
+    co.org.fire("Sandy", "x")
     assert co.org.pick(role="backend_engineer")["id"] == ife["id"]
 
 
 def test_sync_adds_what_is_missing_and_leaves_the_rest(co):
-    co.org.fire("Kenji", "left", by="CTO")                      # an emptied seat stays empty
+    co.org.fire("Sandy", "left", by="CTO")                      # an emptied seat stays empty
     extra = {
         "departments": [{"id": "research", "name": "Research", "reports_to": "cto"}, {"id": "security"}],
         "roles": {"research_scientist": {"department": "research", "kind": "builder", "tools": ["read_file"], "prompt": "x"}},
-        "seats": [{"seat": "rs-1", "role": "research_scientist", "name": "Nadia"}, {"seat": "be-2", "role": "backend_engineer"}],
+        "seats": [{"seat": "rs-1", "role": "research_scientist", "name": "Ram"}, {"seat": "be-2", "role": "backend_engineer"}],
     }
     added = co.org.sync(extra)
     assert added["departments"] == ["research"] and added["roles"] == ["research_scientist"]
-    assert len(added["agents"]) == 1 and added["agents"][0] != "Nadia"      # name already taken
+    assert len(added["agents"]) == 1 and added["agents"][0] != "Ram"      # name already taken
     assert co.org.sync(extra) == {"departments": [], "roles": [], "agents": []}
 
 

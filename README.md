@@ -148,7 +148,7 @@ The product is built in `workspaces/<id>-<name>/`, a normal git repository with
 one commit per completed task and a `release` tag at sign-off. This marks a local verified release, not a deployment.
 
 To try everything without an API key, set `ORGFORGE_PROVIDER=mock`. Scripted
-agents run the full flow offline. `ORGFORGE_MOCK_BAD_AGENTS=Ife,Kenji` makes
+agents run the full flow offline. `ORGFORGE_MOCK_BAD_AGENTS=Hari,Sandy` makes
 those agents fail reviews so you can watch escalation and replacement.
 
 ## Two people, one dashboard
@@ -216,7 +216,7 @@ orgforge ticket show T-5                             # full history and handoffs
 
 Every evaluation is a score from 0 to 100: peer review and QA on each task
 attempt, your approval (92) or rejection (35) of requirements and designs, and
-manual ratings (`orgforge rate Kenji 40 --note "Ignored the design"`). An
+manual ratings (`orgforge rate Sandy 40 --note "Ignored the design"`). An
 agent's standing is a rolling average weighted towards recent work.
 
 | Situation (after `min_tasks` evaluations)                          | Result                         |
@@ -233,9 +233,9 @@ With `hr.auto_fire: false` (default) proposals go to the CEO or CTO; with
 `true` they happen automatically. You can always act yourself:
 
 ```bash
-orgforge org fire Kenji --reason "Keeps skipping tests" --as cto   # replaced by a successor
-orgforge org fire Kenji --no-replace                               # seat left empty
-orgforge org rehire Kenji --as cto                                 # current seat holder steps down
+orgforge org fire Sandy --reason "Keeps skipping tests" --as cto   # replaced by a successor
+orgforge org fire Sandy --no-replace                               # seat left empty
+orgforge org rehire Sandy --as cto                                 # current seat holder steps down
 orgforge org show --all                                            # include former agents
 ```
 
@@ -301,7 +301,7 @@ Each role gets only the tools listed for it.
   is one class with a `complete()` method in `orgforge/llm.py`.
 - API usage costs money, and the full company spends more of it: every task
   attempt is checked by three agents and every release by three auditors. To
-  run leaner, let go of roles you do not need (`orgforge org fire Leila
+  run leaner, let go of roles you do not need (`orgforge org fire Mani
   --no-replace`). Token counts are tracked per agent in the database.
 - Reviewers, QA and auditors are not scored automatically (nobody reviews the
   reviewers). Rate them yourself with `orgforge rate` when their checks miss
