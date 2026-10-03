@@ -185,7 +185,7 @@ No agent can hire. OrgForge watches the queue instead: when a role has
 `staffing.hire_when_waiting` waiting tickets per agent (default 3), it asks the
 CEO or CTO, whoever the department reports to, to hire one more, explaining
 the queue and the extra model cost. Approve and an agent is hired with the next
-free seat and name. Decline and it does not ask again for that role until the
+free seat. Decline and it does not ask again for that role until the
 queue grows. It never asks past `staffing.max_per_role` agents in a role
 (default 4).
 
@@ -196,6 +196,13 @@ staffing:
   hire_when_waiting: 3
   max_per_role: 4
 ```
+
+New hires are named by their teammates. When an agent joins without a name
+(a workload hire, a replacement, or `orgforge org hire` with no `--name`), the
+longest-serving agent in that department picks one, in the spirit of the names
+already there. It must be a single first name nobody at the company uses. If
+the agent cannot find one, or the model is unavailable, a built-in name is used.
+Names you give and the founding team in `org.yaml` are never changed.
 
 ## Tickets
 
@@ -345,6 +352,7 @@ Each role gets only the tools listed for it.
 | ------------------------- | -------------------------------------------------- |
 | `orgforge/default_org.yaml` | Default departments, roles, seats and policies   |
 | `orgforge/org.py`         | Departments, roles, hire, fire, replace, rehire    |
+| `orgforge/naming.py`      | Teammates name new hires                           |
 | `orgforge/performance.py` | Scores and HR policy                               |
 | `orgforge/pipeline.py`    | Stages, task loop, human decisions                 |
 | `orgforge/tickets.py`     | Ticket tracker and the agents' ticket tools        |

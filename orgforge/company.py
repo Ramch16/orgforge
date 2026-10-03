@@ -7,6 +7,7 @@ from .agent import AgentRuntime
 from .config import ensure_org_file, load_settings, resolve_root
 from .db import DB
 from .llm import make_provider
+from .naming import make_namer
 from .org import Org
 from .performance import Performance
 from .pipeline import Pipeline
@@ -40,6 +41,7 @@ class Company:
         self.pipeline = Pipeline(self.db, self.s, self.org, self.perf, self.runtime)
         self.tickets = Tickets(self.db, self.pipeline)
         self.runtime.tickets = self.tickets
+        self.org.namer = make_namer(self.db, self.s, self.runtime.provider)
         if create:
             self.org.seed()
 

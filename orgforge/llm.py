@@ -63,6 +63,10 @@ class AnthropicProvider:
         )
 
 
+MOCK_NAMES = ["Kiran", "Meghana", "Rohit", "Divya", "Arjun", "Keerthi", "Tarun", "Swathi", "Vamsi", "Harika",
+              "Praneeth", "Sahithi", "Charan", "Bhavya", "Teja", "Mounika"]
+
+
 class MockProvider:
     """Deterministic scripted agents. No network, no API key.
 
@@ -161,6 +165,10 @@ class MockProvider:
 
     def complete(self, *, model, system, messages, tools, max_tokens, meta=None) -> LLMResponse:
         meta = meta or {}
+        if meta.get("purpose") == "name_hire":        # a teammate names a new hire
+            taken = set(meta.get("taken") or ())
+            text = next((n for n in MOCK_NAMES if n.lower() not in taken), "Agent")
+            return LLMResponse(content=[{"type": "text", "text": text}], text=text, input_tokens=60, output_tokens=3)
         step = sum(1 for m in messages if m["role"] == "assistant")
         script = self._script(meta, step)
         allowed = {t["name"] for t in tools or []}

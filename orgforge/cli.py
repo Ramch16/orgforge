@@ -109,7 +109,8 @@ def main(argv: list[str] | None = None) -> int:
 
     org = sub.add_parser("org", help="Org chart, hiring and firing").add_subparsers(dest="org_cmd")
     p = org.add_parser("show"); p.add_argument("--all", action="store_true", help="Include former agents")
-    p = org.add_parser("hire"); p.add_argument("--role", required=True); p.add_argument("--name"); p.add_argument("--model"); who(p)
+    p = org.add_parser("hire"); p.add_argument("--role", required=True)
+    p.add_argument("--name", help="Leave out to let a teammate in the department pick one"); p.add_argument("--model"); who(p)
     p = org.add_parser("fire"); p.add_argument("agent"); p.add_argument("--reason", default="Decision by management")
     p.add_argument("--no-replace", action="store_true", help="Leave the seat empty"); who(p)
     p = org.add_parser("rehire"); p.add_argument("agent"); p.add_argument("--note", default=""); who(p)

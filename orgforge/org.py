@@ -22,6 +22,7 @@ class OrgError(Exception):
 class Org:
     def __init__(self, db: DB, settings: Settings) -> None:
         self.db, self.s = db, settings
+        self.namer = None        # set by Company: lets a teammate name new hires (see naming.py)
 
     # ---- setup -----------------------------------------------------------
     def seed(self) -> bool:
@@ -154,8 +155,14 @@ class Org:
         return min(candidates, key=lambda a: (load(a), a["status"] != "active", -(75 if a["score"] is None else a["score"]), a["id"]))
 
     # ---- hiring and firing ----------------------------------------------
-    def _fresh_name(self) -> str:
+    def _fresh_name(self, role_id: str | None = None) -> str:
         used = {r["name"] for r in self.db.all("SELECT name FROM agents")}
+        if role_id and self.namer:
+            try:
+                if name := self.namer(role_id, used):
+                    return name
+            except Exception as exc:             # e.g. no API key: fall back to the name pool
+                self.db.log("warn", f"A teammate could not name the new {role_id}: {exc}")
         for name in NAME_POOL:
             if name not in used:
                 return name
@@ -178,7 +185,7 @@ class Org:
         agent_id = self.db.run(
             "INSERT INTO agents (seat, name, role, model, generation, predecessor_id, lessons, hired_at) "
             "VALUES (?,?,?,?,?,?,?,?)",
-            seat, name or self._fresh_name(), role_id, model or self.s.default_model, generation,
+            seat, name or self._fresh_name(role_id if by != "setup" else None), role_id, model or self.s.default_model, generation,
             predecessor_id, lessons, now())
         agent = self.agent(agent_id)
         if by != "setup":
