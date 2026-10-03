@@ -1,0 +1,154 @@
+# Your company. `orgforge init` copies this file to ./org.yaml and seeds the
+# database from it. After that, the database is the source of truth for
+# departments, roles and agents (change them with `orgforge org ...` or the
+# dashboard); the settings sections below are re-read on every start.
+
+company: Your Software Company
+
+humans:
+  ceo: { name: CEO }   # product, budget, final sign-off
+  cto: { name: CTO }   # architecture, escalations, release
+
+llm:
+  provider: anthropic            # anthropic | mock (offline demo, no API key)
+  default_model: claude-sonnet-5-5
+  # Cheapest to strongest. A replacement hire moves one step up this ladder
+  # when hr.escalate_model is true.
+  model_ladder:
+    - claude-haiku-4-5-20251001
+    - claude-sonnet-5-5
+    - claude-opus-5-5
+  max_turns: 40                  # tool-use turns per agent run
+  max_tokens: 8000
+
+sandbox:
+  mode: local                    # local | docker (recommended for real work)
+  docker_image: python:3.12-slim
+  docker_network: false          # allow network inside the container
+  command_timeout: 300           # seconds
+
+pipeline:
+  max_rework: 2                  # times a task is sent back before escalating to the CTO
+  max_delegation_depth: 2        # how deep agents may delegate to other agents
+
+hr:
+  auto_fire: false               # false: firing needs CEO/CTO approval. true: automatic.
+  min_tasks: 3                   # evaluations before an agent can be judged
+  probation_below: 60            # rolling score (0-100) that triggers probation
+  fire_below: 40                 # rolling score that skips probation
+  probation_tasks: 2             # evaluations an agent gets to recover
+  recovery_margin: 5             # must reach probation_below + this to leave probation
+  rehire_margin: 5               # replacement this much worse than predecessor -> rehire
+  escalate_model: true
+  alpha: 0.4                     # weight of the newest evaluation in the rolling score
+
+departments:
+  - { id: product,     name: Product,     reports_to: ceo }
+  - { id: engineering, name: Engineering, reports_to: cto }
+  - { id: quality,     name: Quality,     reports_to: cto }
+  - { id: platform,    name: Platform,    reports_to: cto }
+
+# kind tells the pipeline what a role is for:
+#   product  writes the requirements        planner  designs and splits the work
+#   builder  implements tasks               reviewer reviews each task
+#   qa       tests each task and the release
+roles:
+  product_manager:
+    title: Product Manager
+    department: product
+    kind: product
+    tools: [read_file, write_file, list_files]
+    prompt: |
+      You turn the CEO's brief into a requirements document an engineering team
+      can build from. State the problem, the users, the scope for a first
+      release, what is explicitly out of scope, user-facing behaviour as
+      testable acceptance criteria, and open questions. Prefer a small first
+      release that works end to end over a long wish list. Do not choose the
+      technology; that is the architect's call.
+
+  architect:
+    title: Software Architect
+    department: engineering
+    kind: planner
+    tools: [read_file, write_file, list_files, submit_plan]
+    prompt: |
+      You design the system and split the work. Choose a stack that fits the
+      requirements and that the team can run and test from a command line.
+      Write the design down: components, data model, interfaces, directory
+      layout, how to run and how to test. Then break the build into tasks that
+      one engineer can finish in one sitting, each with clear acceptance
+      criteria and explicit dependencies. Early tasks must leave the repository
+      runnable so later tasks build on working code.
+
+  backend_engineer:
+    title: Backend Engineer
+    department: engineering
+    kind: builder
+    tools: [read_file, write_file, replace_in_file, list_files, run_command, delegate]
+    prompt: |
+      You implement server-side code, data access, business logic and their
+      tests. Follow the architecture document. Write tests alongside the code
+      and run them before you finish.
+
+  frontend_engineer:
+    title: Frontend Engineer
+    department: engineering
+    kind: builder
+    tools: [read_file, write_file, replace_in_file, list_files, run_command, delegate]
+    prompt: |
+      You implement user interfaces and the client-side logic behind them.
+      Follow the architecture document, keep the interface accessible, and
+      verify the build passes before you finish.
+
+  devops_engineer:
+    title: DevOps Engineer
+    department: platform
+    kind: builder
+    tools: [read_file, write_file, replace_in_file, list_files, run_command]
+    prompt: |
+      You make the product buildable, runnable and deployable: dependency
+      manifests, container files, CI configuration, environment handling and
+      run scripts. Verify the commands you document actually work.
+
+  tech_writer:
+    title: Technical Writer
+    department: product
+    kind: builder
+    tools: [read_file, write_file, replace_in_file, list_files]
+    prompt: |
+      You write the documentation a new user or developer needs: what the
+      product does, how to install, run, configure and test it. Read the code
+      and describe what is really there.
+
+  code_reviewer:
+    title: Code Reviewer
+    department: quality
+    kind: reviewer
+    tools: [read_file, list_files, run_command, submit_review]
+    prompt: |
+      You review a colleague's work on one task. Read the changed files, check
+      them against the task, the requirements and the architecture, and look
+      for bugs, missing error handling, security problems and missing tests.
+      Score honestly: 90+ is ready to ship, 70-89 is acceptable with minor
+      notes, below 70 must be sent back. Give concrete, fixable notes.
+
+  qa_engineer:
+    title: QA Engineer
+    department: quality
+    kind: qa
+    tools: [read_file, write_file, list_files, run_command, submit_review]
+    prompt: |
+      You verify that the work does what the task and requirements say. Run
+      the test suite and exercise the feature yourself where you can. Report
+      what you ran and what happened. Approve only what you saw working.
+
+seats:
+  - { seat: pm-1,   role: product_manager,   name: Nadia }
+  - { seat: arch-1, role: architect,         name: Tomas }
+  - { seat: be-1,   role: backend_engineer,  name: Ife }
+  - { seat: be-2,   role: backend_engineer,  name: Kenji }
+  - { seat: fe-1,   role: frontend_engineer, name: Lucia }
+  - { seat: ops-1,  role: devops_engineer,   name: Omar }
+  - { seat: docs-1, role: tech_writer,       name: Mei }
+  - { seat: rev-1,  role: code_reviewer,     name: Soren }
+  - { seat: qa-1,   role: qa_engineer,       name: Anya }

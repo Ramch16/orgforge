@@ -1,0 +1,111 @@
+"""Runs one agent on one assignment: prompt, tool loop, result."""
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+
+from .config import Settings
+from .db import DB
+from .org import Org
+from .tools import ToolError, Workspace, tool_schema
+
+
+@dataclass
+class RunResult:
+    text: str = ""
+    plan: list[dict] | None = None
+    review: dict | None = None
+    turns: int = 0
+    tool_log: list[str] = field(default_factory=list)
+
+
+class AgentRuntime:
+    def __init__(self, db: DB, settings: Settings, org: Org, provider) -> None:
+        self.db, self.s, self.org, self.provider = db, settings, org, provider
+
+    def _system(self, agent: dict, role: dict) -> str:
+        parts = [
+            f"You are {agent['name']}, {role['title']} at {self.s.company}, a software company staffed by AI "
+            f"agents and led by two people: {self.s.ceo_name} (CEO) and {self.s.cto_name} (CTO).",
+            role["prompt"],
+            "Working rules:\n"
+            "- All work happens in the project workspace through your tools. Paths are relative to its root.\n"
+            "- Read what exists before changing it, and keep changes within your assignment.\n"
+            "- If you can run commands, run what you build. Never report something as working unless you saw it work.\n"
+            "- Your work is reviewed and scored, and the score decides whether you keep this seat.\n"
+            "- When you are finished, reply with a short plain summary: what you did, and anything left open.",
+        ]
+        if agent["lessons"]:
+            parts.append("Feedback on record for this seat:\n" + agent["lessons"])
+        return "\n\n".join(parts)
+
+    def run(self, agent: dict, instructions: str, ws: Workspace, *, project_id: int | None = None,
+            meta: dict | None = None, depth: int = 0) -> RunResult:
+        role = self.org.role(agent["role"])
+        names = json.loads(role["tools"])
+        if depth >= self.s.max_delegation_depth:
+            names = [n for n in names if n != "delegate"]
+        tools = [tool_schema(n) for n in names]
+        meta = {**(meta or {}), "role": role["id"], "kind": role["kind"], "agent": agent["name"]}
+        messages: list[dict] = [{"role": "user", "content": instructions}]
+        result = RunResult()
+
+        for turn in range(1, self.s.max_turns + 1):
+            result.turns = turn
+            resp = self.provider.complete(model=agent["model"], system=self._system(agent, role), messages=messages,
+                                          tools=tools, max_tokens=self.s.max_tokens, meta=meta)
+            self.db.run("UPDATE agents SET input_tokens=input_tokens+?, output_tokens=output_tokens+? WHERE id=?",
+                        resp.input_tokens, resp.output_tokens, agent["id"])
+
+            if resp.stop_reason == "max_tokens":
+                # A reply cut off mid-way may hold a half-written tool call. Drop it and ask for smaller steps.
+                messages.append({"role": "assistant", "content": resp.text or "(reply cut off)"})
+                messages.append({"role": "user", "content": "Your reply hit the length limit and was cut off. "
+                                 "Continue, and write large files in several smaller steps."})
+                continue
+
+            if not resp.tool_calls:
+                result.text = resp.text
+                return result
+
+            messages.append({"role": "assistant", "content": resp.content})
+            outputs = []
+            for call in resp.tool_calls:
+                try:
+                    if call.name not in names:
+                        raise ToolError(f"Your role does not have the '{call.name}' tool.")
+                    out = self._execute(agent, call.name, call.input, ws, result, project_id, meta, depth)
+                    failed = False
+                except ToolError as exc:
+                    out, failed = str(exc), True
+                except (KeyError, TypeError, ValueError) as exc:
+                    out, failed = f"Bad arguments for {call.name}: {exc}", True
+                result.tool_log.append(f"{call.name}{' (failed)' if failed else ''}")
+                outputs.append({"type": "tool_result", "tool_use_id": call.id, "content": out, "is_error": failed})
+            messages.append({"role": "user", "content": outputs})
+
+        result.text = "(Stopped: reached the turn limit before finishing.)"
+        return result
+
+    def _execute(self, agent, name, args, ws, result, project_id, meta, depth) -> str:
+        if name == "submit_plan":
+            tasks = args.get("tasks") or []
+            if not tasks:
+                raise ToolError("The plan has no tasks.")
+            result.plan = tasks
+            return f"Plan received: {len(tasks)} task(s)."
+        if name == "submit_review":
+            result.review = {"score": float(args["score"]), "verdict": args["verdict"], "notes": args.get("notes", "")}
+            return "Review received."
+        if name == "delegate":
+            colleague = self.org.pick(role=args["role"], project_id=project_id, exclude=agent["id"])
+            if not colleague:
+                roles = sorted({a["role"] for a in self.org.staff()})
+                raise ToolError(f"Nobody available in role '{args['role']}'. Staffed roles: {', '.join(roles)}.")
+            self.db.log("delegate", f"{agent['name']} delegated to {colleague['name']}: {args['instructions'][:120]}",
+                        project_id, actor=agent["name"])
+            sub = self.run(colleague, f"{agent['name']} asks for your help.\n\n{args['instructions']}", ws,
+                           project_id=project_id, meta={k: v for k, v in meta.items() if k == "task_key"},
+                           depth=depth + 1)
+            return f"{colleague['name']} reports:\n{sub.text}"
+        return ws.call(name, args)

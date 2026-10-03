@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OrgForge</title>
+<style>
+  :root {
+    --paper: #edf0f3; --panel: #fbfcfd; --ink: #17212b; --soft: #55626f; --line: #cbd3db;
+    --cobalt: #2348c9; --good: #1f7a52; --warn: #a86a0b; --bad: #a8321f; --wash: #e3e8f8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #141a21; --panel: #1b232c; --ink: #e6ebf0; --soft: #9aa7b4; --line: #323d49;
+            --cobalt: #8ea6ff; --good: #5cc496; --warn: #e0a84a; --bad: #f08a76; --wash: #232d45; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink);
+         font: 15px/1.5 "Avenir Next", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; }
+  h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+  h1 { font-size: 1.35rem; } h2 { font-size: 1.05rem; margin-bottom: .7rem; } h3 { font-size: .95rem; }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  button { cursor: pointer; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: .35rem .75rem; }
+  button.primary { background: var(--cobalt); border-color: var(--cobalt); color: var(--panel); font-weight: 600; }
+  button.quiet { border-color: transparent; background: none; color: var(--cobalt); padding: .1rem .3rem; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--cobalt); outline-offset: 2px; }
+  input, textarea, select { width: 100%; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); padding: .45rem .6rem; }
+  textarea { resize: vertical; min-height: 4.5rem; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 1.1rem 1.5rem; border-bottom: 1px solid var(--line); }
+  header p { margin: 0; color: var(--soft); }
+  main { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; gap: 1.5rem; padding: 1.5rem; align-items: start; }
+  @media (max-width: 880px) { main { grid-template-columns: 1fr; } }
+  #decisions { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow: auto; }
+  @media (max-width: 880px) { #decisions { position: static; max-height: none; } }
+  section { margin-bottom: 1.75rem; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: .9rem 1rem; margin-bottom: .8rem; }
+  .decision { border-left: 5px solid var(--cobalt); }
+  .decision.other { border-left-color: var(--line); }
+  .decision pre { white-space: pre-wrap; font: inherit; font-size: .88rem; color: var(--soft); max-height: 14rem; overflow: auto; margin: .5rem 0; }
+  .row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+  .muted { color: var(--soft); font-size: .88rem; }
+  .track { display: flex; gap: 3px; margin: .6rem 0; }
+  .track span { flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
+  .track span.past { background: var(--cobalt); } .track span.now { background: var(--warn); }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th { text-align: left; font-weight: 600; color: var(--soft); }
+  th, td { padding: .35rem .5rem .35rem 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tr.gone td { color: var(--soft); }
+  .chip { display: inline-block; padding: 0 .5rem; border-radius: 99px; font-size: .8rem; border: 1px solid currentColor; }
+  .active, .done { color: var(--good); } .probation, .in_progress, .todo { color: var(--warn); }
+  .fired, .failed { color: var(--bad); }
+  .bar { width: 70px; height: 6px; background: var(--line); border-radius: 3px; display: inline-block; vertical-align: middle; margin-right: .4rem; }
+  .bar i { display: block; height: 100%; border-radius: 3px; background: var(--good); }
+  .bar i.mid { background: var(--warn); } .bar i.low { background: var(--bad); }
+  #log { font-size: .86rem; max-height: 22rem; overflow: auto; }
+  #log div { padding: .2rem 0; border-bottom: 1px solid var(--line); }
+  #signin { max-width: 380px; margin: 12vh auto; }
+  #error { color: var(--bad); min-height: 1.4rem; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+</style>
+</head>
+<body>
+<div id="signin" class="card" hidden>
+  <h1>Sign in to your company</h1>
+  <p class="muted">Paste the CEO or CTO token printed when the server started.</p>
+  <input id="token" type="password" placeholder="Token" autocomplete="off">
+  <p id="signin-error" class="muted"></p>
+  <button class="primary" id="signin-btn">Sign in</button>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div><h1 id="company"></h1><p id="whoami"></p></div>
+    <div class="row"><span id="error"></span><button id="signout">Sign out</button></div>
+  </header>
+  <main>
+    <aside id="decisions">
+      <h2>Waiting for a decision</h2>
+      <div id="inbox"></div>
+    </aside>
+    <div>
+      <section>
+        <h2>Projects</h2>
+        <div class="card">
+          <h3>Start a project</h3>
+          <div style="margin:.5rem 0"><input id="p-name" placeholder="Product name"></div>
+          <textarea id="p-brief" placeholder="What should the team build? Who is it for? What must the first release do?"></textarea>
+          <div class="row" style="margin-top:.5rem"><button class="primary" id="p-start">Start project</button></div>
+        </div>
+        <div id="projects"></div>
+      </section>
+      <section>
+        <h2>People</h2>
+        <div id="people"></div>
+        <div class="card">
+          <h3>Hire an agent</h3>
+          <div class="grid2" style="margin:.5rem 0">
+            <select id="h-role" aria-label="Role"></select>
+            <input id="h-name" placeholder="Name (optional)">
+          </div>
+          <button id="h-go">Hire</button>
+          <label class="muted" style="margin-left:.75rem"><input type="checkbox" id="show-fired" style="width:auto"> Show former agents</label>
+        </div>
+      </section>
+      <section>
+        <h2>Activity</h2>
+        <div class="card" id="log"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+let token = sessionStorage.getItem("orgforge-token") || "";
+let state = null;
+const drafts = {};
+
+async function api(path, body) {
+  const res = await fetch(path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { "X-Token": token, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (res.status === 401) { signOut("That token was not accepted."); throw new Error("unauthorized"); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || `Request failed (${res.status})`);
+  return data;
+}
+
+function signOut(message) {
+  token = ""; sessionStorage.removeItem("orgforge-token");
+  $("app").hidden = true; $("signin").hidden = false; $("signin-error").textContent = message || "";
+}
+
+async function act(fn) {
+  $("error").textContent = "";
+  try { await fn(); await refresh(true); } catch (e) { if (e.message !== "unauthorized") $("error").textContent = e.message; }
+}
+
+async function refresh(force) {
+  if (!token) return signOut();
+  const busy = ["TEXTAREA", "INPUT", "SELECT"].includes(document.activeElement?.tagName);
+  try { state = await api("/api/state"); } catch { return; }
+  $("signin").hidden = true; $("app").hidden = false;
+  if (busy && !force) return;             // don't redraw under someone typing
+  render();
+}
+
+function render() {
+  const me = state.you.role;
+  $("company").textContent = state.company;
+  $("whoami").textContent = `Signed in as ${state.you.name}, ${me.toUpperCase()}`;
+  document.title = `${state.approvals.filter(a => a.required_role === me).length || ""} ${state.company}`.trim();
+
+  $("inbox").innerHTML = state.approvals.length ? state.approvals.map(a => {
+    const mine = a.required_role === me;
+    return `<div class="card decision ${mine ? "" : "other"}">
+      <h3>${esc(a.title)}</h3>
+      <div class="muted">${mine ? "Your call" : `With ${esc(state.humans[a.required_role])} (${a.required_role.toUpperCase()})`}</div>
+      <pre>${esc(a.summary)}</pre>
+      ${mine ? `<textarea data-draft="${a.id}" placeholder="What should change? Required to send back.">${esc(drafts[a.id] || "")}</textarea>
+      <div class="row" style="margin-top:.5rem">
+        <button class="primary" data-decide="approved" data-id="${a.id}">Approve</button>
+        <button data-decide="rejected" data-id="${a.id}">Send back</button>
+      </div>` : ""}
+    </div>`;
+  }).join("") : `<div class="card muted">Nothing needs you right now. The team keeps working until it does.</div>`;
+
+  const order = state.stages.map(s => s.id);
+  $("projects").innerHTML = state.projects.map(p => {
+    const at = order.indexOf(p.stage);
+    const track = state.stages.filter(s => s.id !== "escalation").map(s => {
+      const i = order.indexOf(s.id);
+      return `<span title="${esc(s.label)}" class="${p.stage === "done" || i < at ? "past" : i === at ? "now" : ""}"></span>`;
+    }).join("");
+    const tasks = p.tasks.length ? `<table><tr><th>Task</th><th>Owner</th><th>Status</th></tr>${p.tasks.map(t =>
+      `<tr><td>${esc(t.title)}${t.attempts ? ` <span class="muted">sent back ${t.attempts}×</span>` : ""}</td>
+       <td>${esc(t.assignee || "")}</td><td><span class="chip ${t.status}">${esc(t.status.replace("_", " "))}</span></td></tr>`).join("")}</table>` : "";
+    return `<div class="card">
+      <div class="row" style="justify-content:space-between"><h3>${esc(p.name)}</h3><span class="muted">${esc(p.stage_label)}</span></div>
+      <div class="track">${track}</div>
+      <div class="muted">${esc(p.workspace)}</div>${tasks}
+      ${p.stage === "done" ? "" : `<button class="quiet" data-run="${p.id}">Resume work</button>`}
+    </div>`;
+  }).join("") || `<p class="muted">No projects yet. Write a brief above to start one.</p>`;
+
+  const showFired = $("show-fired").checked;
+  $("people").innerHTML = state.departments.map(d => {
+    const canManage = me === "ceo" || d.reports_to === "cto";
+    const rows = d.agents.filter(a => showFired || a.status !== "fired").map(a => {
+      const s = a.score, cls = s == null ? "" : s < 45 ? "low" : s < 65 ? "mid" : "";
+      const score = s == null ? `<span class="muted">no reviews yet</span>` : `<span class="bar"><i class="${cls}" style="width:${s}%"></i></span>${s.toFixed(0)} <span class="muted">(${a.evals})</span>`;
+      const actions = !canManage ? "" : a.status === "fired"
+        ? `<button class="quiet" data-rehire="${a.id}">Rehire</button>`
+        : `<button class="quiet" data-fire="${a.id}" data-name="${esc(a.name)}">Replace</button>`;
+      return `<tr class="${a.status === "fired" ? "gone" : ""}"><td>${esc(a.name)}${a.generation > 1 ? ` <span class="muted">gen ${a.generation}</span>` : ""}</td>
+        <td>${esc(a.role_title)}</td><td><span class="chip ${a.status}">${a.status}</span></td><td>${score}</td>
+        <td class="muted">${esc(a.model)}</td><td>${actions}</td></tr>`;
+    }).join("");
+    return `<div class="card"><div class="row" style="justify-content:space-between"><h3>${esc(d.name)}</h3>
+      <span class="muted">Reports to ${esc(state.humans[d.reports_to])}</span></div>
+      ${rows ? `<table><tr><th>Name</th><th>Role</th><th>Standing</th><th>Score</th><th>Model</th><th></th></tr>${rows}</table>` : `<p class="muted">No agents. Hire one below.</p>`}</div>`;
+  }).join("");
+
+  const pick = $("h-role").value;
+  $("h-role").innerHTML = state.departments.filter(d => me === "ceo" || d.reports_to === "cto")
+    .flatMap(d => d.roles.map(r => `<option value="${esc(r.id)}">${esc(r.title)} (${esc(d.name)})</option>`)).join("");
+  if (pick) $("h-role").value = pick;
+
+  $("log").innerHTML = state.events.map(e =>
+    `<div><span class="muted">${esc(e.ts.slice(11, 19))} ${esc(e.actor)}</span> ${esc(e.message)}</div>`).join("") || "Nothing yet.";
+}
+
+document.addEventListener("input", e => { if (e.target.dataset.draft) drafts[e.target.dataset.draft] = e.target.value; });
+document.addEventListener("click", e => {
+  const d = e.target.dataset;
+  if (d.decide) act(async () => { await api(`/api/approvals/${d.id}`, { decision: d.decide, feedback: drafts[d.id] || "" }); delete drafts[d.id]; });
+  else if (d.run) act(() => api(`/api/projects/${d.run}/run`, {}));
+  else if (d.rehire) act(() => api(`/api/agents/${d.rehire}/rehire`, {}));
+  else if (d.fire) {
+    const reason = prompt(`Why is ${d.name} being replaced? A successor takes the seat and inherits the lessons.`);
+    if (reason) act(() => api(`/api/agents/${d.fire}/fire`, { reason, replace: true }));
+  }
+});
+$("p-start").onclick = () => act(async () => {
+  await api("/api/projects", { name: $("p-name").value, brief: $("p-brief").value });
+  $("p-name").value = ""; $("p-brief").value = "";
+});
+$("h-go").onclick = () => act(async () => { await api("/api/agents", { role: $("h-role").value, name: $("h-name").value }); $("h-name").value = ""; });
+$("show-fired").onchange = render;
+$("signout").onclick = () => signOut();
+$("signin-btn").onclick = () => { token = $("token").value.trim(); sessionStorage.setItem("orgforge-token", token); $("token").value = ""; refresh(true); };
+$("token").onkeydown = e => { if (e.key === "Enter") $("signin-btn").click(); };
+
+refresh(true);
+setInterval(refresh, 4000);
+</script>
+</body>
+</html>
