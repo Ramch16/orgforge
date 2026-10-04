@@ -4,6 +4,12 @@ from orgforge.company import Company
 from orgforge.llm import MockProvider
 
 
+@pytest.fixture(autouse=True)
+def offline(monkeypatch):
+    """CLI commands build their own Company; keep them on the scripted mock, never the real API."""
+    monkeypatch.setenv("ORGFORGE_PROVIDER", "mock")
+
+
 @pytest.fixture
 def make_company(tmp_path):
     def build(bad_agents=(), **hr):
