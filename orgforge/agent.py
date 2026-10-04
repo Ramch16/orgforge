@@ -9,6 +9,7 @@ from .config import Settings
 from .costs import record_usage
 from .engines import ACTIONS, EngineError, actions_to_calls, parse_block, protocol, run_cli
 from .memory import MEMORY_TOOL_SPECS
+from .runs import describe_call
 from .db import DB
 from .org import Org
 from .tickets import TICKET_RULES, TICKET_TOOL_SPECS, TicketError
@@ -35,6 +36,7 @@ class AgentRuntime:
         self.db, self.s, self.org, self.provider = db, settings, org, provider
         self.tickets = None                 # set by Company; every agent on a project can use the tracker
         self.memory = None                  # set by Company; shared long-term memory
+        self.runs = None                    # set by Company; live run log and steering
 
     def _system(self, agent: dict, role: dict, on_project: bool = False, chat_with: str | None = None,
                 extra: str = "") -> str:
@@ -71,11 +73,32 @@ class AgentRuntime:
             parts.append(extra)
         return "\n\n".join(parts)
 
-    def run(self, agent: dict, instructions: str, ws: Workspace | None, *, project_id: int | None = None,
-            meta: dict | None = None, depth: int = 0, history: list[dict] | None = None,
-            only_tools: set[str] | None = None, chat_with: str | None = None,
-            extra_tools: list[str] | None = None) -> RunResult:
-        """One assignment, or one chat reply when `chat_with` is set (with `history` and a narrower tool set)."""
+    def run(self, agent: dict, instructions: str, ws: Workspace | None, **kw) -> RunResult:
+        """One assignment, or one chat reply when `chat_with` is set. Logged live, and open to steering."""
+        if not self.runs:
+            return self._run(agent, instructions, ws, **kw)
+        meta = dict(kw.get("meta") or {})
+        waiting = self.runs.take_steers(agent["id"])              # sent while the agent was between runs
+        if waiting:
+            instructions += "\n\n" + self.runs.steer_text(waiting)
+        kind = self.org.role(agent["role"])["kind"]
+        run_id = self.runs.start(agent, kw.get("project_id"), meta.get("ticket_id"),
+                                 meta.get("purpose") or ("chat" if kw.get("chat_with") else kind), instructions)
+        for s in waiting:
+            self.runs.event(run_id, "steer", f"{s['author']}: {s['body']}")
+        kw["meta"] = {**meta, "run_id": run_id}
+        try:
+            res = self._run(agent, instructions, ws, **kw)
+        except Exception as exc:
+            self.runs.finish(run_id, "failed", f"{type(exc).__name__}: {exc}")
+            raise
+        self.runs.finish(run_id, "done" if res.completed else "stopped", res.text)
+        return res
+
+    def _run(self, agent: dict, instructions: str, ws: Workspace | None, *, project_id: int | None = None,
+             meta: dict | None = None, depth: int = 0, history: list[dict] | None = None,
+             only_tools: set[str] | None = None, chat_with: str | None = None,
+             extra_tools: list[str] | None = None) -> RunResult:
         role = self.org.role(agent["role"])
         names = json.loads(role["tools"])
         if only_tools is not None:
@@ -112,6 +135,9 @@ class AgentRuntime:
                                  "Continue, and write large files in several smaller steps."})
                 continue
 
+            run_id = meta.get("run_id")
+            if run_id and resp.text and resp.tool_calls:
+                self.runs.event(run_id, "text", resp.text)
             if not resp.tool_calls:
                 result.text = resp.text
                 result.completed = True
@@ -120,6 +146,8 @@ class AgentRuntime:
             messages.append({"role": "assistant", "content": resp.content})
             outputs = []
             for call in resp.tool_calls:
+                if run_id:
+                    self.runs.event(run_id, "tool", describe_call(call.name, call.input))
                 try:
                     if call.name not in names:
                         raise ToolError(f"Your role does not have the '{call.name}' tool.")
@@ -131,6 +159,13 @@ class AgentRuntime:
                     out, failed = f"Bad arguments for {call.name}: {exc}", True
                 result.tool_log.append(f"{call.name}{' (failed)' if failed else ''}")
                 outputs.append({"type": "tool_result", "tool_use_id": call.id, "content": out, "is_error": failed})
+                if run_id:
+                    self.runs.event(run_id, "error" if failed else "output", str(out))
+            steers = self.runs.take_steers(agent["id"]) if run_id else []
+            if steers:                              # the CEO or CTO stepped in: the agent reads it on this step
+                outputs.append({"type": "text", "text": self.runs.steer_text(steers)})
+                for s in steers:
+                    self.runs.event(run_id, "steer", f"{s['author']}: {s['body']}")
             messages.append({"role": "user", "content": outputs})
 
         result.text = "(Stopped: reached the turn limit before finishing.)"
@@ -164,6 +199,8 @@ class AgentRuntime:
         record_usage(self.db, self.s, agent, project_id, out["input_tokens"], out["output_tokens"],
                      f"{meta.get('purpose') or ('chat' if chat_with else role['kind'])} via {engine_name}", cost=cost)
         text, data, problem = parse_block(out["text"])
+        if meta.get("run_id") and self.runs:
+            self.runs.event(meta["run_id"], "text", f"(through {engine_name}, {out['turns']} turns)")
         result.turns, result.completed = out["turns"], not out["is_error"]
         notes = [problem] if problem else []
         for name, args in actions_to_calls(data):

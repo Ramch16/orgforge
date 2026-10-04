@@ -14,6 +14,7 @@ from __future__ import annotations
 import difflib
 import json
 import re
+import subprocess
 import threading
 from pathlib import Path
 
@@ -151,6 +152,92 @@ class Pipeline:
         ws.commit(f"{'Idea' if idea else 'Brief'} from {by}")
         self.db.log("project", f"New {'idea' if idea else 'project'}: {name}", pid, actor=by)
         return self.project(pid)
+
+    def create_task(self, title: str, brief: str, by: str = "ceo", repo: str | None = None, issue: str | None = None,
+                    checks: list[str] | None = None, role: str | None = None, budget: float | None = None) -> dict:
+        """A quick task: one ticket straight to build, optionally on an existing repository or GitHub issue.
+        No idea, plan, requirements or design stages; the CTO reviews the changes at the end."""
+        from .sources import SourceError, clone, github_issue
+        found = None
+        if issue:
+            try:
+                found = github_issue(issue)
+            except SourceError as exc:
+                raise PipelineError(str(exc)) from exc
+            repo = repo or found["repo"]
+            title = title or f"#{found['number']} {found['title']}"
+            brief = (brief + "\n\n" if brief else "") + f"GitHub issue {found['url']}:\n{found['title']}\n\n{found['body']}"
+        if not (title or "").strip() or not (brief or "").strip():
+            raise PipelineError("A task needs a title and a description (or a GitHub issue).")
+        builders = {r["id"] for r in self._builder_roles()}
+        if role and role not in builders:
+            raise PipelineError(f"'{role}' is not a staffed builder role: {', '.join(sorted(builders))}.")
+        ts = now()
+        pid = self.db.run("INSERT INTO projects (name, brief, stage, author, budget, kind, source, checks, created_at, "
+                          "updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)", title.strip()[:120], brief.strip(), "build", by,
+                          self.s.default_budget if budget is None else max(0.0, budget), "task", repo or "",
+                          json.dumps([c for c in (checks or []) if c.strip()]), ts, ts)
+        slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:40] or "task"
+        path = self.s.workspaces / f"{pid:03d}-{slug}"
+        branch = f"orgforge/task-{pid}"
+        try:
+            if repo:
+                base = clone(repo, path, branch)
+            else:
+                Workspace(path).init_repo()
+                base = ""
+        except (SourceError, subprocess.SubprocessError) as exc:
+            self.db.run("DELETE FROM projects WHERE id=?", pid)
+            raise PipelineError(str(exc)) from exc
+        self.db.run("UPDATE projects SET workspace=?, base_branch=?, branch=? WHERE id=?", str(path), base,
+                    branch if repo else "main", pid)
+        ws = Workspace(path)
+        ws.ensure_ignores(shared=not repo)
+        if not repo:
+            ws.write_file("TASK.md", f"# {title}\n\n{brief}\n")
+            ws.commit(f"Task from {by}")
+        role = role or (self._fix_role(pid) if builders else None)
+        if not role:
+            self.db.run("DELETE FROM projects WHERE id=?", pid)
+            raise PipelineError("Nobody on staff can build. Hire a builder.")
+        guide = (f"\n\nWork on the branch {branch} of the existing repository{f' ({repo})' if repo else ''}. Read the code "
+                 "and its README first, follow its conventions, keep the change focused, add or update tests, and run "
+                 "the existing tests. Never push." if repo else "")
+        tid = self.db.run("INSERT INTO tasks (project_id, key, title, description, role, status, type, priority, origin, "
+                          "reporter, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", pid, "task", title.strip(),
+                          brief.strip() + guide, role, "todo", "bug" if found and any("bug" in l for l in found["labels"])
+                          else "task", "high", "human", by, ts, ts)
+        note(self.db, tid, by, f"Quick task for {where(self.db, role)}" + (f", on {repo}" if repo else "")
+             + (f" (from {found['url']})" if found else "") + ".")
+        self.db.log("project", f"New task: {title}" + (f" on {repo}" if repo else ""), pid, actor=by)
+        return self.project(pid)
+
+    def _task_finish(self, p: dict, ws: Workspace) -> None:
+        """A quick task's tickets are done: run its checks, then the CTO reviews the changes."""
+        pid, findings, results = p["id"], [], []
+        for command in json.loads(p["checks"] or "[]"):
+            output = ws.run_command(command)
+            passed = output.splitlines()[0] == "exit code 0"
+            results.append(f"{'PASS' if passed else 'FAIL'}  {command}")
+            if not passed:
+                findings.append(f"Check failed: {command}\n{output[:3000]}")
+        if findings:
+            self._release_failure(p, findings)
+            return
+        base = p["base_branch"]
+        try:
+            stat = ws.git("diff", "--stat", f"{base}...HEAD") if base else ws.git("show", "--stat", "--format=", "HEAD")
+            log = ws.git("log", "--oneline", f"{base}..HEAD") if base else ws.git("log", "--oneline", "-15")
+        except Exception:
+            stat, log = "", ""
+        done = self.db.all("SELECT id, title FROM tasks WHERE project_id=? AND status='done' ORDER BY id", pid)
+        summary = ("Tickets done:\n" + "\n".join(f"- T-{t['id']} {t['title']}" for t in done)
+                   + ("\n\nChecks:\n" + "\n".join(results) if results else "")
+                   + f"\n\nChanges on {p['branch']}" + (f" (from {base})" if base else "") + f":\n{stat or '(none)'}"
+                   + f"\n\nCommits:\n{log}\n\nApprove to accept the changes. Open the review to read the diff.")
+        self._approval(pid, "task_review", "cto", f"Review the changes: {p['name']}", summary,
+                       {"verified_head": ws.git("rev-parse", "HEAD")})
+        self._stage(pid, "release_approval")
 
     def advance(self, pid: int) -> dict:
         """Run the project forward until it needs a human or is finished."""
@@ -491,7 +578,7 @@ class Pipeline:
 
     def _build(self, p: dict) -> None:
         ws, pid = self.workspace(p), p["id"]
-        if ws.ensure_ignores():                 # projects from before 0.10.1 committed caches; stop that
+        if ws.ensure_ignores(shared=not p["source"]):   # projects from before 0.10.1 committed caches; stop that
             ws.commit("Ignore caches and build output")
         if self.db.one("SELECT 1 FROM approvals WHERE project_id=? AND kind='escalation' AND status='pending'", pid):
             self._stage(pid, "escalation")      # another failed ticket is still waiting for the CTO
@@ -523,6 +610,9 @@ class Pipeline:
         if stuck:
             raise PipelineError("Tasks cannot start because their dependencies never finish: "
                                 + ", ".join(t["key"] for t in stuck))
+        if p["kind"] == "task":
+            self._task_finish(p, ws)
+            return
         release_findings = []
         qa = self.org.pick(kind="qa")
         if qa:
@@ -633,9 +723,10 @@ class Pipeline:
         rounds = self.db.one("SELECT COUNT(*) AS n FROM tasks WHERE project_id=? AND key LIKE 'verify-%'", pid)["n"]
         feedback = "\n".join(findings)
         if rounds < self.s.max_rework:
-            self._fix_task(pid, "Repair product acceptance failures", feedback + "\n" + CONTRACT_GUIDE,
-                           key=f"verify-{rounds + 1}")
-            self.db.log("work", "Product verification failed; repair task created.", pid)
+            task = p["kind"] == "task"
+            self._fix_task(pid, "Make the failing checks pass" if task else "Repair product acceptance failures",
+                           feedback + ("" if task else "\n" + CONTRACT_GUIDE), key=f"verify-{rounds + 1}")
+            self.db.log("work", f"{'Checks' if task else 'Product verification'} failed; repair task created.", pid)
         else:
             self._approval(pid, "release_blocked", "cto", f"Release checks failed for {p['name']}", feedback,
                            {})
@@ -935,7 +1026,7 @@ class Pipeline:
         payload = json.loads(a["payload"])
         if ok and a["kind"] == "release_blocked":
             raise PipelineError("Failed release checks cannot be approved. Reject with repair guidance to retry.")
-        if ok and a["kind"] in ("release", "signoff"):
+        if ok and a["kind"] in ("release", "signoff", "task_review"):
             ws = self.workspace(self.project(pid))
             if ws.changed_files() != "(no uncommitted changes)" or ws.git("rev-parse", "HEAD") != payload.get("verified_head"):
                 raise PipelineError("Product changed after verification. Reject with guidance to rebuild and recheck.")
@@ -1039,6 +1130,15 @@ class Pipeline:
             self.db.run("UPDATE tasks SET key='retried-' || key || '-' || id WHERE project_id=? AND key LIKE 'verify-%'", pid)
             self._fix_task(pid, "Repair blocked release", feedback, reporter=who)
             self._stage(pid, "build")
+        elif kind == "task_review":
+            if ok:
+                self._stage(pid, "done")
+                p = self.project(pid)
+                self.db.log("project", f"Task accepted by {who}. The changes are on {p['branch']} in {p['workspace']}.",
+                            pid, actor=who)
+            else:
+                self._fix_task(pid, "Address the CTO's review of the changes", feedback, reporter=who)
+                self._stage(pid, "build")
         elif kind == "release":
             if ok:
                 name = self.project(pid)["name"]
@@ -1095,6 +1195,8 @@ class Pipeline:
             tasks = self.db.all(
                 "SELECT t.*, a.name AS assignee FROM tasks t LEFT JOIN agents a ON a.id=t.assignee_id "
                 "WHERE t.project_id=? ORDER BY t.id", p["id"])
-            out.append({**p, "stage_label": STAGE_LABELS.get(p["stage"], p["stage"]), "tasks": tasks,
+            label = "Changes with CTO" if p["kind"] == "task" and p["stage"] == "release_approval" else \
+                STAGE_LABELS.get(p["stage"], p["stage"])
+            out.append({**p, "stage_label": label, "tasks": tasks,
                         "workspace": str(Path(p["workspace"]))})
         return out

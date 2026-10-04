@@ -96,6 +96,17 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("app", help="Start the dashboard and open it in its own app window")
     p.add_argument("--host", default="127.0.0.1"); p.add_argument("--port", type=int, default=4700)
 
+    p = sub.add_parser("task", help="A quick task: one change, optionally on an existing repo or GitHub issue")
+    p.add_argument("title", nargs="?", default=""); p.add_argument("--brief", default="")
+    p.add_argument("--repo", help="Folder, GitHub owner/name, or git URL to work on")
+    p.add_argument("--issue", help="GitHub issue: owner/repo#123 or its URL (needs gh)")
+    p.add_argument("--check", action="append", default=[], help="Command that must pass, e.g. 'pytest -q' (repeatable)")
+    p.add_argument("--role"); p.add_argument("--budget", type=float); p.add_argument("--no-run", action="store_true"); who(p)
+    p = sub.add_parser("steer", help="Send a message to an agent while it works")
+    p.add_argument("agent"); p.add_argument("message"); who(p)
+    p = sub.add_parser("watch", help="Show an agent's latest run: what it was told, did and said")
+    p.add_argument("agent")
+    p = sub.add_parser("diff", help="Code changes for a ticket (T-12) or a task project (P3)"); p.add_argument("ref")
     p = sub.add_parser("engines", help="Coding CLIs agents can work through, and whether they are ready")
     p.add_argument("--test", metavar="ENGINE", help="Run a tiny prompt through this engine")
     sub.add_parser("costs", help="What the company's AI work has cost (estimate)")
@@ -211,6 +222,33 @@ def _dispatch(args) -> int:
         _ticket(co, args, role)
     elif args.cmd == "idea":
         _idea(co, args, role)
+    elif args.cmd == "task":
+        project = co.pipeline.create_task(args.title, args.brief, by=co.s.human(role), repo=args.repo, issue=args.issue,
+                                          checks=args.check, role=args.role, budget=args.budget)
+        print(f"Task {project['id']} created: {project['name']}" + (f" on {project['source']}, branch {project['branch']}"
+                                                                     if project["source"] else ""))
+        if not args.no_run:
+            _advance(co, project["id"])
+    elif args.cmd == "steer":
+        agent = co.org.agent(args.agent)
+        sent = co.runs.steer(agent["id"], co.s.human(role), args.message)
+        print(f"{agent['name']} gets it " + ("at their next step." if sent["live"] else "when they next start work."))
+    elif args.cmd == "watch":
+        agent = co.org.agent(args.agent)
+        runs = co.runs.recent(agent["id"], 1)
+        if not runs:
+            print(f"{agent['name']} has not worked yet.")
+        else:
+            log = co.runs.transcript(runs[0]["id"])
+            r = log["run"]
+            print(f"{agent['name']} · {r['purpose']} · {r['status']} · started {r['started_at'][11:19]}")
+            for e in log["events"]:
+                print(f"\n[{e['kind']}] " + e["body"])
+    elif args.cmd == "diff":
+        from .review import changes, ticket_diff
+        ref = args.ref.upper()
+        print(changes(co, int(ref[1:]))["diff"] if ref.startswith("P") and ref[1:].isdigit()
+              else ticket_diff(co, co.tickets.get(ref)["id"])["diff"])
     elif args.cmd == "engines":
         import shutil
         from .engines import EngineError, run_cli

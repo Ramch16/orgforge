@@ -242,9 +242,18 @@ class Workspace:
             self.git("init", "-q", "-b", "main")
         self.ensure_ignores()
 
-    def ensure_ignores(self) -> bool:
+    def ensure_ignores(self, shared: bool = True) -> bool:
         """Keep caches and build output out of the product's history: committed, they differ between parallel
-        tickets and make merges conflict. Returns True if the .gitignore changed."""
+        tickets and make merges conflict. Returns True if the .gitignore changed. For someone else's repository
+        (shared=False) the patterns go in .git/info/exclude, so their files and history are left alone."""
+        if not shared:
+            exclude = self.root / ".git" / "info" / "exclude"
+            have = exclude.read_text().splitlines() if exclude.exists() else []
+            missing = [p for p in GITIGNORE if p not in have]
+            if missing:
+                exclude.parent.mkdir(parents=True, exist_ok=True)
+                exclude.write_text("\n".join(have + missing) + "\n")
+            return False
         target = self.root / ".gitignore"
         have = target.read_text().splitlines() if target.exists() else []
         missing = [p for p in GITIGNORE if p not in have]

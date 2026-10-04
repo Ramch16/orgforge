@@ -19,7 +19,7 @@ from .costs import summary as cost_summary
 from .feedback import FeedbackError
 from .reports import NEXT_STEP
 from .telemetry import presence, telemetry
-from .review import read_file as review_file, review as review_product
+from .review import changes as project_changes, commit_diff, patch_file, read_file as review_file, review as review_product, ticket_diff
 from .tools import ToolError
 from .org import OrgError
 from .pipeline import IDEA_STAGES, STAGE_LABELS, STAGES, PipelineError
@@ -37,6 +37,20 @@ class NewProject(BaseModel):
 
 class Budget(BaseModel):
     amount: float
+
+
+class NewTask(BaseModel):
+    title: str = ""
+    description: str = ""
+    repo: str = ""
+    issue: str = ""
+    checks: list[str] = []
+    role: str | None = None
+    budget: float | None = None
+
+
+class Steer(BaseModel):
+    body: str
 
 
 class CustomerFeedback(BaseModel):
@@ -118,7 +132,7 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
             return fn()
         except PermissionError as exc:
             raise HTTPException(403, str(exc))
-        except (OrgError, PipelineError, TicketError, ChatError, FeedbackError, ToolError) as exc:
+        except (OrgError, PipelineError, TicketError, ChatError, FeedbackError, ToolError, ValueError) as exc:
             raise HTTPException(400, str(exc))
 
     def managed(role: str, ref: int) -> dict:
@@ -197,6 +211,49 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
         project = guard(lambda: co.pipeline.project(pid))
         run_in_background(pid)
         return project
+
+    @app.post("/api/tasks")
+    def new_task(body: NewTask, role: str = Depends(auth)) -> dict:
+        project = guard(lambda: co.pipeline.create_task(body.title.strip(), body.description.strip(), by=co.s.human(role),
+                                                        repo=body.repo.strip() or None, issue=body.issue.strip() or None,
+                                                        checks=body.checks, role=body.role or None, budget=body.budget))
+        run_in_background(project["id"])
+        return project
+
+    @app.get("/api/projects/{pid}/changes")
+    def changes(pid: int, role: str = Depends(auth)) -> dict:
+        return guard(lambda: project_changes(co, pid))
+
+    @app.get("/api/projects/{pid}/commits/{sha}")
+    def commit(pid: int, sha: str, role: str = Depends(auth)) -> dict:
+        return guard(lambda: commit_diff(co, pid, sha))
+
+    @app.get("/api/projects/{pid}/patch")
+    def patch(pid: int, role: str = Depends(auth)):
+        from fastapi.responses import Response
+        name, text = guard(lambda: patch_file(co, pid))
+        return Response(text, media_type="text/x-patch", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+    @app.get("/api/tickets/{ref}/diff")
+    def diff(ref: str, role: str = Depends(auth)) -> dict:
+        return guard(lambda: ticket_diff(co, co.tickets.get(ref)["id"]))
+
+    @app.get("/api/agents/{agent_id}/runs")
+    def agent_runs(agent_id: int, role: str = Depends(auth)) -> dict:
+        agent = guard(lambda: co.org.agent(agent_id))
+        return {"agent": {"id": agent["id"], "name": agent["name"], "role": agent["role"], "model": agent["model"]},
+                "runs": co.runs.recent(agent_id),
+                "queued": co.db.all("SELECT author, body, created_at FROM steers WHERE agent_id=? AND delivered_at IS NULL",
+                                    agent_id)}
+
+    @app.get("/api/runs/{run_id}")
+    def run_log(run_id: int, after: int = 0, role: str = Depends(auth)) -> dict:
+        return guard(lambda: co.runs.transcript(run_id, after))
+
+    @app.post("/api/agents/{agent_id}/steer")
+    def steer(agent_id: int, body: Steer, role: str = Depends(auth)) -> dict:
+        guard(lambda: co.org.agent(agent_id))
+        return guard(lambda: co.runs.steer(agent_id, co.s.human(role), body.body))
 
     @app.post("/api/projects/{pid}/budget")
     def set_budget(pid: int, body: Budget, role: str = Depends(auth)) -> dict:

@@ -6,6 +6,7 @@ and audit verdicts, the documents and files, the history, and what it cost.
 from __future__ import annotations
 
 import json
+import re
 
 from .costs import spent
 from .pipeline import STAGE_LABELS
@@ -50,7 +51,8 @@ def review(co, pid: int) -> dict:
         verdicts.append({**t, "verdict": last["body"] if last else "Not run yet."})
     counts = {r["status"]: r["n"] for r in co.db.all(
         "SELECT status, COUNT(*) AS n FROM tasks WHERE project_id=? GROUP BY status", pid)}
-    return {"project": {"id": p["id"], "name": p["name"], "stage": p["stage"],
+    return {"project": {"id": p["id"], "name": p["name"], "stage": p["stage"], "kind": p["kind"], "source": p["source"],
+                        "branch": p["branch"], "base_branch": p["base_branch"],
                         "stage_label": STAGE_LABELS.get(p["stage"], p["stage"]), "purpose": p["purpose"],
                         "version": p["version"], "brief": p["brief"], "budget": p["budget"],
                         "spent": round(spent(co.db, pid), 4)},
@@ -75,3 +77,48 @@ def read_file(co, pid: int, path: str) -> dict:
         return {"path": path, "text": data.decode("utf-8"), "note": ""}
     except UnicodeDecodeError:
         return {"path": path, "text": None, "note": "Binary file; download the release to open it."}
+
+
+# ---- code changes ----------------------------------------------------------
+MAX_DIFF = 200_000
+
+
+def _clip_diff(text: str) -> str:
+    return text if len(text) <= MAX_DIFF else text[:MAX_DIFF] + f"\n… diff shortened ({len(text) // 1000} KB in total)"
+
+
+def ticket_diff(co, ticket_id: int) -> dict:
+    """The commits made for a ticket (their messages carry its [key]) and their combined changes."""
+    t = co.tickets.get(ticket_id)
+    ws = co.pipeline.workspace(co.pipeline.project(t["project_id"]))
+    try:
+        shas = ws.git("log", "--all", "--format=%H", "--fixed-strings", f"--grep=[{t['key']}]").split()
+        diff = ws.git("show", "--stat", "--patch", "--format=commit %h  %ad  %s", "--date=short", *shas) if shas else ""
+    except ToolError:
+        shas, diff = [], ""
+    return {"ticket": t["ticket"], "commits": len(shas), "diff": _clip_diff(diff) or "No code changes recorded for this ticket."}
+
+
+def commit_diff(co, pid: int, sha: str) -> dict:
+    if not re.fullmatch(r"[0-9a-f]{4,40}", sha):
+        raise ToolError("Not a commit id.")
+    ws = co.pipeline.workspace(co.pipeline.project(pid))
+    return {"sha": sha, "diff": _clip_diff(ws.git("show", "--stat", "--patch", "--format=commit %H%nAuthor: %an%nDate:   %ad%n%n    %s", sha))}
+
+
+def changes(co, pid: int) -> dict:
+    """Everything a task changed against the branch it started from (or the last commit, for a new product)."""
+    p = co.pipeline.project(pid)
+    ws = co.pipeline.workspace(p)
+    base = p["base_branch"]
+    diff = ws.git("diff", "--stat", "--patch", f"{base}...HEAD") if base else ws.git("show", "--stat", "--patch", "HEAD")
+    return {"base": base, "branch": p["branch"], "diff": _clip_diff(diff)}
+
+
+def patch_file(co, pid: int) -> tuple[str, str]:
+    """A task's commits as a patch you can `git am` into your own repository."""
+    p = co.pipeline.project(pid)
+    if p["kind"] != "task" or not p["base_branch"]:
+        raise ToolError("Patches are for tasks on an existing repository; download the release for a product.")
+    text = co.pipeline.workspace(p).git("format-patch", "--stdout", f"{p['base_branch']}..HEAD")
+    return f"orgforge-task-{pid}.patch", text + ("\n" if text else "")

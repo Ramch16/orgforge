@@ -206,6 +206,14 @@
   .spark { width: 100%; height: 90px; display: block; }
   .spark .area { fill: color-mix(in srgb, var(--cobalt) 18%, transparent); } .spark .line { fill: none; stroke: var(--cobalt); stroke-width: 2; }
   .spark .axis { stroke: var(--line); stroke-width: 1; }
+  .diff span { display: block; white-space: pre; } .diff .add { color: var(--good); background: color-mix(in srgb, var(--good) 9%, transparent); }
+  .diff .del { color: var(--bad); background: color-mix(in srgb, var(--bad) 9%, transparent); } .diff .hunk { color: var(--cobalt); } .diff .head { font-weight: 700; color: var(--ink); }
+  .viewer.diff { white-space: normal; overflow-x: auto; }
+  .console { background: #0f1720; color: #dbe4ee; border-radius: 8px; padding: .7rem .8rem; margin: .7rem 0; height: min(58vh, 34rem); overflow: auto; font: .8rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .console .ev-row { padding: .2rem 0; white-space: pre-wrap; overflow-wrap: anywhere; border-bottom: 1px solid #1d2a37; }
+  .console .k { display: inline-block; min-width: 6.4rem; margin-right: .6rem; color: #7f93a8; } .console .tool .k { color: #8ea6ff; } .console .output { color: #a9b8c7; }
+  .console .error { color: #f08a76; } .console .steer { color: #e0a84a; } .console .result { color: #5cc496; } .console .instruction { color: #c9d4df; }
+  .live { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--good); margin-right: .35rem; animation: pulse 1.6s infinite; }
   #error { position: fixed; right: 1rem; bottom: 1rem; max-width: min(420px, calc(100vw - 2rem)); min-height: 0; background: var(--bad); color: var(--panel); padding: .7rem 1rem; border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .22); z-index: 50; }
   #error:empty { display: none; }
   #signin { margin-top: 14vh; }
@@ -248,7 +256,7 @@
     <div class="content" role="main">
       <section class="view" data-view="home">
         <div class="page-head"><div><h1 id="greet"></h1><p id="greet-sub"></p></div>
-          <button class="primary" data-new-idea>New idea</button></div>
+          <div class="actions"><button data-new-task>New task</button><button class="primary" data-new-idea>New idea</button></div></div>
         <div class="tiles" id="tiles"></div>
         <div class="cols">
           <div>
@@ -274,8 +282,8 @@
       </section>
 
       <section class="view" data-view="projects" hidden>
-        <div class="page-head"><div><h1>Projects</h1><p>Ideas being assessed, products being built, and releases.</p></div>
-          <button class="primary" data-new-idea>New idea</button></div>
+        <div class="page-head"><div><h1>Projects</h1><p>Products from idea to release, and quick tasks on new or existing code.</p></div>
+          <div class="actions"><button data-new-task>New task</button><button class="primary" data-new-idea>New idea</button></div></div>
         <div class="pgrid" id="projects"></div>
       </section>
 
@@ -323,6 +331,35 @@
     <span>Assess it first: Ram checks feasibility, internal use versus selling, and revenue with Engineering, Marketing and Legal. Lucky signs off, then Niki decides.</span></label>
   <label class="field"><span>Budget in US dollars (blank: the company default)</span><input id="p-budget" type="number" min="0" step="1" placeholder="default"></label>
   <div class="row" style="margin-top:.6rem"><button class="primary" id="p-start">Submit idea</button><button data-close="idea-dlg">Cancel</button></div>
+</dialog>
+
+<dialog id="task-dlg">
+  <div class="row" style="justify-content:space-between"><h2 style="margin:0">New task</h2><button class="quiet" data-close="task-dlg">Close</button></div>
+  <p class="muted" style="margin:.3rem 0">A bug fix, a refactor or a small feature. It skips the idea, plan, requirements and design stages: an engineer does it, it is reviewed, your checks run, then Lucky reviews the changes.</p>
+  <label class="field"><span>Title</span><input id="k-title" placeholder="e.g. Fix the crash on empty names"></label>
+  <label class="field"><span>Description</span><textarea id="k-desc" rows="4" placeholder="What is wrong or needed, and how to tell it is done."></textarea></label>
+  <div class="grid2">
+    <label class="field"><span>Existing repository (optional)</span><input id="k-repo" placeholder="~/code/app, owner/name or git URL"></label>
+    <label class="field"><span>GitHub issue (optional)</span><input id="k-issue" placeholder="owner/repo#123 or issue URL"></label>
+  </div>
+  <label class="field"><span>Checks that must pass (optional, one command per line)</span><textarea id="k-checks" rows="2" placeholder="pytest -q"></textarea></label>
+  <label class="field"><span>Budget in US dollars (blank: the company default)</span><input id="k-budget" type="number" min="0" step="1" placeholder="default"></label>
+  <p id="k-error" class="muted" style="color:var(--bad)"></p>
+  <div class="row"><button class="primary" id="k-go">Start task</button><button data-close="task-dlg">Cancel</button><span class="muted" id="k-wait"></span></div>
+</dialog>
+
+<dialog id="diff-dlg" class="wide">
+  <div class="row" style="justify-content:space-between"><h2 style="margin:0" id="diff-title">Changes</h2><button class="quiet" data-close="diff-dlg">Close</button></div>
+  <div class="viewer diff" id="diff-body" style="max-height:70vh;margin-top:.6rem"></div>
+</dialog>
+
+<dialog id="console-dlg" class="wide">
+  <div class="row" style="justify-content:space-between"><div><h2 style="margin:0" id="con-name"></h2><span class="muted" id="con-sub"></span></div>
+    <div class="actions"><select id="con-run" aria-label="Run" style="width:auto"></select><button class="quiet" data-close="console-dlg">Close</button></div></div>
+  <div class="console" id="con-log" aria-live="polite"></div>
+  <div class="row" style="flex-wrap:nowrap;align-items:flex-end"><textarea id="con-steer" rows="2" placeholder="Steer: tell them something now. They read it at their next step. Ctrl/⌘+Enter to send."></textarea>
+    <button class="primary" id="con-send">Send</button></div>
+  <p class="muted" id="con-note"></p>
 </dialog>
 
 <dialog id="hire-dlg">
@@ -399,6 +436,7 @@ async function refresh(force) {
   try { state = await api("/api/state"); } catch { return; }
   $("signin").hidden = true; $("app").hidden = false;
   if (openChatId) loadChat(openChatId).catch(() => {});   // only redraws the messages, never the input
+  if (watching) openConsole(watching).catch(() => {});      // appends new steps; never touches what you type
   if (reportFor) openReports(reportFor).catch(() => {});
   if (feedbackFor && !["fb-body", "fb-source"].includes(document.activeElement?.id)) openFeedback(feedbackFor).catch(() => {});
   if (busy && !force) return;             // don't redraw under someone typing
@@ -414,7 +452,7 @@ const WAITING = ["idea_review", "idea_decision", "plan_approval", "prd_approval"
 const TROUBLE = ["escalation", "contract_review", "release_blocked", "paused"];
 const KIND = { prd: "Requirements", architecture: "Design and plan", release: "Release", signoff: "Sign-off", escalation: "Escalation",
   feasibility: "Technical sign-off", idea_decision: "Idea decision", plan: "Plan of action", budget: "Budget", hire: "Hiring",
-  hr: "People", contract: "Acceptance checks", release_blocked: "Release blocked" };
+  hr: "People", contract: "Acceptance checks", release_blocked: "Release blocked", task_review: "Changes review" };
 
 function paint(id, html) { if (painted[id] !== html) { painted[id] = html; $(id).innerHTML = html; } }
 function badge(id, n) { $(id).hidden = !n; $(id).textContent = n || ""; }
@@ -427,10 +465,15 @@ function ago(ts) {
 function tone(stage) { return stage === "done" ? "done" : TROUBLE.includes(stage) ? "fired" : WAITING.includes(stage) ? "probation" : stage === "dropped" || stage === "parked" ? "cancelled" : "in_review"; }
 function stageChip(p) { return `<span class="chip ${tone(p.stage)}">${esc(p.stage_label)}</span>`; }
 function chips(p) {
-  return (p.version ? ` <span class="chip done">v${p.version}</span>` : "")
+  return (p.kind === "task" ? ` <span class="chip in_review">Task</span>` : "") + (p.version ? ` <span class="chip done">v${p.version}</span>` : "")
     + (p.purpose ? ` <span class="chip ${p.purpose === "commercial" ? "active" : "in_review"}">${p.purpose === "commercial" ? "To sell" : "Internal"}</span>` : "");
 }
 function steps(p) {
+  if (p.kind === "task") {
+    const list = [{ id: "build", label: "Building" }, { id: "release_approval", label: "Changes with CTO" }, { id: "done", label: "Done" }];
+    const at = p.stage === "done" ? 2 : ["release_approval", "release_blocked"].includes(p.stage) ? 1 : 0;
+    return { list, at, done: p.stage === "done", pct: p.stage === "done" ? 100 : at * 50 };
+  }
   const order = state.stages.map(s => s.id), ideaPath = !!p.purpose || state.idea_stages.includes(p.stage) || ["parked", "dropped"].includes(p.stage);
   const list = state.stages.filter(s => ![...TROUBLE, "parked", "dropped"].includes(s.id) && (ideaPath || !state.idea_stages.includes(s.id)));
   const where = p.stage === "paused" ? (p.paused_stage || "build") : ["parked", "dropped"].includes(p.stage) ? "idea_decision" : p.stage;
@@ -464,6 +507,7 @@ function decisionCard(a, me) {
     <div class="summary ${open ? "open" : ""}">${linkTickets(esc(a.summary))}</div>
     ${long ? `<button class="quiet" style="padding:0" data-expand-toggle="${a.id}">${open ? "Show less" : "Read more"}</button>` : ""}
     ${["release", "signoff"].includes(a.kind) && a.project_id ? `<button class="quiet" style="padding:0;margin-left:.8rem" data-review="${a.project_id}">Open product review</button>` : ""}
+    ${a.kind === "task_review" ? `<button class="quiet" style="padding:0;margin-left:.8rem" data-changes="${a.project_id}">See the changes</button>` : ""}
     ${mine ? `<textarea data-draft="${a.id}" style="margin-top:.6rem" rows="2" placeholder="${a.kind === "idea_decision" ? "Your reasons (optional)" : ["hire", "budget", "hr"].includes(a.kind) ? "Note (optional)" : "What should change? Required to send back."}">${esc(drafts[a.id] || "")}</textarea>
     <div class="actions" style="margin-top:.5rem">
       ${a.kind === "idea_decision" ? `
@@ -529,16 +573,23 @@ function renderOffice() {
   paint("floor", Object.entries(rooms).sort((x, y) => busyness(y[1]) - busyness(x[1])).map(([dept, people]) => {
     const busy = people.filter(a => a.state !== "idle").length;
     return `<div class="room"><div class="room-head" style="background:hsl(${hue(dept)} 45% 50% / .14)"><span>${esc(dept)}</span><span class="muted">${busy ? `${busy} busy` : "quiet"}</span></div>
-      <div class="desks">${people.map(a => `<button class="desk ${a.state}" ${a.ticket_id ? `data-ticket="${a.ticket_id}"` : `data-chat="${a.id}"`} title="${esc(a.doing || "Idle")}">
+      <div class="desks">${people.map(a => `<button class="desk ${a.state}" data-watch="${a.id}" title="${esc(a.doing || "Idle")} · click to watch and steer">
         <span class="avatar" style="background:hsl(${hue(dept)} 42% 46%)">${esc(a.name[0])}<span class="ring"></span></span>
         <b>${esc(a.name)}</b><small>${esc(a.title)}</small>
         <span class="doing" style="display:block">${a.state === "idle" ? "Idle" : linkTickets(esc(a.doing)).replace(/<button[^>]*>|<\/button>/g, "")}</span></button>`).join("")}</div></div>`;
   }).join(""));
 }
 
+function nextStep(p) {
+  if (p.kind !== "task") return (state.next_steps || {})[p.stage] || "";
+  return ({ build: "The team builds and reviews the ticket.", release_approval: "Lucky reviews the changes.",
+    release_blocked: "Lucky sends repair guidance.", paused: "Niki sets a new budget to resume.",
+    done: "Done. Download the patch or pull the branch." })[p.stage] || "";
+}
+
 function renderProjects() {
   paint("projects", state.projects.map(p => {
-    const s = steps(p), c = counts(p.id), next = (state.next_steps || {})[p.stage] || "";
+    const s = steps(p), c = counts(p.id), next = nextStep(p);
     return `<button class="pcard" data-project="${p.id}">
       <span class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><span class="ptitle">${esc(p.name)}</span><span>${chips(p)}</span></span>
       <span class="row" style="margin-top:.35rem">${stageChip(p)}</span>
@@ -561,7 +612,8 @@ function renderProject() {
   const me = state.you.role, p = state.projects.find(x => x.id === viewId);
   if (!p) return paint("project-view", `<button class="back" data-go="projects">← Projects</button><div class="card empty">That project does not exist.</div>`);
   loadProjectReport(p.id);
-  const s = steps(p), c = counts(p.id), next = (state.next_steps || {})[p.stage] || "";
+  const s = steps(p), c = counts(p.id);
+  const next = nextStep(p);
   const pm = state.departments.flatMap(d => d.agents).find(a => a.role === "product_manager" && a.status !== "fired");
   const decisions = state.approvals.filter(a => a.project_id === p.id);
   const tickets = state.tickets.filter(t => t.project_id === p.id);
@@ -572,11 +624,13 @@ function renderProject() {
   const events = state.events.filter(e => e.project_id === p.id).slice(0, 10);
   paint("project-view", `
     <button class="back" data-go="projects">← Projects</button>
-    <div class="page-head"><div><h1>${esc(p.name)}${chips(p)}</h1><p>${stageChip(p)} <span style="margin-left:.3rem">${c.done} of ${c.total} tickets done · ${usd(spentOf(p.id))} spent</span></p></div>
+    <div class="page-head"><div><h1>${esc(p.name)}${chips(p)}</h1><p>${stageChip(p)} <span style="margin-left:.3rem">${c.done} of ${c.total} tickets done · ${usd(spentOf(p.id))} spent</span>
+      ${p.source ? `<br><span class="muted">On ${esc(p.source)}, branch <b>${esc(p.branch)}</b>${p.base_branch ? ` from ${esc(p.base_branch)}` : ""}. Agents never push; download the patch or pull the branch from ${esc(p.workspace)}.</span>` : ""}</p></div>
       <div class="actions">
-        ${state.idea_stages.includes(p.stage) && p.stage !== "plan_approval" ? "" : `<button class="primary" data-review="${p.id}">Review product</button>`}
+        ${p.kind === "task" ? `<button class="primary" data-changes="${p.id}">Changes</button>${p.base_branch ? `<button data-patch="${p.id}">Download patch</button>` : ""}`
+          : state.idea_stages.includes(p.stage) && p.stage !== "plan_approval" ? "" : `<button class="primary" data-review="${p.id}">Review product</button>`}
         <button data-report="${p.id}">Status report</button>
-        ${built(p) ? `<button data-feedback="${p.id}">Customer feedback</button>` : ""}
+        ${built(p) && p.kind !== "task" ? `<button data-feedback="${p.id}">Customer feedback</button>` : ""}
         ${pm ? `<button data-chat="${pm.id}">Message ${esc(pm.name)}</button>` : ""}
         ${p.stage === "parked" && me === "ceo" ? `<button data-revisit="${p.id}">Revisit this idea</button>` : ""}
         ${["done", "dropped", "paused", "parked"].includes(p.stage) ? "" : `<button class="quiet" data-run="${p.id}">Resume work</button>`}
@@ -626,7 +680,8 @@ function renderPeople(me) {
             <div class="muted ellip">${esc(a.role_title)} · ${s == null ? "no reviews yet" : `<span class="bar"><i class="${cls}" style="width:${s}%"></i></span>${s.toFixed(0)}`}</div>
             ${now ? `<div class="muted ellip">Working on <button class="quiet" style="padding:0" data-ticket="${now.id}">${esc(now.ticket)}</button></div>` : ""}</div>
           <div class="actions" style="flex-direction:column;align-items:flex-end;gap:.1rem">
-            ${a.status === "fired" ? "" : `<button class="quiet" style="padding:0" data-chat="${a.id}">${chat && chat.pending ? "Replying…" : "Message"}</button>`}
+            ${a.status === "fired" ? "" : `<button class="quiet" style="padding:0" data-chat="${a.id}">${chat && chat.pending ? "Replying…" : "Message"}</button>
+              <button class="quiet" style="padding:0" data-watch="${a.id}">Watch</button>`}
             ${!canManage ? "" : a.status === "fired" ? `<button class="quiet" style="padding:0" data-rehire="${a.id}">Rehire</button>` : `<button class="quiet" style="padding:0;color:var(--soft)" data-fire="${a.id}" data-name="${esc(a.name)}">Replace</button>`}
           </div></div>`;
       }).join("")}</div>`;
@@ -745,7 +800,7 @@ async function openReview(pid) {
         <h3 style="margin-top:.9rem">File</h3>
         <div class="viewer" id="review-viewer">Choose a document or file on the left.</div>
         <h3 style="margin-top:.9rem">History</h3>
-        <div class="viewer" style="max-height:12rem">${esc(r.history.join("\n")) || "No commits yet."}</div>
+        <div class="filelist" style="max-height:12rem">${r.history.map(h => `<button data-commit="${esc(h.split(" ")[0])}" data-cproject="${P.id}">${esc(h)}</button>`).join("") || `<p class="muted">No commits yet.</p>`}</div>
       </div>
     </div>`;
   if (!$("review-dlg").open) $("review-dlg").showModal();
@@ -883,7 +938,7 @@ async function loadTicket(id) {
     <p class="muted">${esc(t.department)} · ${esc(t.role)} · ${t.assignee ? `assigned to ${esc(t.assignee)}` : "unassigned"} · reported by ${esc(t.reporter)} · ${esc(t.created_at.slice(0, 16).replace("T", " "))}${t.attempts ? ` · sent back ${t.attempts}×` : ""}</p>
     ${editable ? `<label class="field"><span>Description</span><textarea id="d-desc" rows="5">${esc(t.description)}</textarea></label>`
                : `<div class="field"><span>Description</span><pre style="white-space:pre-wrap;font:inherit;margin:0">${esc(t.description) || '<span class="muted">None</span>'}</pre></div>`}
-    ${closed ? "" : `<button id="d-save">Save changes</button>`}
+    <div class="actions">${closed ? "" : `<button id="d-save">Save changes</button>`}<button data-tdiff="${t.id}">Code changes</button>${t.assignee_id ? `<button data-watch="${t.assignee_id}">Watch ${esc(t.assignee || "")}</button>` : ""}</div>
     <p id="d-error" class="muted" style="color:var(--bad)"></p>
     <div class="history">${t.history.map(h => `<div class="${h.kind}"><span class="muted">${esc(h.created_at.slice(0, 16).replace("T", " "))} · ${esc(h.author)}${({ comment: " commented", transfer: " transferred", handoff: " handed off" })[h.kind] || ""}</span><pre>${esc(h.body)}</pre></div>`).join("") || '<span class="muted">No history yet.</span>'}</div>
     <label class="field"><span>Comment</span><textarea id="d-comment" placeholder="The agent who works this ticket next will read your comment."></textarea></label>
@@ -1018,6 +1073,95 @@ $("chat-send").onclick = sendChat;
 $("chat-input").onkeydown = e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendChat(); } };
 $("chat-close").onclick = () => $("chat-dlg").close();
 $("chat-dlg").addEventListener("close", () => { openChatId = null; chatShown = ""; });
+
+// ---- code changes ----
+function colorDiff(text) {
+  return text.split("\n").map(l => {
+    const cls = l.startsWith("+++") || l.startsWith("---") || l.startsWith("diff --git") || l.startsWith("commit ") ? "head"
+      : l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : l.startsWith("@@") ? "hunk" : "";
+    return `<span class="${cls}">${esc(l) || " "}</span>`;
+  }).join("");
+}
+async function openDiff(title, url) {
+  $("diff-title").textContent = title; $("diff-body").innerHTML = "Loading…";
+  if (!$("diff-dlg").open) $("diff-dlg").showModal();
+  try { const d = await api(url); $("diff-body").innerHTML = colorDiff(d.diff || "No changes."); }
+  catch (e) { $("diff-body").textContent = e.message; }
+}
+async function downloadPatch(pid) {
+  const res = await fetch(`/api/projects/${pid}/patch`, { headers: { "X-Token": token } });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Download failed");
+  const url = URL.createObjectURL(await res.blob());
+  Object.assign(document.createElement("a"), { href: url, download: `orgforge-task-${pid}.patch` }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+// ---- agent console: watch a run live and steer ----
+let watching = null, watchRun = null, watchAfter = 0, watchRuns = "";
+const KINDS = { instruction: "told", text: "says", tool: "does", output: "sees", error: "error", steer: "you said", result: "finished" };
+async function openConsole(agentId) {
+  if (watching !== agentId) { watching = agentId; watchRun = null; watchAfter = 0; watchRuns = ""; $("con-log").innerHTML = ""; $("con-steer").value = ""; }
+  const d = await api(`/api/agents/${agentId}/runs`);
+  $("con-name").textContent = d.agent.name;
+  const latest = d.runs[0];
+  $("con-sub").innerHTML = `${esc(d.agent.role.replace(/_/g, " "))} · ${esc(d.agent.model)}${latest && latest.status === "running" ? ` · <span class="live"></span>working now` : ""}`;
+  const sig = JSON.stringify(d.runs.map(r => [r.id, r.status]));
+  if (sig !== watchRuns) {
+    watchRuns = sig;
+    const keep = $("con-run").value;
+    $("con-run").innerHTML = d.runs.map(r => `<option value="${r.id}">${esc(r.started_at.slice(11, 16))} · ${esc(r.purpose)} · ${esc(r.status)}</option>`).join("") || `<option value="">No runs yet</option>`;
+    if (keep && d.runs.some(r => String(r.id) === keep) && watchRun) $("con-run").value = keep;
+  }
+  const chosen = Number($("con-run").value) || null;
+  if (chosen !== watchRun) { watchRun = chosen; watchAfter = 0; $("con-log").innerHTML = ""; }
+  const cli = d.agent.model.startsWith("cli:");
+  $("con-note").textContent = d.queued.length ? `${d.queued.length} message${d.queued.length > 1 ? "s" : ""} waiting for ${d.agent.name}'s next ${cli ? "run" : "step"}.`
+    : cli ? `${d.agent.name} works through a CLI engine in one go, so messages reach them at the start of their next run.` : "";
+  if (!$("console-dlg").open) $("console-dlg").showModal();
+  if (!watchRun) { if (!d.runs.length) $("con-log").innerHTML = `<div class="ev-row">${esc(d.agent.name)} has not worked yet.</div>`; return; }
+  const t = await api(`/api/runs/${watchRun}?after=${watchAfter}`);
+  const log = $("con-log"), atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+  log.insertAdjacentHTML("beforeend", t.events.map(e => `<div class="ev-row ${e.kind}"><span class="k">${esc(e.created_at.slice(11, 19))} ${esc(KINDS[e.kind] || e.kind)}</span>${esc(e.body)}</div>`).join(""));
+  if (t.events.length) watchAfter = t.events[t.events.length - 1].id;
+  if (atBottom || t.events.length === log.children.length) log.scrollTop = log.scrollHeight;
+}
+async function sendSteer() {
+  const body = $("con-steer").value.trim();
+  if (!body || !watching) return;
+  try { await api(`/api/agents/${watching}/steer`, { body }); $("con-steer").value = ""; await openConsole(watching); }
+  catch (e) { if (e.message !== "unauthorized") $("con-note").textContent = e.message; }
+}
+$("con-send").onclick = sendSteer;
+$("con-steer").onkeydown = e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendSteer(); } };
+$("con-run").onchange = () => openConsole(watching);
+$("console-dlg").addEventListener("close", () => { watching = null; });
+
+// ---- new task ----
+$("k-go").onclick = async () => {
+  $("k-error").textContent = ""; $("k-wait").textContent = $("k-repo").value || $("k-issue").value ? "Copying the repository…" : "";
+  try {
+    const p = await api("/api/tasks", { title: $("k-title").value, description: $("k-desc").value, repo: $("k-repo").value,
+      issue: $("k-issue").value, checks: $("k-checks").value.split("\n").map(x => x.trim()).filter(Boolean),
+      budget: $("k-budget").value === "" ? null : Number($("k-budget").value) });
+    ["k-title", "k-desc", "k-repo", "k-issue", "k-checks", "k-budget"].forEach(id => $(id).value = "");
+    $("task-dlg").close();
+    location.hash = "#/project/" + p.id;
+    await refresh(true);
+  } catch (e) { if (e.message !== "unauthorized") $("k-error").textContent = e.message; }
+  $("k-wait").textContent = "";
+};
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-watch],[data-tdiff],[data-changes],[data-commit],[data-patch],[data-new-task]");
+  if (!b) return;
+  const d = b.dataset;
+  if (d.watch) act(() => openConsole(Number(d.watch)));
+  else if (d.tdiff) openDiff(`Code changes for T-${d.tdiff}`, `/api/tickets/${d.tdiff}/diff`);
+  else if (d.changes) openDiff("Everything this task changed", `/api/projects/${d.changes}/changes`);
+  else if (d.commit) openDiff(`Commit ${d.commit}`, `/api/projects/${d.cproject}/commits/${d.commit}`);
+  else if (d.patch) downloadPatch(Number(d.patch)).catch(err => { $("error").textContent = err.message; });
+  else if (d.newTask !== undefined) { $("task-dlg").showModal(); $("k-title").focus(); }
+});
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 route();
