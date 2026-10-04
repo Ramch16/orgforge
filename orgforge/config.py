@@ -45,6 +45,10 @@ class Settings:
     max_parallel: int = 3
     hire_when_waiting: int = 3
     max_per_role: int = 4
+    prices: dict = field(default_factory=dict)
+    default_budget: float = 25.0
+    budget_warn_at: float = 0.8
+    auto_reports: bool = True
     hr: HRPolicy = field(default_factory=HRPolicy)
 
     @property
@@ -98,4 +102,9 @@ def load_settings(root: str | os.PathLike | None = None) -> Settings:
     staffing = raw.get("staffing", {})
     s.hire_when_waiting = max(1, int(staffing.get("hire_when_waiting", s.hire_when_waiting)))
     s.max_per_role = max(1, int(staffing.get("max_per_role", s.max_per_role)))
+    s.prices = dict(llm.get("prices") or {})
+    budgets = raw.get("budgets", {})
+    s.default_budget = max(0.0, float(budgets.get("default_project_usd", s.default_budget)))
+    s.budget_warn_at = min(1.0, max(0.1, float(budgets.get("warn_at", s.budget_warn_at))))
+    s.auto_reports = bool((raw.get("reports") or {}).get("automatic", s.auto_reports))
     return s

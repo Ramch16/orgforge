@@ -246,7 +246,7 @@ def test_tickets_filed_during_release_checks_are_built_before_release(tmp_path):
 
 def test_agent_ticket_limits(co):
     p = built(co)
-    agent, result = co.org.pick(kind="qa"), SimpleNamespace(transfer=None)
+    agent, result = co.org.pick(kind="qa"), SimpleNamespace(transfer=None, filed=[])
     ask = {"title": "Late finding", "description": "x", "type": "bug", "priority": "low", "role": "backend_engineer"}
     out = co.tickets.agent_tool(agent, "create_ticket", ask, p["id"], None, result)
     assert "backlog" in out.lower()                       # a releasing product is not reopened by an agent

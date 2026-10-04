@@ -6,6 +6,7 @@ import math
 from dataclasses import dataclass, field
 
 from .config import Settings
+from .costs import record_usage
 from .db import DB
 from .org import Org
 from .tickets import TICKET_RULES, TICKET_TOOL_SPECS, TicketError
@@ -20,6 +21,7 @@ class RunResult:
     transfer: dict | None = None
     assessment: dict | None = None
     dept_plan: dict | None = None
+    filed: list[str] = field(default_factory=list)      # tickets this run filed
     completed: bool = False
     turns: int = 0
     tool_log: list[str] = field(default_factory=list)
@@ -85,8 +87,8 @@ class AgentRuntime:
             result.turns = turn
             resp = self.provider.complete(model=agent["model"], system=self._system(agent, role, bool(project_id), chat_with), messages=messages,
                                           tools=tools, max_tokens=self.s.max_tokens, meta=meta)
-            self.db.run("UPDATE agents SET input_tokens=input_tokens+?, output_tokens=output_tokens+? WHERE id=?",
-                        resp.input_tokens, resp.output_tokens, agent["id"])
+            record_usage(self.db, self.s, agent, project_id, resp.input_tokens, resp.output_tokens,
+                         meta.get("purpose") or ("chat" if chat_with else role["kind"]))
 
             if resp.stop_reason == "max_tokens":
                 # A reply cut off mid-way may hold a half-written tool call. Drop it and ask for smaller steps.
@@ -123,7 +125,8 @@ class AgentRuntime:
         if name in TICKET_TOOL_SPECS and self.tickets:
             try:
                 return self.tickets.agent_tool(agent, name, args, project_id, meta.get("ticket_id"), result,
-                                               requested_by=meta.get("requested_by"))
+                                               requested_by=meta.get("requested_by"),
+                                               feedback_id=meta.get("feedback_id"))
             except TicketError as exc:
                 raise ToolError(str(exc)) from exc
         if name == "submit_plan":

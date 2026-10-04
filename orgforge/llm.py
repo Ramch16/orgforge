@@ -118,6 +118,19 @@ class MockProvider:
                         "6. Support: help guide\n" + ("7. Marketing: pricing and launch\n" if meta.get("selling") else "")))],
                     [self._call("submit_department_plan", summary="One small release; every department has its part.",
                                 tickets=tickets)]]
+        if purpose == "triage":                 # Support triages customer feedback
+            text = str(meta.get("feedback", "")).lower()
+            if re.search(r"crash|error|bug|broken|fails|wrong", text):
+                return [[self._call("list_tickets"),
+                         self._call("create_ticket", title="Customer bug: " + str(meta.get("feedback", ""))[:60],
+                                    description=str(meta.get("feedback", "")), type="bug", priority="high",
+                                    role="backend_engineer")]]
+            if re.search(r"please add|would be nice|feature|could you|wish", text):
+                return [[self._call("list_tickets"),
+                         self._call("create_ticket", title="Customer request: " + str(meta.get("feedback", ""))[:60],
+                                    description=str(meta.get("feedback", "")), type="story", priority="low",
+                                    role="backend_engineer")]]
+            return [[self._call("list_tickets")]]
         if purpose == "chat":                   # asked for work in a chat: file it as a ticket
             message = str(meta.get("message", ""))
             if re.match(r"\s*(please\s+|(can|could|would) you\s+(please\s+)?)?(add|fix|build|change|create|make|update|implement)\b",
@@ -220,6 +233,13 @@ class MockProvider:
                 return LLMResponse(content=blocks, tool_calls=calls, stop_reason="tool_use",
                                    input_tokens=100, output_tokens=50)
         text = f"Done ({meta.get('role', 'agent')})."
+        if meta.get("purpose") == "status_report":
+            text = "Status report (demo)\n\n" + str(meta.get("facts", ""))
+        if meta.get("purpose") == "triage":
+            ticket = re.search(r"Filed (T-\d+)", json.dumps(messages))
+            text = (f"Filed {ticket.group(1)} for Engineering." if ticket else
+                    "This is a question, not a bug. Suggested reply: thanks for asking; the README explains how "
+                    "to get started, and we are happy to help further.")
         if meta.get("purpose") == "chat":
             filed = any("Filed T-" in str(b.get("content", "")) for m in messages if m["role"] == "user"
                         and isinstance(m["content"], list) for b in m["content"])

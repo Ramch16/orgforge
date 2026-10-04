@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 
 from .config import Settings
+from .costs import record_usage
 from .db import DB
 
 NAME = re.compile(r"^[A-Za-z][A-Za-z'-]{1,19}$")
@@ -43,8 +44,7 @@ def make_namer(db: DB, settings: Settings, provider):
         for _ in range(2):
             resp = provider.complete(model=namer["model"], system=system, messages=messages, tools=[],
                                      max_tokens=50, meta=meta)
-            db.run("UPDATE agents SET input_tokens=input_tokens+?, output_tokens=output_tokens+? WHERE id=?",
-                   resp.input_tokens, resp.output_tokens, namer["id"])
+            record_usage(db, settings, namer, None, resp.input_tokens, resp.output_tokens, "naming")
             raw = (resp.text or "").strip().splitlines()[0].strip(" .!\"'*`") if (resp.text or "").strip() else ""
             if NAME.match(raw) and raw.lower() not in blocked:
                 name = raw[0].upper() + raw[1:]

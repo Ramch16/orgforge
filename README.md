@@ -207,6 +207,49 @@ orgforge idea revisit 3                          # bring a parked idea back
 Choose "Start building" (or `orgforge new`) to skip the assessment when the
 decision is already made.
 
+## Running the company day to day
+
+**Costs and budgets.** Every model call is recorded with its estimated cost
+(Anthropic list prices: Haiku 4.5 $1/$5, Sonnet 5.5 $2/$10, Opus 5.5 $4/$20 per
+million input/output tokens; override with `llm.prices`). The dashboard's Costs
+section shows the total, each project against its budget, each department and
+the top agents. Each project gets `budgets.default_project_usd` (25 by default,
+0 for no limit), or a budget you set when you start it. At 80% it is noted in
+the activity log. When the budget is used up, work pauses before the next step
+and the CEO is asked: approve to raise it (to the suggested amount, or a number
+you write in the note), or send back to stop. A stopped project resumes when the
+CEO sets a new budget. A step already running finishes, so spend can go slightly
+over. Your Anthropic bill is the source of truth.
+
+**Status reports.** Click **Status report** on a project, or run `orgforge report`,
+and the product manager writes a short report: done, in progress, blocked or
+needs you, cost, next steps. Reports are also written automatically when the
+build starts, when a release is ready for review or blocked, at sign-off, and
+when work pauses for budget (`reports.automatic`). The facts come from the
+tickets, decisions, costs and activity log; if no product manager is staffed, the
+plain facts are the report.
+
+**Product review.** **Review product** (also on release and sign-off decisions)
+shows everything needed to approve without a terminal: how to run it, every
+acceptance check with its real output, the QA and audit verdicts, the documents
+(assessment, plan, requirements, design, architecture, README, operations, audit
+reports), every file, the history and the cost. Once signed off, **Download
+release** gives you the verified source as a zip.
+
+**After release.** Paste customer feedback under **Customer feedback** (or
+`orgforge feedback`). The support specialist (Venky) triages it against the
+product and its tickets: bugs become To do tickets and reopen the product for its
+next version; feature requests go to the backlog for you to prioritise;
+questions get a suggested reply. Each sign-off is a numbered version, tagged
+`v1`, `v2` and so on in the product's git history.
+
+```bash
+orgforge costs
+orgforge budget 1 60                             # CEO: raise project 1's budget to $60
+orgforge report 1 --as cto
+orgforge feedback 1 "Crashes when the name is empty" --source "support email" --as ceo
+```
+
 ## Talking to the team
 
 The CEO and CTO can talk to any agent directly. On the dashboard, click
@@ -411,6 +454,10 @@ Each role gets only the tools listed for it.
 | `orgforge/org.py`         | Departments, roles, hire, fire, replace, rehire    |
 | `orgforge/naming.py`      | Teammates name new hires                           |
 | `orgforge/chat.py`        | CEO and CTO chat with agents                       |
+| `orgforge/costs.py`       | Cost ledger, prices and budgets                    |
+| `orgforge/reports.py`     | Status reports                                     |
+| `orgforge/review.py`      | Product review page                                |
+| `orgforge/feedback.py`    | Customer feedback triage                           |
 | `orgforge/performance.py` | Scores and HR policy                               |
 | `orgforge/pipeline.py`    | Stages, task loop, human decisions                 |
 | `orgforge/tickets.py`     | Ticket tracker and the agents' ticket tools        |

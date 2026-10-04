@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from .chat import ChatError
+from .feedback import FeedbackError
 from .company import Company
 from .org import KINDS, OrgError
 from .pipeline import PipelineError
@@ -93,6 +94,13 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("serve", help="Start the dashboard")
     p.add_argument("--host", default="127.0.0.1"); p.add_argument("--port", type=int, default=4700)
 
+    sub.add_parser("costs", help="What the company's AI work has cost (estimate)")
+    p = sub.add_parser("budget", help="CEO: set a project's budget in USD (0 = no limit)")
+    p.add_argument("project", type=int); p.add_argument("amount", type=float)
+    p = sub.add_parser("report", help="Get a status report from the product manager")
+    p.add_argument("project", type=int); p.add_argument("--latest", action="store_true", help="Show the last report only"); who(p)
+    p = sub.add_parser("feedback", help="Pass on customer feedback for Support to triage (no text: list it)")
+    p.add_argument("project", type=int); p.add_argument("text", nargs="?"); p.add_argument("--source", default=""); who(p)
     ia = sub.add_parser("idea", help="Ideas: assess, decide, revisit").add_subparsers(dest="idea_cmd")
     p = ia.add_parser("new", help="Submit an idea; Ram assesses it with Engineering, Marketing and Legal")
     p.add_argument("name"); p.add_argument("--brief"); p.add_argument("--brief-file"); p.add_argument("--no-run", action="store_true"); who(p)
@@ -139,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     try:
         return _dispatch(args)
-    except (OrgError, PipelineError, TicketError, ChatError, PermissionError, RuntimeError) as exc:
+    except (OrgError, PipelineError, TicketError, ChatError, FeedbackError, PermissionError, RuntimeError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
@@ -197,6 +205,39 @@ def _dispatch(args) -> int:
         _ticket(co, args, role)
     elif args.cmd == "idea":
         _idea(co, args, role)
+    elif args.cmd == "costs":
+        from .costs import summary
+        c = summary(co.db)
+        print(f"Total so far (estimate): ${c['total']['cost']:.2f}  "
+              f"({c['total']['input_tokens']:,} tokens in, {c['total']['output_tokens']:,} out)")
+        for p in c["projects"]:
+            print(f"  P{p['id']:<3} {p['name']:<30} ${p['spent']:.2f}" + (f" of ${p['budget']:.2f}" if p["budget"] else ""))
+        if c["departments"]:
+            print("By department: " + ", ".join(f"{d['department']} ${d['spent']:.2f}" for d in c["departments"]))
+        if c["unpriced_models"]:
+            print("No price for: " + ", ".join(c["unpriced_models"]) + " (set llm.prices in org.yaml)")
+    elif args.cmd == "budget":
+        project = co.pipeline.set_budget(args.project, args.amount, co.s.ceo_name)
+        print(f"{project['name']}: budget " + (f"${project['budget']:.2f}" if project["budget"] else "no limit")
+              + f". Stage: {project['stage']}")
+    elif args.cmd == "report":
+        if not args.latest:
+            co.reports.request(args.project, co.s.human(role))
+            co.pipeline.write_reports(args.project)
+        latest = [r for r in co.reports.latest(args.project) if r["status"] == "sent"]
+        print(f"{latest[0]['author']}, {latest[0]['created_at'][:16].replace('T', ' ')}:\n\n{latest[0]['body']}"
+              if latest else "No reports yet.")
+    elif args.cmd == "feedback":
+        if args.text:
+            print("Support is triaging...")
+            f = co.feedback.submit(args.project, args.text, co.s.human(role), source=args.source, wait=True)
+            row = co.feedback.list(args.project)[0]
+            print(row["result"])
+            if row["tickets"]:
+                print(f"\nThe team picks up new tickets on the next run: orgforge run {args.project}")
+        else:
+            for f in co.feedback.list(args.project):
+                print(f"\n#{f['id']} {f['created_at'][:16].replace('T', ' ')} {f['source']}\n  {f['body']}\n  -> {f['result']}")
     elif args.cmd == "chat":
         if args.message:
             print(f"Waiting for {co.org.agent(args.agent)['name']}...")

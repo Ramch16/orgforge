@@ -3,15 +3,22 @@ from __future__ import annotations
 
 import os
 import secrets
+import shutil
+import tempfile
 import threading
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from starlette.background import BackgroundTask
 from pydantic import BaseModel
 
 from .chat import ChatError
 from .company import Company
+from .costs import summary as cost_summary
+from .feedback import FeedbackError
+from .review import read_file as review_file, review as review_product
+from .tools import ToolError
 from .org import OrgError
 from .pipeline import IDEA_STAGES, STAGE_LABELS, STAGES, PipelineError
 from .tickets import PRIORITIES, STATUS_LABELS, TYPES, TicketError
@@ -23,6 +30,16 @@ class NewProject(BaseModel):
     name: str
     brief: str
     idea: bool = False
+    budget: float | None = None
+
+
+class Budget(BaseModel):
+    amount: float
+
+
+class CustomerFeedback(BaseModel):
+    body: str
+    source: str = ""
 
 
 class Decision(BaseModel):
@@ -91,14 +108,14 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
                 pass                            # already written to the activity log
         threading.Thread(target=work, daemon=True).start()
 
-    co.chat.on_work = run_in_background
+    co.chat.on_work = co.feedback.on_work = run_in_background
 
     def guard(fn):
         try:
             return fn()
         except PermissionError as exc:
             raise HTTPException(403, str(exc))
-        except (OrgError, PipelineError, TicketError, ChatError) as exc:
+        except (OrgError, PipelineError, TicketError, ChatError, FeedbackError, ToolError) as exc:
             raise HTTPException(400, str(exc))
 
     def managed(role: str, ref: int) -> dict:
@@ -126,6 +143,7 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
             "ticket_meta": {"types": TYPES, "priorities": PRIORITIES, "statuses": STATUS_LABELS,
                             "roles": co.tickets.work_roles()},
             "events": co.events(60)[::-1],
+            "costs": cost_summary(co.db),
             "chats": co.db.all("SELECT agent_id, MAX(id) AS last_id, SUM(status='pending') AS pending FROM messages "
                                "WHERE human=? GROUP BY agent_id", role),
         }
@@ -135,7 +153,7 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
         if not body.name.strip() or not body.brief.strip():
             raise HTTPException(400, "A project needs a name and a brief.")
         project = guard(lambda: co.pipeline.create_project(body.name.strip(), body.brief.strip(), by=co.s.human(role),
-                                                           idea=body.idea))
+                                                           idea=body.idea, budget=body.budget))
         run_in_background(project["id"])
         return project
 
@@ -144,6 +162,51 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
         project = guard(lambda: co.pipeline.project(pid))
         run_in_background(pid)
         return project
+
+    @app.post("/api/projects/{pid}/budget")
+    def set_budget(pid: int, body: Budget, role: str = Depends(auth)) -> dict:
+        if role != "ceo":
+            raise HTTPException(403, "Budgets are the CEO's call.")
+        project = guard(lambda: co.pipeline.set_budget(pid, body.amount, co.s.human(role)))
+        run_in_background(pid)
+        return project
+
+    @app.get("/api/projects/{pid}/reports")
+    def reports(pid: int, role: str = Depends(auth)) -> list:
+        return guard(lambda: co.reports.latest(pid))
+
+    @app.post("/api/projects/{pid}/reports")
+    def request_report(pid: int, role: str = Depends(auth)) -> list:
+        guard(lambda: co.reports.request(pid, co.s.human(role)))
+        run_in_background(pid)
+        return co.reports.latest(pid)
+
+    @app.get("/api/projects/{pid}/review")
+    def product_review(pid: int, role: str = Depends(auth)) -> dict:
+        return guard(lambda: review_product(co, pid))
+
+    @app.get("/api/projects/{pid}/file")
+    def product_file(pid: int, path: str, role: str = Depends(auth)) -> dict:
+        return guard(lambda: review_file(co, pid, path))
+
+    @app.get("/api/projects/{pid}/download")
+    def download(pid: int, role: str = Depends(auth)):
+        from .delivery import export_product
+        folder = Path(tempfile.mkdtemp(prefix="orgforge-export-"))
+        project = guard(lambda: co.pipeline.project(pid))
+        name = f"{project['name'].lower().replace(' ', '-')}-v{project['version']}.zip"
+        zipped = guard(lambda: export_product(co.pipeline, pid, folder / name))
+        return FileResponse(zipped, filename=name, media_type="application/zip",
+                            background=BackgroundTask(shutil.rmtree, folder, ignore_errors=True))
+
+    @app.get("/api/projects/{pid}/feedback")
+    def feedback(pid: int, role: str = Depends(auth)) -> list:
+        return guard(lambda: co.feedback.list(pid))
+
+    @app.post("/api/projects/{pid}/feedback")
+    def submit_feedback(pid: int, body: CustomerFeedback, role: str = Depends(auth)) -> list:
+        guard(lambda: co.feedback.submit(pid, body.body, co.s.human(role), source=body.source))
+        return co.feedback.list(pid)
 
     @app.post("/api/projects/{pid}/revisit")
     def revisit(pid: int, role: str = Depends(auth)) -> dict:

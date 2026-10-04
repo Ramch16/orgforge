@@ -48,6 +48,10 @@ CREATE TABLE IF NOT EXISTS projects (
   feedback TEXT NOT NULL DEFAULT '',
   purpose TEXT NOT NULL DEFAULT '',
   author TEXT NOT NULL DEFAULT '',
+  budget REAL NOT NULL DEFAULT 0,
+  budget_warned REAL NOT NULL DEFAULT 0,
+  paused_stage TEXT NOT NULL DEFAULT '',
+  version INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -87,6 +91,39 @@ CREATE TABLE IF NOT EXISTS messages (
   body TEXT NOT NULL DEFAULT '',
   project_id INTEGER,
   status TEXT NOT NULL DEFAULT 'sent',
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS usage (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id INTEGER NOT NULL,
+  project_id INTEGER,
+  model TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL,
+  output_tokens INTEGER NOT NULL,
+  cost REAL NOT NULL,
+  priced INTEGER NOT NULL DEFAULT 1,
+  purpose TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  trigger TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  author TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  requested_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  source TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  result TEXT NOT NULL DEFAULT '',
+  tickets TEXT NOT NULL DEFAULT '[]',
+  submitted_by TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS reviews (
@@ -149,9 +186,11 @@ class DB:
                 self.conn.execute(f"ALTER TABLE tasks ADD COLUMN {column} TEXT NOT NULL DEFAULT '{default}'")
         # 0.7 added the idea stage: what a product is for, and who proposed it.
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(projects)")}
-        for column in ("purpose", "author"):
-            if column not in have:
-                self.conn.execute(f"ALTER TABLE projects ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+        for column, decl in (("purpose", "TEXT NOT NULL DEFAULT ''"), ("author", "TEXT NOT NULL DEFAULT ''"),
+                             ("budget", "REAL NOT NULL DEFAULT 0"), ("budget_warned", "REAL NOT NULL DEFAULT 0"),
+                             ("paused_stage", "TEXT NOT NULL DEFAULT ''"), ("version", "INTEGER NOT NULL DEFAULT 0")):
+            if column not in have:                # 0.7 ideas, 0.8 budgets and versions
+                self.conn.execute(f"ALTER TABLE projects ADD COLUMN {column} {decl}")
         # Companies created before 0.2 limited role kinds in the table itself. Lift that.
         sql = self.conn.execute("SELECT sql FROM sqlite_master WHERE name='roles'").fetchone()["sql"]
         if "CHECK (kind IN" not in sql:

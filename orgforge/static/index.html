@@ -85,6 +85,23 @@
   .bubble.failed { color: var(--bad); } .bubble.pending { color: var(--soft); font-style: italic; }
   .bubble .when { display: block; font-size: .74rem; color: var(--soft); margin-bottom: .15rem; }
   .bubble button.tlink { border: 0; padding: 0; background: none; color: var(--cobalt); font: inherit; text-decoration: underline; }
+  .money { font-variant-numeric: tabular-nums; }
+  .budgetbar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: .2rem 0 .1rem; }
+  .budgetbar i { display: block; height: 100%; background: var(--good); } .budgetbar i.mid { background: var(--warn); } .budgetbar i.over { background: var(--bad); }
+  .costgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .8rem; }
+  .big { font-size: 1.6rem; font-weight: 650; }
+  dialog.wide { width: min(980px, calc(100vw - 2rem)); }
+  .review-grid { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 1rem; }
+  @media (max-width: 760px) { .review-grid { grid-template-columns: minmax(0, 1fr); } }
+  .filelist { max-height: 22rem; overflow: auto; font-size: .85rem; }
+  .filelist button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: .15rem .3rem; border-radius: 4px; color: var(--ink); overflow-wrap: anywhere; }
+  .filelist button:hover, .filelist button.on { background: var(--wash); }
+  .viewer { white-space: pre-wrap; font: .82rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: .7rem; max-height: 30rem; overflow: auto; overflow-wrap: anywhere; }
+  .check { padding: .35rem 0; border-bottom: 1px solid var(--line); font-size: .9rem; }
+  .check details pre { white-space: pre-wrap; font-size: .8rem; color: var(--soft); max-height: 12rem; overflow: auto; }
+  .pass { color: var(--good); font-weight: 650; } .fail { color: var(--bad); font-weight: 650; }
+  .report { white-space: pre-wrap; font-size: .92rem; }
+  .fb { border-top: 1px solid var(--line); padding: .55rem 0; font-size: .9rem; }
   tr[data-ticket] { cursor: pointer; } tr[data-ticket]:hover td { color: var(--cobalt); }
 </style>
 </head>
@@ -116,7 +133,8 @@
           <textarea id="p-brief" placeholder="Describe the idea: the problem, who it is for, and what it should do."></textarea>
           <label class="muted row" style="margin-top:.5rem;flex-wrap:nowrap;align-items:flex-start"><input type="checkbox" id="p-idea" checked style="width:auto;margin-top:.25rem">
             <span>Assess it first: Ram checks feasibility, internal use versus selling, and revenue with Engineering, Marketing and Legal. Lucky signs off, then Niki decides.</span></label>
-          <div class="row" style="margin-top:.5rem"><button class="primary" id="p-start">Submit idea</button></div>
+          <div class="row" style="margin-top:.5rem"><button class="primary" id="p-start">Submit idea</button>
+            <label class="muted row" style="flex-wrap:nowrap">Budget $<input id="p-budget" type="number" min="0" step="5" style="width:6rem" placeholder="default"></label></div>
         </div>
         <div id="projects"></div>
       </section>
@@ -130,6 +148,10 @@
           <label class="muted row" style="flex-wrap:nowrap"><input type="checkbox" id="f-cancelled" style="width:auto"> Cancelled</label>
         </div>
         <div class="board" id="board"></div>
+      </section>
+      <section>
+        <h2>Costs</h2>
+        <div id="costs"></div>
       </section>
       <section>
         <h2>People</h2>
@@ -169,6 +191,10 @@
 </dialog>
 
 <dialog id="ticket-dlg"><div id="ticket-body"></div></dialog>
+
+<dialog id="review-dlg" class="wide"><div id="review-body"></div></dialog>
+<dialog id="report-dlg"><div id="report-body"></div></dialog>
+<dialog id="feedback-dlg"><div id="feedback-body"></div></dialog>
 
 <dialog id="chat-dlg">
   <div class="row" style="justify-content:space-between"><div><h2 id="chat-name" style="margin:0"></h2><span class="muted" id="chat-role"></span></div>
@@ -215,6 +241,8 @@ async function refresh(force) {
   try { state = await api("/api/state"); } catch { return; }
   $("signin").hidden = true; $("app").hidden = false;
   if (openChatId) loadChat(openChatId).catch(() => {});   // only redraws the messages, never the input
+  if (reportFor) openReports(reportFor).catch(() => {});
+  if (feedbackFor && !["fb-body", "fb-source"].includes(document.activeElement?.id)) openFeedback(feedbackFor).catch(() => {});
   if (busy && !force) return;             // don't redraw under someone typing
   render();
   if (openTicketId && !force) loadTicket(openTicketId).catch(() => {});
@@ -232,6 +260,7 @@ function render() {
       <h3>${esc(a.title)}</h3>
       <div class="muted">${mine ? "Your call" : `With ${esc(state.humans[a.required_role])} (${a.required_role.toUpperCase()})`}</div>
       <pre>${esc(a.summary)}</pre>
+      ${["release", "signoff"].includes(a.kind) && a.project_id ? `<button class="quiet" data-review="${a.project_id}">Open product review</button>` : ""}
       ${mine ? `<textarea data-draft="${a.id}" placeholder="${a.kind === "idea_decision" ? "Your reasons (optional)" : "What should change? Required to send back."}">${esc(drafts[a.id] || "")}</textarea>
       <div class="row" style="margin-top:.5rem">
         ${a.kind === "idea_decision" ? `
@@ -257,11 +286,17 @@ function render() {
       `<tr data-ticket="${t.id}"><td class="key">T-${t.id}</td><td>${esc(t.title)}${t.attempts ? ` <span class="muted">sent back ${t.attempts}×</span>` : ""}</td>
        <td>${esc(t.assignee || "")}</td><td><span class="chip ${t.status}">${esc(state.ticket_meta.statuses[t.status] || t.status)}</span></td></tr>`).join("")}</table>` : "";
     return `<div class="card">
-      <div class="row" style="justify-content:space-between"><h3>${esc(p.name)} ${p.purpose ? `<span class="chip ${p.purpose === "commercial" ? "active" : "in_review"}">${p.purpose === "commercial" ? "To sell" : "Internal"}</span>` : ""}</h3><span class="muted">${esc(p.stage_label)}</span></div>
+      <div class="row" style="justify-content:space-between"><h3>${esc(p.name)} ${p.version ? `<span class="chip done">v${p.version}</span>` : ""} ${p.purpose ? `<span class="chip ${p.purpose === "commercial" ? "active" : "in_review"}">${p.purpose === "commercial" ? "To sell" : "Internal"}</span>` : ""}</h3><span class="muted">${esc(p.stage_label)}</span></div>
       <div class="track">${track}</div>
       <div class="muted">${esc(p.workspace)}</div>${tasks}
+      ${budgetLine(p)}
+      <div class="row">
       ${p.stage === "parked" ? (me === "ceo" ? `<button class="quiet" data-revisit="${p.id}">Revisit this idea</button>` : "")
-        : ["done", "dropped"].includes(p.stage) ? "" : `<button class="quiet" data-run="${p.id}">Resume work</button>`}
+        : ["done", "dropped", "paused"].includes(p.stage) ? "" : `<button class="quiet" data-run="${p.id}">Resume work</button>`}
+      ${state.idea_stages.includes(p.stage) && p.stage !== "plan_approval" ? "" : `<button class="quiet" data-review="${p.id}">Review product</button>`}
+      <button class="quiet" data-report="${p.id}">Status report</button>
+      ${built(p) ? `<button class="quiet" data-feedback="${p.id}">Customer feedback</button>` : ""}
+      </div>
     </div>`;
   }).join("") || `<p class="muted">No projects yet. Write a brief above to start one.</p>`;
 
@@ -293,7 +328,143 @@ function render() {
   $("log").innerHTML = state.events.map(e =>
     `<div><span class="muted">${esc(e.ts.slice(11, 19))} ${esc(e.actor)}</span> ${esc(e.message)}</div>`).join("") || "Nothing yet.";
   renderTickets();
+  renderCosts();
 }
+
+const usd = n => "$" + (n >= 100 ? n.toFixed(0) : n >= 1 ? n.toFixed(2) : n.toFixed(4));
+const built = p => !["idea", "idea_review", "idea_decision", "plan", "plan_approval", "prd", "prd_approval", "architecture", "architecture_approval", "dropped", "parked"].includes(p.stage);
+function spentOf(pid) { return (state.costs.projects.find(c => c.id === pid) || {}).spent || 0; }
+function budgetLine(p) {
+  const s = spentOf(p.id), b = p.budget;
+  const pct = b ? Math.min(100, s / b * 100) : 0, cls = pct >= 100 ? "over" : pct >= 80 ? "mid" : "";
+  const change = state.you.role === "ceo" ? ` <button class="quiet" data-budget="${p.id}" data-amount="${b}">${p.stage === "paused" ? "Raise budget to resume" : "Change"}</button>` : "";
+  return `<div class="muted money" style="margin-top:.5rem">Cost ${usd(s)} ${b ? `of ${usd(b)} budget` : "· no budget limit"}${change}</div>
+    ${b ? `<div class="budgetbar"><i class="${cls}" style="width:${pct}%"></i></div>` : ""}`;
+}
+function renderCosts() {
+  const c = state.costs;
+  const rows = (items, label) => items.length ? `<table>${items.map(i => `<tr><td>${esc(i[label])}</td><td class="money" style="text-align:right">${usd(i.spent)}</td></tr>`).join("")}</table>` : `<p class="muted">Nothing yet.</p>`;
+  $("costs").innerHTML = `<div class="costgrid">
+    <div class="card"><div class="muted">Total so far (estimate)</div><div class="big money">${usd(c.total.cost)}</div>
+      <div class="muted money">${(c.total.input_tokens / 1e6).toFixed(2)}M tokens in · ${(c.total.output_tokens / 1e6).toFixed(2)}M out${c.outside_projects ? ` · ${usd(c.outside_projects)} outside projects` : ""}</div>
+      ${c.unpriced_models.length ? `<p class="muted" style="color:var(--warn)">No price for ${esc(c.unpriced_models.join(", "))}; set llm.prices in org.yaml.</p>` : ""}</div>
+    <div class="card"><h3>By project</h3>${c.projects.length ? `<table>${c.projects.map(p => `<tr><td>${esc(p.name)}</td><td class="money" style="text-align:right">${usd(p.spent)}${p.budget ? ` / ${usd(p.budget)}` : ""}</td></tr>`).join("")}</table>` : `<p class="muted">No projects.</p>`}</div>
+    <div class="card"><h3>By department</h3>${rows(c.departments, "department")}</div>
+    <div class="card"><h3>Top agents</h3>${rows(c.agents, "name")}</div></div>
+    <p class="muted">Estimated from Anthropic list prices; your Anthropic bill is the source of truth.</p>`;
+}
+
+// ---- product review ----
+let reviewing = null;
+async function openReview(pid) {
+  const r = await api(`/api/projects/${pid}/review`);
+  reviewing = pid;
+  const v = r.verification, P = r.project;
+  const checks = !v.ran ? `<p class="muted">The acceptance checks have not run yet (they run after the build and audits).</p>`
+    : `<p class="${v.passed ? "pass" : "fail"}">${v.passed ? "All acceptance checks passed" : "Acceptance checks failed"}</p>
+       ${v.errors.map(e => `<p class="fail">${esc(e)}</p>`).join("")}
+       ${v.checks.map(c => `<div class="check"><span class="${c.passed ? "pass" : "fail"}">${c.passed ? "Pass" : "Fail"}</span> ${esc(c.requirement || c.id)}
+         <details><summary class="muted">Command and output</summary><pre>$ ${esc(c.command)}\n${esc(c.output)}</pre></details></div>`).join("")}`;
+  $("review-body").innerHTML = `
+    <div class="row" style="justify-content:space-between"><div><h2 style="margin:0">${esc(P.name)} ${P.version ? `<span class="chip done">v${P.version}</span>` : ""}</h2>
+      <span class="muted">${esc(P.stage_label)}${P.purpose ? ` · ${P.purpose === "commercial" ? "to sell" : "internal use"}` : ""} · cost ${usd(P.spent)}${P.budget ? ` of ${usd(P.budget)}` : ""}</span></div>
+      <div class="row">${r.downloadable ? `<button class="primary" data-download="${P.id}">Download release</button>` : ""}<button class="quiet" id="review-close">Close</button></div></div>
+    <div class="review-grid" style="margin-top:.8rem">
+      <div>
+        <h3>How to run it</h3>
+        ${r.run.setup || r.run.run ? `<p class="muted" style="margin:.2rem 0">Setup</p><div class="viewer">${esc(r.run.setup)}</div><p class="muted" style="margin:.4rem 0 .2rem">Run</p><div class="viewer">${esc(r.run.run)}</div>` : `<p class="muted">Not written yet.</p>`}
+        <h3 style="margin-top:.9rem">Documents</h3>
+        <div class="filelist">${r.docs.map(d => `<button data-file="${esc(d.path)}">${esc(d.title)}</button>`).join("") || `<p class="muted">None yet.</p>`}</div>
+        <h3 style="margin-top:.9rem">All files (${r.files.length})</h3>
+        <div class="filelist">${r.files.map(f => `<button data-file="${esc(f)}">${esc(f)}</button>`).join("")}</div>
+      </div>
+      <div>
+        <h3>Acceptance checks</h3>${checks}
+        <h3 style="margin-top:.9rem">QA and audits</h3>
+        ${r.verdicts.map(t => `<div class="check"><b>${esc(t.title)}</b> <span class="muted">${esc(t.who || "")}</span><div class="muted">${linkTickets(esc(t.verdict))}</div></div>`).join("") || `<p class="muted">Not run yet.</p>`}
+        <h3 style="margin-top:.9rem">File</h3>
+        <div class="viewer" id="review-viewer">Choose a document or file on the left.</div>
+        <h3 style="margin-top:.9rem">History</h3>
+        <div class="viewer" style="max-height:12rem">${esc(r.history.join("\n")) || "No commits yet."}</div>
+      </div>
+    </div>`;
+  if (!$("review-dlg").open) $("review-dlg").showModal();
+  const first = r.docs.find(d => d.path === "README.md") || r.docs[0];
+  if (first) showFile(first.path);
+}
+async function showFile(path) {
+  document.querySelectorAll("#review-body [data-file]").forEach(b => b.classList.toggle("on", b.dataset.file === path));
+  const f = await api(`/api/projects/${reviewing}/file?path=${encodeURIComponent(path)}`);
+  $("review-viewer").textContent = f.text ?? f.note;
+}
+async function download(pid) {
+  const res = await fetch(`/api/projects/${pid}/download`, { headers: { "X-Token": token } });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Download failed");
+  const name = (res.headers.get("content-disposition") || "").match(/filename="?([^"]+)"?/)?.[1] || "release.zip";
+  const url = URL.createObjectURL(await res.blob());
+  Object.assign(document.createElement("a"), { href: url, download: name }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+// ---- status reports ----
+let reportFor = null, reportShown = "";
+async function openReports(pid) {
+  const list = await api(`/api/projects/${pid}/reports`), p = state.projects.find(x => x.id === pid);
+  const sig = JSON.stringify(list);
+  if (reportFor === pid && sig === reportShown && $("report-dlg").open) return;
+  reportFor = pid; reportShown = sig;
+  const pending = list.some(r => r.status === "pending");
+  $("report-body").innerHTML = `<div class="row" style="justify-content:space-between"><h2 style="margin:0">Status: ${esc(p ? p.name : "")}</h2><button class="quiet" id="report-close">Close</button></div>
+    <div class="row" style="margin:.5rem 0"><button class="primary" id="report-new" ${pending ? "disabled" : ""}>${pending ? "Ram is writing a report…" : "Get a new report"}</button></div>
+    ${list.filter(r => r.status === "sent").map((r, i) => `<div class="fb"><div class="muted">${esc(r.created_at.slice(0, 16).replace("T", " "))} · ${esc(r.author)} · ${esc(r.trigger)}</div>
+      ${i === 0 ? `<div class="report">${linkTickets(esc(r.body))}</div>` : `<details><summary>Show</summary><div class="report">${linkTickets(esc(r.body))}</div></details>`}</div>`).join("") || `<p class="muted">No reports yet. Reports are also written automatically at milestones.</p>`}`;
+  if (!$("report-dlg").open) $("report-dlg").showModal();
+}
+
+// ---- customer feedback ----
+let feedbackFor = null, feedbackShown = "";
+async function openFeedback(pid) {
+  const list = await api(`/api/projects/${pid}/feedback`), p = state.projects.find(x => x.id === pid);
+  const sig = JSON.stringify(list);
+  if (feedbackFor === pid && sig === feedbackShown && $("feedback-dlg").open) return;
+  feedbackFor = pid; feedbackShown = sig;
+  const keep = { src: $("fb-source")?.value || "", body: $("fb-body")?.value || "" };
+  $("feedback-body").innerHTML = `<div class="row" style="justify-content:space-between"><h2 style="margin:0">Customer feedback: ${esc(p ? p.name : "")}</h2><button class="quiet" id="feedback-close">Close</button></div>
+    <p class="muted">Paste what a customer said. Venky (Support) triages it: bugs go straight to the team and start the next version, feature requests wait in the backlog for you, questions get a suggested reply.</p>
+    <label class="field"><span>Where it came from</span><input id="fb-source" placeholder="e.g. email from a customer, support call, app review"></label>
+    <label class="field"><span>Feedback</span><textarea id="fb-body" rows="4"></textarea></label>
+    <p id="fb-error" class="muted" style="color:var(--bad)"></p>
+    <button class="primary" id="fb-send">Send to Support</button>
+    <div style="margin-top:.8rem">${list.map(f => `<div class="fb"><div class="muted">${esc(f.created_at.slice(0, 16).replace("T", " "))} · ${esc(f.submitted_by)}${f.source ? ` · ${esc(f.source)}` : ""}</div>
+      <div>${esc(f.body)}</div>
+      <div class="${f.status === "failed" ? "fail" : "muted"}" style="margin-top:.25rem">${f.status === "pending" ? "Venky is triaging…" : linkTickets(esc(f.result))}</div></div>`).join("")}</div>`;
+  $("fb-source").value = keep.src; $("fb-body").value = keep.body;
+  if (!$("feedback-dlg").open) $("feedback-dlg").showModal();
+}
+
+document.addEventListener("click", e => {
+  const t = e.target, d = t.dataset;
+  if (d.review) act(() => openReview(Number(d.review)));
+  else if (d.file) showFile(d.file).catch(err => { $("review-viewer").textContent = err.message; });
+  else if (d.download) download(Number(d.download)).catch(err => alert(err.message));
+  else if (d.report) act(() => openReports(Number(d.report)));
+  else if (d.feedback) act(() => openFeedback(Number(d.feedback)));
+  else if (d.budget) {
+    const v = prompt("New budget in US dollars (0 means no limit):", d.amount);
+    if (v !== null && v.trim() !== "" && !isNaN(Number(v))) act(() => api(`/api/projects/${d.budget}/budget`, { amount: Number(v) }));
+  }
+  else if (t.id === "review-close") $("review-dlg").close();
+  else if (t.id === "report-close") $("report-dlg").close();
+  else if (t.id === "feedback-close") $("feedback-dlg").close();
+  else if (t.id === "report-new") act(async () => { await api(`/api/projects/${reportFor}/reports`, {}); await openReports(reportFor); });
+  else if (t.id === "fb-send") (async () => {
+    try { await api(`/api/projects/${feedbackFor}/feedback`, { body: $("fb-body").value, source: $("fb-source").value });
+          $("fb-body").value = ""; $("fb-source").value = ""; await openFeedback(feedbackFor); }
+    catch (err) { if (err.message !== "unauthorized") $("fb-error").textContent = err.message; }
+  })();
+});
+$("report-dlg").addEventListener("close", () => { reportFor = null; reportShown = ""; });
+$("feedback-dlg").addEventListener("close", () => { feedbackFor = null; feedbackShown = ""; });
 
 const COLUMNS = ["backlog", "todo", "in_progress", "in_review", "failed", "done"];
 let openTicketId = null, ticketShown = "", boardShown = "";
@@ -427,7 +598,9 @@ document.addEventListener("click", e => {
 });
 $("p-idea").onchange = () => { $("p-start").textContent = $("p-idea").checked ? "Submit idea" : "Start building"; };
 $("p-start").onclick = () => act(async () => {
-  await api("/api/projects", { name: $("p-name").value, brief: $("p-brief").value, idea: $("p-idea").checked });
+  const budget = $("p-budget").value === "" ? null : Number($("p-budget").value);
+  await api("/api/projects", { name: $("p-name").value, brief: $("p-brief").value, idea: $("p-idea").checked, budget });
+  $("p-budget").value = "";
   $("p-name").value = ""; $("p-brief").value = "";
 });
 $("h-go").onclick = () => act(async () => { await api("/api/agents", { role: $("h-role").value, name: $("h-name").value }); $("h-name").value = ""; });

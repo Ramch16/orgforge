@@ -5,6 +5,8 @@ import os
 
 from .agent import AgentRuntime
 from .chat import Chat
+from .feedback import Feedback
+from .reports import Reports
 from .config import ensure_org_file, load_settings, resolve_root
 from .db import DB
 from .llm import make_provider
@@ -44,6 +46,9 @@ class Company:
         self.runtime.tickets = self.tickets
         self.org.namer = make_namer(self.db, self.s, self.runtime.provider)
         self.chat = Chat(self)
+        self.reports = Reports(self)
+        self.pipeline.reporter = self.reports.write
+        self.feedback = Feedback(self)
         if create:
             self.org.seed()
 

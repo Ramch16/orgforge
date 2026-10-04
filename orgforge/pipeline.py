@@ -18,6 +18,7 @@ import threading
 from pathlib import Path
 
 from .agent import AgentRuntime
+from .costs import spent
 from .config import Settings
 from .db import DB, now
 from .org import Org
@@ -28,11 +29,12 @@ from .validation import CONTRACT, CONTRACT_GUIDE, validate_plan, verify_product
 
 IDEA_STAGES = ["idea", "idea_review", "idea_decision", "plan", "plan_approval"]
 STAGES = [*IDEA_STAGES, "prd", "prd_approval", "architecture", "architecture_approval", "build",
-          "escalation", "contract_review", "release_blocked", "release_approval", "signoff", "done", "parked", "dropped"]
+          "escalation", "contract_review", "release_blocked", "release_approval", "signoff", "done", "parked", "dropped",
+          "paused"]
 STAGE_LABELS = {
     "idea": "Assessing the idea", "idea_review": "Technical sign-off with CTO", "idea_decision": "Decision with CEO",
     "plan": "Planning across departments", "plan_approval": "Plan with CEO and CTO",
-    "parked": "Parked", "dropped": "Dropped",
+    "parked": "Parked", "dropped": "Dropped", "paused": "Paused: budget used up",
     "contract_review": "Acceptance checks changed, with CTO",
     "release_blocked": "Release checks need attention",
     "prd": "Writing requirements", "prd_approval": "Requirements with CEO",
@@ -41,6 +43,8 @@ STAGE_LABELS = {
     "release_approval": "Release with CTO", "signoff": "Sign-off with CEO", "done": "Ready for deployment",
 }
 HUMAN_APPROVED, HUMAN_REJECTED = 92, 35
+MILESTONES = {"release_approval": "Ready for release review", "release_blocked": "Release blocked",
+              "done": "Signed off", "paused": "Paused for budget"}
 PURPOSES = {"internal": "for internal use", "commercial": "to sell"}
 RECOMMENDATIONS = {"build_internal": "build it for internal use", "build_to_sell": "build it to sell",
                    "park": "park it for now", "drop": "drop it"}
@@ -70,6 +74,7 @@ class Pipeline:
         self.db, self.s, self.org, self.perf, self.runtime = db, settings, org, perf, runtime
         self._locks: dict[int, threading.Lock] = {}
         self._solo: set[int] = set()            # tickets that hit a merge conflict: redo them alone
+        self.reporter = None                    # writes a pending status report (set by Company)
 
     # ---- helpers ---------------------------------------------------------
     def project(self, pid: int) -> dict:
@@ -83,7 +88,11 @@ class Pipeline:
                          docker_network=self.s.docker_network, timeout=self.s.command_timeout)
 
     def _stage(self, pid: int, stage: str, feedback: str | None = None) -> None:
+        old = self.db.one("SELECT stage FROM projects WHERE id=?", pid)
         self.db.run("UPDATE projects SET stage=?, updated_at=? WHERE id=?", stage, now(), pid)
+        if self.s.auto_reports and old and old["stage"] != stage and (
+                stage in MILESTONES or (stage == "build" and old["stage"] == "architecture_approval")):
+            self.queue_report(pid, MILESTONES.get(stage, "Build started"))
         if feedback is not None:
             self.db.run("UPDATE projects SET feedback=? WHERE id=?", feedback, pid)
 
@@ -126,11 +135,13 @@ class Pipeline:
         return target.read_text(errors="replace") if target.is_file() else ""
 
     # ---- projects --------------------------------------------------------
-    def create_project(self, name: str, brief: str, by: str = "ceo", idea: bool = False) -> dict:
+    def create_project(self, name: str, brief: str, by: str = "ceo", idea: bool = False,
+                       budget: float | None = None) -> dict:
         """A project that starts building, or with `idea` an idea that is assessed and decided first."""
         ts = now()
-        pid = self.db.run("INSERT INTO projects (name, brief, stage, author, created_at, updated_at) VALUES (?,?,?,?,?,?)",
-                          name, brief, "idea" if idea else "prd", by, ts, ts)
+        pid = self.db.run("INSERT INTO projects (name, brief, stage, author, budget, created_at, updated_at) "
+                          "VALUES (?,?,?,?,?,?,?)", name, brief, "idea" if idea else "prd", by,
+                          self.s.default_budget if budget is None else max(0.0, budget), ts, ts)
         slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40] or "project"
         path = self.s.workspaces / f"{pid:03d}-{slug}"
         self.db.run("UPDATE projects SET workspace=? WHERE id=?", str(path), pid)
@@ -150,14 +161,65 @@ class Pipeline:
             self.db.run("UPDATE tasks SET status='todo' WHERE project_id=? AND status IN ('in_progress', 'in_review') AND origin!='stage'", pid)
             steps = {"idea": self._idea, "plan": self._plan, "prd": self._prd, "architecture": self._architecture,
                      "build": self._build}
+            self.write_reports(pid)
             while (stage := self.project(pid)["stage"]) in steps:
+                if not self._budget_ok(pid):
+                    break
                 steps[stage](self.project(pid))
+            self.write_reports(pid)
         except Exception as exc:
             self.db.log("error", f"{type(exc).__name__}: {exc}", pid)
             raise
         finally:
             lock.release()
         return self.project(pid)
+
+    # ---- budgets and reports ---------------------------------------------
+    def _budget_ok(self, pid: int) -> bool:
+        """False when the project has used its budget; the CEO is asked to raise it or stop."""
+        p, used = self.project(pid), spent(self.db, pid)
+        budget = p["budget"]
+        if budget <= 0:
+            return True
+        if used >= budget * self.s.budget_warn_at and p["budget_warned"] != budget:
+            self.db.run("UPDATE projects SET budget_warned=? WHERE id=?", budget, pid)
+            self.db.log("budget", f"{p['name']} has used ${used:.2f} of its ${budget:.2f} budget.", pid)
+        if used < budget:
+            return True
+        if not self.db.one("SELECT 1 FROM approvals WHERE project_id=? AND kind='budget' AND status='pending'", pid):
+            suggested = round(max(budget * 1.5, used + 5), 2)
+            self._approval(pid, "budget", "ceo", f"Budget used up: {p['name']}",
+                           f"{p['name']} has used ${used:.2f} of its ${budget:.2f} budget, so work is paused "
+                           f"({STAGE_LABELS.get(p['stage'], p['stage'])}).\n\nApprove to raise the budget to "
+                           f"${suggested:.2f}, or write a different amount in the note (e.g. 60). "
+                           "Send back to stop work; you can set a new budget later to resume.",
+                           {"suggested": suggested, "stage": p["stage"]})
+        return False
+
+    def set_budget(self, pid: int, amount: float, by: str) -> dict:
+        """Set a project's budget (0 = no limit). Resumes a project paused for budget if there is room."""
+        p = self.project(pid)
+        amount = max(0.0, float(amount))
+        self.db.run("UPDATE projects SET budget=? WHERE id=?", amount, pid)
+        self.db.log("budget", f"Budget for {p['name']} set to " + (f"${amount:.2f}." if amount else "no limit."),
+                    pid, actor=by)
+        if amount == 0 or amount > spent(self.db, pid):
+            self.db.run("UPDATE approvals SET status='withdrawn', decided_by=?, decided_at=? WHERE project_id=? "
+                        "AND kind='budget' AND status='pending'", by, now(), pid)
+            if p["stage"] == "paused":
+                self._stage(pid, p["paused_stage"] or "build")
+        return self.project(pid)
+
+    def queue_report(self, pid: int, trigger: str, by: str = "") -> None:
+        if not self.db.one("SELECT 1 FROM reports WHERE project_id=? AND status='pending'", pid):
+            self.db.run("INSERT INTO reports (project_id, trigger, requested_by, created_at) VALUES (?,?,?,?)",
+                        pid, trigger, by, now())
+
+    def write_reports(self, pid: int) -> None:
+        """Write any status reports waiting for this project (set by Company: see reports.py)."""
+        if self.reporter:
+            for r in self.db.all("SELECT * FROM reports WHERE project_id=? AND status='pending' ORDER BY id", pid):
+                self.reporter(r)
 
     # ---- stages ----------------------------------------------------------
     def _idea(self, p: dict) -> None:
@@ -432,6 +494,8 @@ class Pipeline:
             self._stage(pid, "escalation")      # another failed ticket is still waiting for the CTO
             return
         while True:
+            if not self._budget_ok(pid):
+                return
             self._check_staffing(pid)
             batch = self._claim_batch(pid)
             if not batch:
@@ -851,7 +915,7 @@ class Pipeline:
             if choice not in allowed:
                 raise PipelineError("Decide the idea with one of: build it for internal use (internal), build it to "
                                     "sell (commercial), park it (park), or drop it (drop).")
-        if decision == "rejected" and not feedback and a["kind"] not in ("hr", "hire", "idea_decision"):
+        if decision == "rejected" and not feedback and a["kind"] not in ("hr", "hire", "idea_decision", "budget"):
             raise PipelineError("Say what needs to change when you reject, so the team can act on it.")
         who, ok, pid = self.s.human(role), decision == "approved", a["project_id"]
         payload = json.loads(a["payload"])
@@ -974,12 +1038,26 @@ class Pipeline:
             if ok:
                 ws = self.workspace(self.project(pid))
                 ws.commit("Release signed off by the CEO")
+                self.db.run("UPDATE projects SET version=version+1 WHERE id=?", pid)
+                version = self.project(pid)["version"]
                 ws.git("tag", "-f", "release")
+                ws.git("tag", "-f", f"v{version}")
                 self._stage(pid, "done")
-                self.db.log("project", "Verified release ready for deployment.", pid, actor=who)
+                self.db.log("project", f"Version {version} verified and ready for deployment.", pid, actor=who)
             else:
                 self._fix_task(pid, "Address the CEO's sign-off feedback", feedback, reporter=who)
                 self._stage(pid, "build")
+        elif kind == "budget":
+            if ok:
+                amount = payload["suggested"]
+                if m := re.search(r"\d+(?:\.\d+)?", feedback or ""):
+                    amount = float(m.group(0))
+                self.set_budget(pid, amount, who)
+            else:
+                self.db.run("UPDATE projects SET paused_stage=? WHERE id=?", payload["stage"], pid)
+                self._stage(pid, "paused")
+                self.db.log("budget", f"{who} stopped work when the budget ran out. Set a new budget to resume.",
+                            pid, actor=who)
         elif kind == "hire":
             if ok:
                 hired = self.org.hire(payload["role"], by=who)
