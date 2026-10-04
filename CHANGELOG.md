@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.11.0
+- **Quick tasks** (`orgforge task`, New task): one change straight to build, optionally on an
+  existing repository or a GitHub issue, on an `orgforge/task-N` branch, with your checks and a
+  CTO review of the changes; delivered as a patch or branch. Agents never push.
+- **Watch and steer agents.** Every run is logged live; the agent console streams it and the CEO
+  or CTO can message an agent mid-task. Diffs per ticket, commit and task.
+- **More engines.** Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode and Qwen Code presets
+  (from their docs, marked untested). Local models through Ollama and LM Studio, and OpenAI,
+  OpenRouter and Groq keys, through any OpenAI-compatible endpoint, per agent.
+- **MIT licence.**
+- Fix: product repositories ignore caches and build output; on most machines committed
+  `__pycache__` files made parallel merges conflict.
+
 ## 0.10.0
 - **CLI engines.** Agents can work through coding CLIs on their own logins instead of the
   pay-per-token API. Claude Code is built in (uses your Claude subscription; OrgForge removes

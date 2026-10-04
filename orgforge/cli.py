@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -254,11 +255,32 @@ def _dispatch(args) -> int:
         from .engines import EngineError, run_cli
         for name, e in sorted(co.s.engines.items()):
             exe = e["command"][0]
-            print(f"  {name:<14} {'installed' if shutil.which(exe) else 'not installed'}  ({exe})"
-                  + ("  · uses its own login, not the API key" if e.get("subscription") else ""))
+            print(f"  {name:<12} {'installed    ' if shutil.which(exe) else 'not installed'}  ({exe})"
+                  + ("  · tested" if e.get("verified") else "  · from its docs, untested")
+                  + ("  · uses its own login" if e.get("subscription") else ""))
+        import urllib.request
+        for name, e in sorted(co.s.endpoints.items()):
+            if e.get("free"):
+                try:
+                    with urllib.request.urlopen(e["base_url"].rstrip("/") + "/models", timeout=2) as r:
+                        models = [m.get("id") for m in json.loads(r.read()).get("data", [])]
+                    state = f"running · models: {', '.join(models[:6]) or 'none pulled yet'}"
+                except Exception:
+                    state = "not running"
+            else:
+                state = "key set" if os.environ.get(e.get("key_env", "")) else f"needs {e.get('key_env')}"
+            print(f"  {name:<12} {state}  ({e['base_url']})  · use {name}:<model>")
         users = co.db.all("SELECT model, COUNT(*) AS n FROM agents WHERE status!='fired' GROUP BY model")
         print("Agents by model: " + ", ".join(f"{u['model']} ({u['n']})" for u in users))
-        if args.test:
+        if args.test and ":" in args.test:          # a model on an endpoint, e.g. ollama:qwen2.5-coder
+            try:
+                r = co.runtime.provider.complete(model=args.test, system="You are testing a connection.",
+                                                 messages=[{"role": "user", "content": "Reply with just: OK"}],
+                                                 tools=[], max_tokens=20)
+                print(f"\n{args.test}: works: {r.text[:120]}")
+            except RuntimeError as exc:
+                print(f"\n{args.test}: {exc}")
+        elif args.test:
             if args.test not in co.s.engines:
                 raise OrgError(f"No engine '{args.test}'.")
             try:

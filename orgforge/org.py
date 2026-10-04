@@ -200,6 +200,10 @@ class Org:
             raise OrgError("Give a model, e.g. claude-sonnet-5-5 or cli:claude-code.")
         if model.startswith("cli:") and model[4:].partition("/")[0] not in self.s.engines:
             raise OrgError(f"No engine '{model[4:].partition('/')[0]}'. Known: {', '.join(sorted(self.s.engines))}.")
+        prefix, sep, rest = model.partition(":")
+        if sep and prefix != "cli" and (prefix not in self.s.endpoints or not rest):
+            raise OrgError(f"Unknown model source '{prefix}'. Use one of: {', '.join(sorted(self.s.endpoints))}, cli:<engine>,"
+                           " or an Anthropic model id.")
         self.db.run("UPDATE agents SET model=? WHERE id=?", model, agent["id"])
         self.db.log("org", f"{agent['name']} now works on {model}.", actor=by)
         return self.agent(agent["id"])

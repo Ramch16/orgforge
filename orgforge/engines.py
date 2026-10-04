@@ -18,6 +18,27 @@ import tempfile
 
 # Verified against Claude Code 2.1 (`claude --help`): -p reads the prompt from stdin.
 BUILTIN_ENGINES: dict[str, dict] = {
+    # Documented, not yet run against OrgForge: each one's non-interactive flags are from its official docs (Oct 2026).
+    # Their permissions are coarser than Claude Code's: "read" roles get the CLI's read-only or ask-first mode,
+    # builders get its edit mode. The role and rules go at the top of the prompt (no system-prompt flag).
+    "codex": {"command": ["codex", "exec", "--ephemeral", "--skip-git-repo-check", "{prompt}"], "model_args": ["-m", "{model}"],
+              "level_args": {"read": ["--sandbox", "read-only"], "write": ["--full-auto"]},
+              "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False},
+    "gemini": {"command": ["gemini", "-p", "{prompt}"], "model_args": ["-m", "{model}"],
+               "level_args": {"read": [], "write": ["--yolo"]},
+               "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False},
+    "copilot": {"command": ["copilot", "-p", "{prompt}"], "model_args": ["--model", "{model}"],
+                "level_args": {"read": [], "write": ["--allow-all-tools"]},
+                "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False},
+    "cursor": {"command": ["cursor-agent", "-p", "{prompt}", "--output-format", "text"], "model_args": ["--model", "{model}"],
+               "level_args": {"read": [], "write": ["--force"]},
+               "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False},
+    "opencode": {"command": ["opencode", "run", "{prompt}"], "model_args": ["--model", "{model}"],
+                 "level_args": {"read": [], "write": ["--dangerously-skip-permissions"]},
+                 "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False},
+    "qwen": {"command": ["qwen", "-p", "{prompt}"], "model_args": ["-m", "{model}"],
+             "level_args": {"read": [], "write": ["--yolo"]},
+             "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False},
     "claude-code": {
         "command": ["claude", "-p", "--output-format", "json", "--no-session-persistence",
                     "--permission-mode", "acceptEdits", "--append-system-prompt", "{system}"],
@@ -28,6 +49,7 @@ BUILTIN_ENGINES: dict[str, dict] = {
         "prompt": "stdin",
         "output": "claude-json",
         "subscription": True,       # drop ANTHROPIC_API_KEY so the CLI bills its own login, not the API key
+        "verified": True,           # run against OrgForge's tests and a real Claude Code 2.1 install
     },
 }
 
@@ -100,8 +122,12 @@ def actions_to_calls(data: dict) -> list[tuple[str, dict]]:
 def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: str, write: bool, run: bool,
             timeout: int) -> dict:
     """Run one CLI turn. Reading is always allowed; editing files and running commands only when granted."""
+    if engine.get("system") == "prompt":    # no system-prompt flag: the role and rules lead the prompt
+        prompt = f"{system}\n\n---\n\n{prompt}"
     fill = {"system": system, "prompt": prompt, "model": model}
     argv = [part.format(**fill) for part in engine["command"]]
+    if engine.get("level_args"):
+        argv += list(engine["level_args"].get("write" if write else "read", []))
     if model and engine.get("model_args"):
         argv += [part.format(**fill) for part in engine["model_args"]]
     tools = engine.get("tools") or {}

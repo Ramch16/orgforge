@@ -277,3 +277,105 @@ def make_provider(name: str):
     if name == "anthropic":
         return AnthropicProvider()
     raise ValueError(f"Unknown llm.provider '{name}'. Use 'anthropic' or 'mock'.")
+
+
+# ---- any OpenAI-compatible endpoint: local models (Ollama, LM Studio) and other providers' keys ----------
+ENDPOINTS: dict[str, dict] = {
+    "ollama": {"base_url": "http://localhost:11434/v1", "free": True},
+    "lmstudio": {"base_url": "http://localhost:1234/v1", "free": True},
+    "openai": {"base_url": "https://api.openai.com/v1", "key_env": "OPENAI_API_KEY"},
+    "openrouter": {"base_url": "https://openrouter.ai/api/v1", "key_env": "OPENROUTER_API_KEY"},
+    "groq": {"base_url": "https://api.groq.com/openai/v1", "key_env": "GROQ_API_KEY"},
+}
+
+
+class OpenAICompatProvider:
+    """Chat completions with tool calling, the interface Ollama, LM Studio, OpenAI and many others share."""
+
+    def __init__(self, name: str, base_url: str, api_key: str | None = None, timeout: int = 900) -> None:
+        self.name, self.base_url, self.api_key, self.timeout = name, base_url.rstrip("/"), api_key, timeout
+
+    @staticmethod
+    def to_openai(system: str, messages: list[dict]) -> list[dict]:
+        out = [{"role": "system", "content": system}] if system else []
+        for m in messages:
+            content = m["content"]
+            if m["role"] == "assistant":
+                if isinstance(content, str):
+                    out.append({"role": "assistant", "content": content})
+                    continue
+                text = "".join(b.get("text", "") for b in content if b.get("type") == "text")
+                calls = [{"id": b["id"], "type": "function",
+                          "function": {"name": b["name"], "arguments": json.dumps(b.get("input") or {})}}
+                         for b in content if b.get("type") == "tool_use"]
+                out.append({"role": "assistant", "content": text or None, **({"tool_calls": calls} if calls else {})})
+            elif isinstance(content, str):
+                out.append({"role": "user", "content": content})
+            else:
+                for b in content:
+                    if b.get("type") == "tool_result":
+                        out.append({"role": "tool", "tool_call_id": b["tool_use_id"], "content": str(b.get("content", ""))})
+                texts = [b["text"] for b in content if b.get("type") == "text"]
+                if texts:
+                    out.append({"role": "user", "content": "\n\n".join(texts)})
+        return out
+
+    def complete(self, *, model, system, messages, tools, max_tokens, meta=None) -> LLMResponse:
+        import urllib.error
+        import urllib.request
+        body = {"model": model, "messages": self.to_openai(system, messages), "max_tokens": max_tokens}
+        if tools:
+            body["tools"] = [{"type": "function", "function": {"name": t["name"], "description": t.get("description", ""),
+                                                               "parameters": t["input_schema"]}} for t in tools]
+        req = urllib.request.Request(f"{self.base_url}/chat/completions", data=json.dumps(body).encode(), method="POST",
+                                     headers={"Content-Type": "application/json",
+                                              **({"Authorization": f"Bearer {self.api_key}"} if self.api_key else {})})
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                data = json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            raise RuntimeError(f"{self.name} refused the request ({exc.code}): {exc.read().decode(errors='replace')[:300]}")
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Could not reach {self.name} at {self.base_url}: is it running? ({exc.reason})")
+        choice = (data.get("choices") or [{}])[0]
+        msg = choice.get("message") or {}
+        text = msg.get("content") or ""
+        calls, content = [], ([{"type": "text", "text": text}] if text else [])
+        for c in msg.get("tool_calls") or []:
+            fn = c.get("function") or {}
+            try:
+                args = json.loads(fn.get("arguments") or "{}")
+            except ValueError:
+                args = {"_unparsed": fn.get("arguments")}
+            cid = c.get("id") or f"call_{len(calls)}"
+            calls.append(ToolCall(cid, fn.get("name", ""), args if isinstance(args, dict) else {"value": args}))
+            content.append({"type": "tool_use", "id": cid, "name": fn.get("name", ""), "input": args})
+        finish = choice.get("finish_reason")
+        usage = data.get("usage") or {}
+        return LLMResponse(content=content, text=text.strip(), tool_calls=calls,
+                           stop_reason="max_tokens" if finish == "length" else "tool_use" if calls else "end_turn",
+                           input_tokens=int(usage.get("prompt_tokens") or 0),
+                           output_tokens=int(usage.get("completion_tokens") or 0))
+
+
+class RoutingProvider:
+    """Sends each agent's calls where its model lives: "ollama:qwen2.5-coder" to Ollama, "openai:..." to OpenAI,
+    and plain model ids to the company's provider (Anthropic, or the offline mock)."""
+
+    def __init__(self, default, endpoints: dict[str, dict]) -> None:
+        self.default, self.endpoints, self._made = default, endpoints, {}
+
+    def endpoint(self, prefix: str) -> OpenAICompatProvider:
+        if prefix not in self._made:
+            e = self.endpoints[prefix]
+            key = os.environ.get(e["key_env"]) if e.get("key_env") else None
+            if e.get("key_env") and not key:
+                raise RuntimeError(f"{e['key_env']} is not set. Export it to use {prefix} models.")
+            self._made[prefix] = OpenAICompatProvider(prefix, e["base_url"], key)
+        return self._made[prefix]
+
+    def complete(self, *, model, **kw) -> LLMResponse:
+        prefix, sep, name = str(model).partition(":")
+        if sep and prefix in self.endpoints:
+            return self.endpoint(prefix).complete(model=name, **kw)
+        return self.default.complete(model=model, **kw)

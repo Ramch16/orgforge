@@ -9,7 +9,7 @@ from .feedback import Feedback
 from .reports import Reports
 from .config import ensure_org_file, load_settings, resolve_root
 from .db import DB
-from .llm import make_provider
+from .llm import RoutingProvider, make_provider
 from .memory import Memory
 from .runs import Runs
 from .naming import make_namer
@@ -42,7 +42,8 @@ class Company:
         self.db = DB(self.s.db_path)
         self.org = Org(self.db, self.s)
         self.perf = Performance(self.db, self.s, self.org)
-        self.runtime = AgentRuntime(self.db, self.s, self.org, provider or _LazyProvider(self.s.provider))
+        self.runtime = AgentRuntime(self.db, self.s, self.org,
+                                    RoutingProvider(provider or _LazyProvider(self.s.provider), self.s.endpoints))
         self.pipeline = Pipeline(self.db, self.s, self.org, self.perf, self.runtime)
         self.tickets = Tickets(self.db, self.pipeline)
         self.runtime.tickets = self.tickets

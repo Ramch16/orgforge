@@ -45,6 +45,7 @@ class Settings:
     max_parallel: int = 3
     review_mode: str = "standard"
     engines: dict = field(default_factory=dict)
+    endpoints: dict = field(default_factory=dict)
     cli_timeout: int = 1800
     hire_when_waiting: int = 3
     max_per_role: int = 4
@@ -112,6 +113,8 @@ def load_settings(root: str | os.PathLike | None = None) -> Settings:
     from .engines import BUILTIN_ENGINES
     s.engines = {**BUILTIN_ENGINES, **(raw.get("engines") or {})}
     s.cli_timeout = int(llm.get("cli_timeout", s.cli_timeout))
+    from .llm import ENDPOINTS
+    s.endpoints = {**ENDPOINTS, **(raw.get("endpoints") or {})}
     budgets = raw.get("budgets", {})
     s.default_budget = max(0.0, float(budgets.get("default_project_usd", s.default_budget)))
     s.budget_warn_at = min(1.0, max(0.1, float(budgets.get("warn_at", s.budget_warn_at))))

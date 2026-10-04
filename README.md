@@ -226,12 +226,55 @@ orgforge engines --test claude-code              # check it works
 orgforge org set-model --all cli:claude-code     # move the whole team (or name one agent)
 ```
 
-Other CLIs (Codex, Gemini CLI and others) can be added under `engines:` in `org.yaml`; see the
-examples there and check the flags against each CLI's `--help`.
+Seven CLI engines are built in: `claude-code` (tested), and `codex`, `gemini`, `copilot`, `cursor`,
+`opencode` and `qwen`, set up from each CLI's documentation but not yet run against OrgForge. Their
+permissions are coarser than Claude Code's: read-only roles get the CLI's read-only or ask-first
+mode, builders its edit mode. `orgforge engines` shows which are installed. Add or override any
+engine under `engines:` in `org.yaml`.
+
+**Local models and other keys.** Any OpenAI-compatible endpoint works, per agent:
+`ollama:<model>` and `lmstudio:<model>` (local, $0), `openai:<model>`, `openrouter:<model>` and
+`groq:<model>` (with `OPENAI_API_KEY`, `OPENROUTER_API_KEY` or `GROQ_API_KEY`). Add others under
+`endpoints:` in `org.yaml` (`base_url`, `key_env`, `free`). Local models must support tool calling.
+
+```bash
+orgforge engines --test ollama:qwen2.5-coder
+orgforge org set-model Hari ollama:qwen2.5-coder
+```
 
 **Review depth** also sets cost: `pipeline.review_mode` is `standard` by default (a code reviewer
 and QA check each ticket), `thorough` (every reviewer role, including security, per ticket) or
 `light` (one reviewer). Release QA and the audits always run.
+
+## Quick tasks and existing code
+
+Not everything is a new product. A **task** is one change, straight to build: an engineer does
+it, it is reviewed (by `review_mode`), your checks run, and the CTO reviews the changes. It can
+work on an **existing repository** (a folder, a GitHub `owner/name`, or any git URL) or start
+from a **GitHub issue** (needs the `gh` CLI). OrgForge clones the repository, works on an
+`orgforge/task-N` branch and leaves your files and history alone; agents never push. Take the
+result as a patch (`Download patch`, then `git am`) or pull the branch from the task's workspace.
+
+```bash
+orgforge task "Fix the crash on empty names" --repo ~/code/app --check "pytest -q" --as cto
+orgforge task --issue Ramch16/orgforge#12 --check "python -m pytest -q"
+orgforge diff P3                                  # everything task 3 changed
+```
+
+## Watching and steering agents
+
+Every agent run is recorded as it happens: what the agent was told, what it says, every tool call
+and its result, and how it ended. Click a desk in the Office (or **Watch** on the Team page or a
+ticket) to follow a run live, and type a message to **steer** it: the agent reads it at its next
+step (agents on a CLI engine, which runs in one go, read it at the start of their next run).
+**Code changes** on a ticket, the history entries on the review page, and **Changes** on a task
+open colour-coded diffs.
+
+```bash
+orgforge watch Hari                               # Hari's latest run, step by step
+orgforge steer Hari "Use python3, not python, on this Mac" --as cto
+orgforge diff T-12
+```
 
 ## The office, memory and the app
 
@@ -492,6 +535,8 @@ Each role gets only the tools listed for it.
 | `orgforge/naming.py`      | Teammates name new hires                           |
 | `orgforge/chat.py`        | CEO and CTO chat with agents                       |
 | `orgforge/engines.py`     | Coding CLI engines (Claude Code and others)        |
+| `orgforge/runs.py`        | Live run log and steering                          |
+| `orgforge/sources.py`     | Existing repositories and GitHub issues            |
 | `orgforge/memory.py`      | Shared long-term memory                            |
 | `orgforge/telemetry.py`   | Office presence and live telemetry                 |
 | `orgforge/costs.py`       | Cost ledger, prices and budgets                    |

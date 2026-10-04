@@ -19,6 +19,9 @@ DEFAULT_PRICES = {
 
 def price(settings: Settings, model: str) -> tuple[float, float] | None:
     custom = (settings.prices or {}).get(model)
+    prefix, sep, _ = str(model).partition(":")
+    if not custom and sep and (settings.endpoints or {}).get(prefix, {}).get("free"):
+        return 0.0, 0.0                         # local models run on your own machine
     if custom:
         return float(custom.get("input", 0)), float(custom.get("output", 0))
     return DEFAULT_PRICES.get(model)
