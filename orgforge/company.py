@@ -46,6 +46,7 @@ class Company:
         self.runtime.tickets = self.tickets
         self.org.namer = make_namer(self.db, self.s, self.runtime.provider)
         self.chat = Chat(self)
+        self.tickets.on_human_note = self.chat.ticket_note
         self.reports = Reports(self)
         self.pipeline.reporter = self.reports.write
         self.feedback = Feedback(self)

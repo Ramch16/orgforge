@@ -120,3 +120,28 @@ def test_chat_cli(co, capsys):
     assert main([*home, "chat", "Sravani", "--as", "ceo"]) == 0
     out = capsys.readouterr().out
     assert "Sravani: Hi Niki, Sravani here." in out and "UX Designer (Design)" in out and "How should errors look?" in out
+
+
+def test_status_questions_get_answered_from_the_records(tmp_path):
+    provider = Recorder()
+    co = Company(tmp_path, provider=provider, create=True)
+    p = co.pipeline.create_project("APTV clone", "Clone an iOS app.")
+    co.pipeline.advance(p["id"])
+    reply = co.chat.send("Ram", "cto", "any update on APTV clone? is it ready?", wait=True)["messages"][-1]["body"]
+    assert "APTV clone: Requirements with CEO" in reply             # no project picked: every project's status
+    assert "Requirements with CEO" in [m["content"] for m in provider.calls[-1]["messages"] if isinstance(m["content"], str)][-1]
+    reply = co.chat.send("Ram", "cto", "and now?", project_id=p["id"], wait=True)["messages"][-1]["body"]
+    asked = [m["content"] for m in provider.calls[-1]["messages"] if isinstance(m["content"], str)][-1]
+    assert "Stage: Requirements with CEO" in reply and "Waiting on a decision" in asked
+
+
+def test_ticket_owner_replies_to_the_ceo_and_cto(co):
+    p = co.pipeline.create_project("APTV clone", "Clone an iOS app.")
+    t = co.tickets.create(p["id"], "Check for status", "Is it ready?", "Niki")
+    first = co.tickets.get(t["id"])["history"][-1]
+    assert first["author"] == "Hari" and first["kind"] == "comment"         # owner of the backend ticket
+    assert "Backlog" in first["body"] and "APTV clone" in first["body"]
+    co.tickets.comment(t["ticket"], "Lucky", "any update?")
+    assert co.tickets.get(t["id"])["history"][-1]["author"] == "Hari"
+    co.tickets.comment(t["ticket"], "Hari", "Working on it")                # agents' own comments get no reply
+    assert co.tickets.get(t["id"])["history"][-1]["body"] == "Working on it"

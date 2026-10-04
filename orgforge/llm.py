@@ -118,6 +118,8 @@ class MockProvider:
                         "6. Support: help guide\n" + ("7. Marketing: pricing and launch\n" if meta.get("selling") else "")))],
                     [self._call("submit_department_plan", summary="One small release; every department has its part.",
                                 tickets=tickets)]]
+        if purpose in ("ticket_reply", "status_report"):   # look at the tickets, then answer from the facts
+            return [[self._call("list_tickets")]]
         if purpose == "triage":                 # Support triages customer feedback
             text = str(meta.get("feedback", "")).lower()
             if re.search(r"crash|error|bug|broken|fails|wrong", text):
@@ -240,7 +242,13 @@ class MockProvider:
             text = (f"Filed {ticket.group(1)} for Engineering." if ticket else
                     "This is a question, not a bug. Suggested reply: thanks for asking; the README explains how "
                     "to get started, and we are happy to help further.")
-        if meta.get("purpose") == "chat":
+        if meta.get("purpose") in ("chat", "ticket_reply") and meta.get("facts"):
+            facts = [l for l in str(meta["facts"]).splitlines() if l.strip()][:8]
+            text = (f"Hi {meta.get('human', 'there')}, {meta.get('agent', 'I')} here. Here is where things stand:\n"
+                    + "\n".join(facts))
+            if meta.get("ticket_status") == "backlog":
+                text += "\n\nThis ticket is in the Backlog, so nobody will work on it until you move it to To do."
+        if meta.get("purpose") == "chat" and re.search(r"Filed (T-\d+)", json.dumps(messages)):
             filed = any("Filed T-" in str(b.get("content", "")) for m in messages if m["role"] == "user"
                         and isinstance(m["content"], list) for b in m["content"])
             ticket = re.search(r"Filed (T-\d+)", json.dumps(messages))

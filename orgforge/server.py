@@ -109,6 +109,7 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
         threading.Thread(target=work, daemon=True).start()
 
     co.chat.on_work = co.feedback.on_work = run_in_background
+    co.chat.background = True               # replies on tickets arrive without holding up the page
 
     def guard(fn):
         try:

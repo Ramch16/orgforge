@@ -1,3 +1,4 @@
+import time
 import sqlite3
 
 import pytest
@@ -112,9 +113,16 @@ def test_ticket_api(co):
     assert client.post(f"/api/tickets/{t['id']}", json={"status": "in_progress"}, headers=cto).status_code == 400
     assert client.post(f"/api/tickets/{t['id']}", json={"priority": "high"}, headers=cto).json()["priority"] == "high"
     detail = client.get(f"/api/tickets/{t['id']}", headers=cto).json()
-    assert [h["kind"] for h in detail["history"]] == ["change", "comment", "change"]
+    mine = [h["kind"] for h in detail["history"] if h["author"] == co.s.cto_name]
+    assert mine == ["change", "comment", "change"]
+    for _ in range(100):                                         # the owner replies in the background
+        replies = [h for h in co.tickets.get(t["id"])["history"] if h["author"] != co.s.cto_name]
+        if len(replies) >= 2:
+            break
+        time.sleep(0.05)
+    assert len(replies) == 2 and all("where things stand" in h["body"] for h in replies)
     state = client.get("/api/state", headers=cto).json()
-    assert next(x for x in state["tickets"] if x["id"] == t["id"])["comments"] == 1 and "in_review" in state["ticket_meta"]["statuses"]
+    assert next(x for x in state["tickets"] if x["id"] == t["id"])["comments"] == 3 and "in_review" in state["ticket_meta"]["statuses"]
     assert client.get("/api/tickets/T-999", headers=cto).status_code == 400
 
 
@@ -125,7 +133,8 @@ def test_ticket_cli(co, capsys):
     assert main([*home, "ticket", "comment", "T-1", "Make it blue", "--as", "cto"]) == 0
     assert main([*home, "ticket", "list"]) == 0
     out = capsys.readouterr().out
-    assert "Filed T-1." in out and "Make it blue" in out and "high" in out and "(1 comments)" in out
+    assert "Filed T-1." in out and "Make it blue" in out and "high" in out and "(3 comments)" in out
+    assert "nobody will work on it until you move it to To do" in out      # the owner replied, twice
     assert main([*home, "ticket", "update", "T-1", "--status", "cancelled"]) == 0
     assert main([*home, "ticket", "update", "T-1", "--priority", "low"]) == 1
 

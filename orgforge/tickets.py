@@ -91,6 +91,10 @@ def note(db: DB, task_id: int, author: str, body: str, kind: str = "change") -> 
 class Tickets:
     def __init__(self, db: DB, pipeline) -> None:
         self.db, self.pipeline = db, pipeline
+        self.on_human_note = None    # (ticket id, who, text, filed): the owner replies (set by Company)
+
+    def _human(self, who: str) -> bool:
+        return who in (self.pipeline.s.ceo_name, self.pipeline.s.cto_name)
 
     # ---- reading ---------------------------------------------------------
     _SELECT = ("SELECT t.*, a.name AS assignee, p.name AS project, d.name AS department, "
@@ -156,6 +160,8 @@ class Tickets:
         self.db.log("ticket", f"{by} filed {ticket_key(tid)} for {self.where(role)}: {title}", project_id, actor=by)
         if status == "todo" and origin == "human":
             self._reopen(project, by)
+        if origin == "human" and self.on_human_note and self._human(by):
+            self.on_human_note(tid, by, description, True)
         return self.get(tid)
 
     def comment(self, ref: int | str, by: str, body: str) -> dict:
@@ -164,6 +170,8 @@ class Tickets:
             raise TicketError("Write a comment first.")
         note(self.db, t["id"], by, body.strip(), kind="comment")
         self.db.log("ticket", f"{by} commented on {t['ticket']}.", t["project_id"], actor=by)
+        if self.on_human_note and self._human(by):
+            self.on_human_note(t["id"], by, body.strip(), False)
         return self.get(t["id"])
 
     def transfer(self, ref: int | str, by: str, role: str, reason: str = "", *, limit: int | None = None) -> dict:
