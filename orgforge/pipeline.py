@@ -491,6 +491,8 @@ class Pipeline:
 
     def _build(self, p: dict) -> None:
         ws, pid = self.workspace(p), p["id"]
+        if ws.ensure_ignores():                 # projects from before 0.10.1 committed caches; stop that
+            ws.commit("Ignore caches and build output")
         if self.db.one("SELECT 1 FROM approvals WHERE project_id=? AND kind='escalation' AND status='pending'", pid):
             self._stage(pid, "escalation")      # another failed ticket is still waiting for the CTO
             return

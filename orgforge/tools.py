@@ -30,6 +30,10 @@ DENIED = [
 ]
 
 
+GITIGNORE = ["__pycache__/", "*.py[cod]", ".pytest_cache/", ".mypy_cache/", ".ruff_cache/", ".coverage", "htmlcov/",
+             ".venv/", "venv/", "node_modules/", "dist/", "*.egg-info/", ".next/", ".cache/", "*.log", ".DS_Store"]
+
+
 class ToolError(RuntimeError):
     pass
 
@@ -236,6 +240,22 @@ class Workspace:
     def init_repo(self) -> None:
         if not (self.root / ".git").exists():
             self.git("init", "-q", "-b", "main")
+        self.ensure_ignores()
+
+    def ensure_ignores(self) -> bool:
+        """Keep caches and build output out of the product's history: committed, they differ between parallel
+        tickets and make merges conflict. Returns True if the .gitignore changed."""
+        target = self.root / ".gitignore"
+        have = target.read_text().splitlines() if target.exists() else []
+        missing = [p for p in GITIGNORE if p not in have]
+        if not missing:
+            return False
+        target.write_text("\n".join(have + (["# Added by OrgForge"] if have else []) + missing) + "\n")
+        with _GIT_LOCK:
+            tracked = self.git("ls-files", "-ci", "--exclude-standard").splitlines()
+            if tracked:
+                self.git("rm", "-r", "-q", "--cached", "--", *tracked)
+        return True
 
     def changed_files(self) -> str:
         return self.git("status", "--porcelain") or "(no uncommitted changes)"

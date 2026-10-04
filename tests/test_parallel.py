@@ -149,3 +149,16 @@ def test_no_hiring_request_past_the_role_cap(tmp_path):
     add_tickets(co, p["id"], 20)                                # two backend engineers already
     co.pipeline._check_staffing(p["id"])
     assert not [a for a in co.pipeline.inbox() if a["kind"] == "hire"]
+
+
+def test_caches_and_build_output_are_never_committed(tmp_path, monkeypatch):
+    monkeypatch.delenv("PYTHONDONTWRITEBYTECODE", raising=False)      # most machines write __pycache__
+    co = company(tmp_path, Timed())
+    p = plan_approved(co)
+    add_tickets(co, p["id"], 2, role="frontend_engineer")
+    add_tickets(co, p["id"], 2, role="backend_engineer")
+    assert co.pipeline.advance(p["id"])["stage"] == "release_approval"
+    files = subprocess.run(["git", "ls-files"], cwd=p["workspace"], capture_output=True, text=True).stdout
+    assert ".gitignore" in files and "__pycache__" not in files and ".pyc" not in files
+    starts = co.db.one("SELECT COUNT(*) AS n FROM ticket_comments WHERE body LIKE 'Started work%'")["n"]
+    assert starts == len([t for t in co.tickets.search(p["id"]) if t["origin"] != "stage"])   # nothing redone
