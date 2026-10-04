@@ -207,6 +207,43 @@ orgforge idea revisit 3                          # bring a parked idea back
 Choose "Start building" (or `orgforge new`) to skip the assessment when the
 decision is already made.
 
+## What powers the agents: API or your subscription
+
+Each agent works through one of two engines, set by its model:
+
+- **The Anthropic API** (`claude-haiku-4-5`, `claude-sonnet-5-5`, `claude-opus-5-5`): pay per token,
+  needs `ANTHROPIC_API_KEY`, and runs agents' commands in OrgForge's Docker sandbox.
+- **A coding CLI on its own login** (`cli:claude-code`, or `cli:claude-code/haiku` to pick its model):
+  runs on your Claude subscription instead of the API. OrgForge removes `ANTHROPIC_API_KEY` from
+  the CLI's environment so it bills your subscription, and records usage at $0. Claude Code does
+  its own reading, editing and commands in the project workspace; read-only roles get read-only
+  tools, and reviewers may run tests but not edit. It runs on your machine under Claude Code's
+  permission rules, not in the Docker sandbox, and your plan's usage limits apply.
+
+```bash
+claude                                           # once: sign in to Claude Code, then type /login
+orgforge engines --test claude-code              # check it works
+orgforge org set-model --all cli:claude-code     # move the whole team (or name one agent)
+```
+
+Other CLIs (Codex, Gemini CLI and others) can be added under `engines:` in `org.yaml`; see the
+examples there and check the flags against each CLI's `--help`.
+
+**Review depth** also sets cost: `pipeline.review_mode` is `standard` by default (a code reviewer
+and QA check each ticket), `thorough` (every reviewer role, including security, per ticket) or
+`light` (one reviewer). Release QA and the audits always run.
+
+## The office, memory and the app
+
+- **Office** shows the company as a floor of departments and desks: who is working (and on
+  which ticket), active in the last few minutes, or idle, with live telemetry: agents working
+  now, model calls and tokens in the last hour, cost today and a 12-hour activity chart.
+- **Shared memory.** Agents `remember` lasting facts and decisions ("the API uses JWT in
+  cookies", "Niki wants British spelling"). The most relevant ones, from the project and
+  company-wide, are given to every later agent. Each project page lists them.
+- **Install it as an app.** In Chrome or Edge, use the install icon in the address bar (Safari:
+  File → Add to Dock). Or run `orgforge app` to start the dashboard in its own window.
+
 ## Running the company day to day
 
 **Costs and budgets.** Every model call is recorded with its estimated cost
@@ -454,6 +491,9 @@ Each role gets only the tools listed for it.
 | `orgforge/org.py`         | Departments, roles, hire, fire, replace, rehire    |
 | `orgforge/naming.py`      | Teammates name new hires                           |
 | `orgforge/chat.py`        | CEO and CTO chat with agents                       |
+| `orgforge/engines.py`     | Coding CLI engines (Claude Code and others)        |
+| `orgforge/memory.py`      | Shared long-term memory                            |
+| `orgforge/telemetry.py`   | Office presence and live telemetry                 |
 | `orgforge/costs.py`       | Cost ledger, prices and budgets                    |
 | `orgforge/reports.py`     | Status reports                                     |
 | `orgforge/review.py`      | Product review page                                |

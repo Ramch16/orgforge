@@ -40,7 +40,7 @@ def test_brief_to_shipped_product(co):
     assert co.org.agent("Ram")["score"] > 90 and co.org.agent("Sony")["score"] > 90   # scored by the humans
     assert co.org.agent("Sravani")["score"] > 90                                            # designer shares the CEO gate
     checkers = {r["reviewer"] for r in co.db.all("SELECT reviewer FROM reviews WHERE task_id=?", tasks[0]["id"])}
-    assert checkers == {"Pavan", "Mani", "Badri"}        # code review, security review and QA on every task
+    assert checkers == {"Pavan", "Badri"}                # standard review: code review and QA on every task
 
 
 def test_rejection_needs_feedback_and_sends_work_back(co):
@@ -62,7 +62,7 @@ def test_failing_work_is_reworked_escalated_and_the_agent_replaced(make_company)
     assert project["stage"] == "escalation"
     task = next(t for t in co.pipeline.overview()[0]["tasks"] if t["key"] == "core")
     assert task["status"] == "failed" and task["attempts"] == 3      # first try + two reworks
-    assert "Security Engineer" in task["feedback"] and "Code Reviewer" in task["feedback"]
+    assert "QA Engineer" in task["feedback"] and "Code Reviewer" in task["feedback"]
 
     owner = co.org.agent(task["assignee_id"])
     assert owner["score"] < 40                            # below the floor: HR asks the CTO to replace them
@@ -104,3 +104,15 @@ def test_unresolved_audit_findings_reach_the_cto(make_company):
     decide_next(co, "ceo")
     decide_next(co, "cto")
     assert "UNRESOLVED AUDIT FINDINGS" in co.pipeline.inbox("cto")[0]["summary"]
+
+
+@pytest.mark.parametrize("mode, expected", [("thorough", {"Pavan", "Mani", "Badri"}), ("standard", {"Pavan", "Badri"}),
+                                            ("light", {"Pavan"})])
+def test_review_mode_sets_who_checks_each_ticket(co, mode, expected):
+    co.s.review_mode = mode
+    p = co.pipeline.create_project("Greeter", "A tiny library.")
+    co.pipeline.advance(p["id"])
+    decide_next(co, "ceo")
+    decide_next(co, "cto")
+    core = next(t for t in co.pipeline.overview()[0]["tasks"] if t["key"] == "core")
+    assert {r["reviewer"] for r in co.db.all("SELECT reviewer FROM reviews WHERE task_id=?", core["id"])} == expected

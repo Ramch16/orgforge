@@ -758,6 +758,17 @@ class Pipeline:
             self._approval(pid, "hire", boss, f"Hire another {role['title']}?", summary,
                            {"role": role["id"], "waiting": row["n"], "staff": len(staff)})
 
+    def _checkers(self) -> list[dict]:
+        """Roles that check each ticket, by review_mode. Fewer checks cost less; release QA and audits always run."""
+        staffed = self.org.staffed_roles("reviewer", "qa")
+        if self.s.review_mode == "thorough":
+            return staffed
+        reviewers = sorted((r for r in staffed if r["kind"] == "reviewer"), key=lambda r: r["id"] != "code_reviewer")
+        qa = [r for r in staffed if r["kind"] == "qa"]
+        if self.s.review_mode == "light":
+            return (reviewers or qa)[:1]
+        return reviewers[:1] + qa[:1]
+
     def _assignee(self, task: dict, pid: int) -> dict | None:
         """Rework stays with the same seat (or its new holder); new work goes to whoever is free."""
         if task["assignee_id"]:
@@ -816,7 +827,7 @@ class Pipeline:
             findings, approved = [], res.completed
             if not res.completed:
                 findings.append("Builder did not finish within its turn budget.")
-            for check_role in self.org.staffed_roles("reviewer", "qa"):
+            for check_role in self._checkers():
                 checker = self.org.pick(role=check_role["id"], exclude=agent["id"])
                 if not checker:
                     continue

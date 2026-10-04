@@ -214,7 +214,7 @@ def test_build_ticket_records_review_handoffs_between_departments(co):
     history = co.tickets.get(core["id"])["history"]
     handoffs = [h["body"] for h in history if h["kind"] == "handoff"]
     assert any("Quality and Testing (Code Reviewer)" in h for h in handoffs)
-    assert any("Security (Security Engineer)" in h for h in handoffs)
+    assert any("Quality and Testing (QA Engineer)" in h for h in handoffs)
     assert any(h["kind"] == "comment" and h["body"].startswith("Approved (") for h in history)
     assert any(h["body"] == "Starting: implementing core with unit tests." for h in history)   # agent's own log
 

@@ -18,6 +18,7 @@ from .company import Company
 from .costs import summary as cost_summary
 from .feedback import FeedbackError
 from .reports import NEXT_STEP
+from .telemetry import presence, telemetry
 from .review import read_file as review_file, review as review_product
 from .tools import ToolError
 from .org import OrgError
@@ -130,6 +131,34 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
     def index() -> str:
         return (STATIC / "index.html").read_text()
 
+    # Installable app: manifest, icons and a pass-through service worker.
+    @app.get("/manifest.webmanifest")
+    def manifest():
+        from fastapi.responses import JSONResponse
+        return JSONResponse({
+            "name": f"{co.s.company} · OrgForge", "short_name": co.s.company[:12] or "OrgForge",
+            "description": "Run your AI-staffed software company.", "start_url": "/#/home", "scope": "/",
+            "display": "standalone", "background_color": "#edf0f3", "theme_color": "#2348c9",
+            "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"},
+                      {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
+                      {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"}]},
+            media_type="application/manifest+json")
+
+    @app.get("/icon.svg")
+    def icon_svg():
+        return FileResponse(STATIC / "icon.svg", media_type="image/svg+xml")
+
+    @app.get("/icon-{size}.png")
+    def icon_png(size: int):
+        from fastapi.responses import Response
+        if size not in (180, 192, 512):
+            raise HTTPException(404, "No such icon.")
+        return Response(app_icon_png(size), media_type="image/png")
+
+    @app.get("/sw.js")
+    def service_worker():
+        return FileResponse(STATIC / "sw.js", media_type="text/javascript")
+
     @app.get("/api/state")
     def state(role: str = Depends(auth)) -> dict:
         return {
@@ -147,6 +176,9 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
                             "roles": co.tickets.work_roles()},
             "events": co.events(60)[::-1],
             "costs": cost_summary(co.db),
+            "presence": presence(co.db),
+            "memories": co.memory.list(limit=60),
+            "telemetry": telemetry(co.db),
             "chats": co.db.all("SELECT agent_id, MAX(id) AS last_id, SUM(status='pending') AS pending FROM messages "
                                "WHERE human=? GROUP BY agent_id", role),
         }
@@ -284,7 +316,39 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
     return app
 
 
-def serve(co: Company, host: str, port: int) -> None:
+def app_icon_png(size: int) -> bytes:
+    """The app icon as a PNG, drawn without image libraries: a blue tile with four rounded squares."""
+    import struct
+    import zlib
+    blue, white = (35, 72, 201), (255, 255, 255)
+
+    def inside_round(x, y, x0, y0, w, r):
+        cx, cy = min(max(x, x0 + r), x0 + w - r), min(max(y, y0 + r), y0 + w - r)
+        return x0 <= x < x0 + w and y0 <= y < y0 + w and (x - cx) ** 2 + (y - cy) ** 2 <= r * r
+
+    k = size / 512
+    boxes = [(120, 120, False), (280, 120, False), (120, 280, False), (280, 280, True)]
+    rows = bytearray()
+    for y in range(size):
+        rows.append(0)
+        for x in range(size):
+            px = (0, 0, 0, 0)
+            if inside_round(x, y, 0, 0, size, 112 * k):
+                px = (*blue, 255)
+                for bx, by, solid in boxes:
+                    outer = inside_round(x, y, bx * k - 20 * k, by * k - 20 * k, 152 * k, 30 * k)
+                    inner = inside_round(x, y, bx * k + 20 * k, by * k + 20 * k, 72 * k, 8 * k)
+                    if outer and (solid or not inner):
+                        px = (*white, 255)
+            rows += bytes(px)
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(bytes(rows), 9)) + chunk(b"IEND", b""))
+
+
+def serve(co: Company, host: str, port: int, open_app: bool = False) -> None:
     import uvicorn
 
     tokens = {}
@@ -296,4 +360,29 @@ def serve(co: Company, host: str, port: int) -> None:
     if tokens["ceo"] == tokens["cto"]:
         raise SystemExit("The CEO and CTO tokens must differ.")
     print(f"{co.s.company} dashboard: http://{host}:{port}")
+    if open_app:
+        open_window(f"http://{'localhost' if host in ('127.0.0.1', '0.0.0.0') else host}:{port}/#/home")
     uvicorn.run(create_app(co, tokens), host=host, port=port, log_level="warning")
+
+
+def open_window(url: str) -> None:
+    """Open the dashboard in its own app window once the server is up (Chrome or Edge app mode, else the browser)."""
+    import shutil
+    import subprocess
+    import sys
+    import time
+    import webbrowser
+
+    def go() -> None:
+        time.sleep(1.5)
+        if sys.platform == "darwin":
+            for app in ("Google Chrome", "Microsoft Edge", "Brave Browser"):
+                if Path(f"/Applications/{app}.app").exists():
+                    subprocess.Popen(["open", "-na", app, "--args", f"--app={url}"])
+                    return
+        for exe in ("google-chrome", "chromium", "microsoft-edge"):
+            if shutil.which(exe):
+                subprocess.Popen([exe, f"--app={url}"])
+                return
+        webbrowser.open(url)
+    threading.Thread(target=go, daemon=True).start()

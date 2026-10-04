@@ -20,9 +20,24 @@ llm:
     - claude-opus-5-5
   max_turns: 40                  # tool-use turns per agent run
   max_tokens: 8000
+  cli_timeout: 1800              # seconds one agent run through a coding CLI may take
   # USD per million tokens. Built in: Haiku 4.5, Sonnet 5.5 and Opus 5.5 list prices (September 2026).
   # prices:
   #   my-model: { input: 2.00, output: 10.00 }
+
+# Coding CLIs agents can work through on their own logins (flat-fee subscriptions) instead of the API.
+# Give an agent the model "cli:<engine>" or "cli:<engine>/<model>", e.g. `orgforge org set-model --all cli:claude-code`.
+# claude-code is built in. Add others below; check each against your CLI's --help, since flags change.
+# {system} is the agent's role and rules, {prompt} its assignment, {model} the part after the slash.
+# engines:
+#   codex:
+#     command: [codex, exec, "{prompt}"]
+#     prompt: arg              # passed as an argument (claude-code reads it from stdin)
+#     output: text             # plain text reply; claude-code returns JSON with cost and usage
+#   gemini:
+#     command: [gemini, -p, "{prompt}"]
+#     prompt: arg
+#     output: text
 
 sandbox:
   mode: local                    # local | docker (recommended for real work)
@@ -34,6 +49,9 @@ pipeline:
   max_rework: 2                  # times a task is sent back before escalating to the CTO
   max_delegation_depth: 2        # how deep agents may delegate to other agents
   max_parallel: 3                # tickets worked at the same time per project, each on its own git branch
+  review_mode: standard          # who checks each ticket: thorough (every reviewer and QA role),
+                                 # standard (one code reviewer and QA), light (one reviewer).
+                                 # Release QA and the audits always run.
 
 budgets:
   default_project_usd: 25        # each new project's budget; 0 means no limit. Change per project any time.

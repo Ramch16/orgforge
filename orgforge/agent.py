@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 
 from .config import Settings
 from .costs import record_usage
+from .engines import ACTIONS, EngineError, actions_to_calls, parse_block, protocol, run_cli
+from .memory import MEMORY_TOOL_SPECS
 from .db import DB
 from .org import Org
 from .tickets import TICKET_RULES, TICKET_TOOL_SPECS, TicketError
@@ -32,8 +34,10 @@ class AgentRuntime:
     def __init__(self, db: DB, settings: Settings, org: Org, provider) -> None:
         self.db, self.s, self.org, self.provider = db, settings, org, provider
         self.tickets = None                 # set by Company; every agent on a project can use the tracker
+        self.memory = None                  # set by Company; shared long-term memory
 
-    def _system(self, agent: dict, role: dict, on_project: bool = False, chat_with: str | None = None) -> str:
+    def _system(self, agent: dict, role: dict, on_project: bool = False, chat_with: str | None = None,
+                extra: str = "") -> str:
         parts = [
             f"You are {agent['name']}, {role['title']} at {self.s.company}, a software company staffed by AI "
             f"agents and led by two people: {self.s.ceo_name} (CEO) and {self.s.cto_name} (CTO).",
@@ -49,6 +53,8 @@ class AgentRuntime:
                 "them the ticket id. Comment on an existing ticket instead when the request belongs to it.")
             if agent["lessons"]:
                 parts.append("Feedback on record for this seat:\n" + agent["lessons"])
+            if extra:
+                parts.append(extra)
             return "\n\n".join(parts)
         parts.append(
             "Working rules:\n"
@@ -61,6 +67,8 @@ class AgentRuntime:
             parts.append(TICKET_RULES)
         if agent["lessons"]:
             parts.append("Feedback on record for this seat:\n" + agent["lessons"])
+        if extra:
+            parts.append(extra)
         return "\n\n".join(parts)
 
     def run(self, agent: dict, instructions: str, ws: Workspace | None, *, project_id: int | None = None,
@@ -80,13 +88,19 @@ class AgentRuntime:
             extra = [n for n in TICKET_TOOL_SPECS if n not in names and (only_tools is None or n in only_tools)]
             names = names + extra
             tools += [{"name": n, **TICKET_TOOL_SPECS[n]} for n in extra]
+        if project_id and self.memory and not chat_with and (only_tools is None or "remember" in only_tools):
+            names = names + ["remember"]
+            tools += [{"name": "remember", **MEMORY_TOOL_SPECS["remember"]}]
         meta = {**(meta or {}), "role": role["id"], "kind": role["kind"], "agent": agent["name"]}
+        memories = self.memory.as_text(self.memory.recall(project_id, instructions)) if self.memory and project_id else ""
+        if str(agent["model"]).startswith("cli:"):
+            return self._run_cli(agent, role, names, instructions, ws, project_id, meta, history, chat_with, memories)
         messages: list[dict] = [*(history or []), {"role": "user", "content": instructions}]
         result = RunResult()
 
         for turn in range(1, self.s.max_turns + 1):
             result.turns = turn
-            resp = self.provider.complete(model=agent["model"], system=self._system(agent, role, bool(project_id), chat_with), messages=messages,
+            resp = self.provider.complete(model=agent["model"], system=self._system(agent, role, bool(project_id), chat_with, memories), messages=messages,
                                           tools=tools, max_tokens=self.s.max_tokens, meta=meta)
             record_usage(self.db, self.s, agent, project_id, resp.input_tokens, resp.output_tokens,
                          meta.get("purpose") or ("chat" if chat_with else role["kind"]))
@@ -122,7 +136,52 @@ class AgentRuntime:
         result.text = "(Stopped: reached the turn limit before finishing.)"
         return result
 
+    def _run_cli(self, agent, role, names, instructions, ws, project_id, meta, history, chat_with, memories) -> RunResult:
+        """One run through a coding CLI on its own login (see engines.py)."""
+        result = RunResult()
+        engine_name, _, model = str(agent["model"])[4:].partition("/")
+        engine = self.s.engines.get(engine_name)
+        if not engine:
+            result.text = f"(Unknown engine '{engine_name}'. Configure it under engines: in org.yaml.)"
+            return result
+        system = self._system(agent, role, bool(project_id), chat_with, memories) + "\n\n" + protocol(names)
+        prompt = instructions
+        if history:
+            prompt = "Conversation so far:\n" + "\n".join(
+                f"{'Them' if m['role'] == 'user' else 'You'}: {m['content']}" for m in history) + "\n\nNow:\n" + prompt
+        if project_id and self.tickets and "list_tickets" in names:   # no live tool: give the board up front
+            board = self.tickets.agent_tool(agent, "list_tickets", {}, project_id, meta.get("ticket_id"), result)
+            prompt += f"\n\nThe project's tickets right now:\n{board}"
+        can_write = bool(ws) and bool({"write_file", "replace_in_file"} & set(names))   # same rights as the role's tools
+        can_run = bool(ws) and "run_command" in names
+        try:
+            out = run_cli(engine, system=system, prompt=prompt, cwd=str(ws.root) if ws else None, model=model,
+                          write=can_write, run=can_run, timeout=self.s.cli_timeout)
+        except EngineError as exc:
+            result.text = f"(The {engine_name} engine failed: {exc})"
+            return result
+        cost = 0.0 if engine.get("subscription") else out["cost"]
+        record_usage(self.db, self.s, agent, project_id, out["input_tokens"], out["output_tokens"],
+                     f"{meta.get('purpose') or ('chat' if chat_with else role['kind'])} via {engine_name}", cost=cost)
+        text, data, problem = parse_block(out["text"])
+        result.turns, result.completed = out["turns"], not out["is_error"]
+        notes = [problem] if problem else []
+        for name, args in actions_to_calls(data):
+            if name not in names:
+                notes.append(f"{ACTIONS.get(name, (name,))[0]} is not allowed in this assignment")
+                continue
+            try:
+                self._execute(agent, name, args, ws, result, project_id, meta, 0)
+                result.tool_log.append(name)
+            except (ToolError, KeyError, TypeError, ValueError) as exc:
+                notes.append(f"{name}: {exc}")
+                result.tool_log.append(f"{name} (failed)")
+        result.text = text + (("\n\n(OrgForge could not use part of the reply: " + "; ".join(notes) + ")") if notes else "")
+        return result
+
     def _execute(self, agent, name, args, ws, result, project_id, meta, depth) -> str:
+        if name == "remember" and self.memory:
+            return self.memory.remember(args.get("text", ""), agent["name"], project_id, args.get("scope", "project"))
         if name in TICKET_TOOL_SPECS and self.tickets:
             try:
                 return self.tickets.agent_tool(agent, name, args, project_id, meta.get("ticket_id"), result,

@@ -43,6 +43,9 @@ class Settings:
     max_rework: int = 2
     max_delegation_depth: int = 2
     max_parallel: int = 3
+    review_mode: str = "standard"
+    engines: dict = field(default_factory=dict)
+    cli_timeout: int = 1800
     hire_when_waiting: int = 3
     max_per_role: int = 4
     prices: dict = field(default_factory=dict)
@@ -99,10 +102,16 @@ def load_settings(root: str | os.PathLike | None = None) -> Settings:
     s.max_rework = int(pipeline.get("max_rework", s.max_rework))
     s.max_delegation_depth = int(pipeline.get("max_delegation_depth", s.max_delegation_depth))
     s.max_parallel = max(1, int(pipeline.get("max_parallel", s.max_parallel)))
+    s.review_mode = str(pipeline.get("review_mode", s.review_mode))
+    if s.review_mode not in ("thorough", "standard", "light"):
+        raise ValueError("pipeline.review_mode must be thorough, standard or light.")
     staffing = raw.get("staffing", {})
     s.hire_when_waiting = max(1, int(staffing.get("hire_when_waiting", s.hire_when_waiting)))
     s.max_per_role = max(1, int(staffing.get("max_per_role", s.max_per_role)))
     s.prices = dict(llm.get("prices") or {})
+    from .engines import BUILTIN_ENGINES
+    s.engines = {**BUILTIN_ENGINES, **(raw.get("engines") or {})}
+    s.cli_timeout = int(llm.get("cli_timeout", s.cli_timeout))
     budgets = raw.get("budgets", {})
     s.default_budget = max(0.0, float(budgets.get("default_project_usd", s.default_budget)))
     s.budget_warn_at = min(1.0, max(0.1, float(budgets.get("warn_at", s.budget_warn_at))))

@@ -192,6 +192,18 @@ class Org:
             self.db.log("hire", f"{agent['name']} hired as {role_id} (seat {seat}, {agent['model']}).", actor=by)
         return agent
 
+    def set_model(self, ref: int | str, model: str, by: str = "ceo") -> dict:
+        """Move an agent to another model or engine (e.g. claude-opus-5-5, cli:claude-code, cli:claude-code/haiku)."""
+        agent = self.agent(ref)
+        model = model.strip()
+        if not model:
+            raise OrgError("Give a model, e.g. claude-sonnet-5-5 or cli:claude-code.")
+        if model.startswith("cli:") and model[4:].partition("/")[0] not in self.s.engines:
+            raise OrgError(f"No engine '{model[4:].partition('/')[0]}'. Known: {', '.join(sorted(self.s.engines))}.")
+        self.db.run("UPDATE agents SET model=? WHERE id=?", model, agent["id"])
+        self.db.log("org", f"{agent['name']} now works on {model}.", actor=by)
+        return self.agent(agent["id"])
+
     def fire(self, ref: int | str, reason: str, by: str = "ceo") -> dict:
         agent = self.agent(ref)
         if agent["status"] == "fired":

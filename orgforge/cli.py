@@ -93,7 +93,11 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("log", help="Recent activity"); p.add_argument("-n", type=int, default=40)
     p = sub.add_parser("serve", help="Start the dashboard")
     p.add_argument("--host", default="127.0.0.1"); p.add_argument("--port", type=int, default=4700)
+    p = sub.add_parser("app", help="Start the dashboard and open it in its own app window")
+    p.add_argument("--host", default="127.0.0.1"); p.add_argument("--port", type=int, default=4700)
 
+    p = sub.add_parser("engines", help="Coding CLIs agents can work through, and whether they are ready")
+    p.add_argument("--test", metavar="ENGINE", help="Run a tiny prompt through this engine")
     sub.add_parser("costs", help="What the company's AI work has cost (estimate)")
     p = sub.add_parser("budget", help="CEO: set a project's budget in USD (0 = no limit)")
     p.add_argument("project", type=int); p.add_argument("amount", type=float)
@@ -134,6 +138,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--name", help="Leave out to let a teammate in the department pick one"); p.add_argument("--model"); who(p)
     p = org.add_parser("fire"); p.add_argument("agent"); p.add_argument("--reason", default="Decision by management")
     p.add_argument("--no-replace", action="store_true", help="Leave the seat empty"); who(p)
+    p = org.add_parser("set-model", help="Move an agent, or everyone with --all, to a model or engine")
+    p.add_argument("agent", nargs="?"); p.add_argument("model"); p.add_argument("--all", action="store_true"); who(p)
     p = org.add_parser("rehire"); p.add_argument("agent"); p.add_argument("--note", default=""); who(p)
     p = org.add_parser("add-dept"); p.add_argument("id"); p.add_argument("--name"); p.add_argument("--reports-to", choices=["ceo", "cto"], default="cto")
     p = org.add_parser("remove-dept"); p.add_argument("id")
@@ -196,15 +202,36 @@ def _dispatch(args) -> int:
     elif args.cmd == "log":
         for e in co.events(args.n):
             print(f"{e['ts'][11:19]}  {e['actor']:<10} {e['kind']:<9} {e['message']}")
-    elif args.cmd == "serve":
+    elif args.cmd in ("serve", "app"):
         from .server import serve
-        serve(co, args.host, args.port)
+        serve(co, args.host, args.port, open_app=args.cmd == "app")
     elif args.cmd == "org":
         _org(co, args, role)
     elif args.cmd == "ticket":
         _ticket(co, args, role)
     elif args.cmd == "idea":
         _idea(co, args, role)
+    elif args.cmd == "engines":
+        import shutil
+        from .engines import EngineError, run_cli
+        for name, e in sorted(co.s.engines.items()):
+            exe = e["command"][0]
+            print(f"  {name:<14} {'installed' if shutil.which(exe) else 'not installed'}  ({exe})"
+                  + ("  · uses its own login, not the API key" if e.get("subscription") else ""))
+        users = co.db.all("SELECT model, COUNT(*) AS n FROM agents WHERE status!='fired' GROUP BY model")
+        print("Agents by model: " + ", ".join(f"{u['model']} ({u['n']})" for u in users))
+        if args.test:
+            if args.test not in co.s.engines:
+                raise OrgError(f"No engine '{args.test}'.")
+            try:
+                out = run_cli(co.s.engines[args.test], system="You are testing a connection.", prompt="Reply with just: OK",
+                              cwd=None, model="", write=False, run=False, timeout=120)
+                ok = not out["is_error"] and "OK" in out["text"]
+                print(f"\n{args.test}: {'works' if ok else 'answered, but not as expected'}: {out['text'][:200]}")
+                if "login" in out["text"].lower():
+                    print("Sign in first: run `claude` in a terminal and type /login.")
+            except EngineError as exc:
+                print(f"\n{args.test}: {exc}")
     elif args.cmd == "costs":
         from .costs import summary
         c = summary(co.db)
@@ -331,6 +358,16 @@ def _org(co: Company, args, role: str) -> None:
             raise PermissionError("That department reports to the CEO.")
         a = co.org.hire(args.role, name=args.name, model=args.model, by=by)
         print(f"Hired {a['name']} as {a['role']} (#{a['id']}, seat {a['seat']}).")
+    elif cmd == "set-model":
+        targets = [a["id"] for a in co.org.staff()] if args.all else [args.agent]
+        if not args.all and not args.agent:
+            raise OrgError("Name an agent, or use --all.")
+        for ref in targets:
+            agent = co.org.agent(ref)
+            if not co.can_manage(role, agent):
+                print(f"  skipped {agent['name']}: their department reports to the CEO")
+                continue
+            print(f"  {co.org.set_model(ref, args.model, by=by)['name']} -> {args.model}")
     elif cmd in ("fire", "rehire"):
         agent = co.org.agent(args.agent)
         if not co.can_manage(role, agent):
