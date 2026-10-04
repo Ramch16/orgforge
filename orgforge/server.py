@@ -192,6 +192,7 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
             "costs": cost_summary(co.db),
             "presence": presence(co.db),
             "memories": co.memory.list(limit=60),
+            "skills": [{k: s[k] for k in ("name", "title", "kinds", "departments", "enabled", "builtin", "source")} for s in co.skills.all()],
             "telemetry": telemetry(co.db),
             "chats": co.db.all("SELECT agent_id, MAX(id) AS last_id, SUM(status='pending') AS pending FROM messages "
                                "WHERE human=? GROUP BY agent_id", role),

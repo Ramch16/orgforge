@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.0
+- **Skills.** Guidelines agents work by, by kind of role and department, on every engine. Built
+  in: the Karpathy coding guidelines (andrej-karpathy-skills, MIT), on for technical roles. Add
+  your own in the company's `skills/` folder or with `orgforge skills add <file-or-url>`.
+- **Router endpoints.** `omniroute:auto` (OmniRoute) and `freellmapi:auto` (FreeLLMAPI), local
+  OpenAI-compatible routers to many free and paid providers.
+
 ## 0.11.0
 - **Quick tasks** (`orgforge task`, New task): one change straight to build, optionally on an
   existing repository or a GitHub issue, on an `orgforge/task-N` branch, with your checks and a

@@ -1,3 +1,3 @@
 """OrgForge: an AI-staffed software company led by a human CEO and CTO."""
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"

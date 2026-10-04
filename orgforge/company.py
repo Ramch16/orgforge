@@ -12,6 +12,7 @@ from .db import DB
 from .llm import RoutingProvider, make_provider
 from .memory import Memory
 from .runs import Runs
+from .skills import Skills
 from .naming import make_namer
 from .org import Org
 from .performance import Performance
@@ -51,6 +52,8 @@ class Company:
         self.runtime.memory = self.memory
         self.runs = Runs(self.db)
         self.runtime.runs = self.runs
+        self.skills = Skills(self.s)
+        self.runtime.skills = self.skills
         self.org.namer = make_namer(self.db, self.s, self.runtime.provider)
         self.chat = Chat(self)
         self.tickets.on_human_note = self.chat.ticket_note

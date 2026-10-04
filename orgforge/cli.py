@@ -108,6 +108,9 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("watch", help="Show an agent's latest run: what it was told, did and said")
     p.add_argument("agent")
     p = sub.add_parser("diff", help="Code changes for a ticket (T-12) or a task project (P3)"); p.add_argument("ref")
+    p = sub.add_parser("skills", help="Guidelines agents work by (no argument: list them)")
+    p.add_argument("action", nargs="?", choices=["list", "add"], default="list")
+    p.add_argument("source", nargs="?", help="For add: a Markdown file or URL (e.g. a CLAUDE.md)")
     p = sub.add_parser("engines", help="Coding CLIs agents can work through, and whether they are ready")
     p.add_argument("--test", metavar="ENGINE", help="Run a tiny prompt through this engine")
     sub.add_parser("costs", help="What the company's AI work has cost (estimate)")
@@ -250,6 +253,21 @@ def _dispatch(args) -> int:
         ref = args.ref.upper()
         print(changes(co, int(ref[1:]))["diff"] if ref.startswith("P") and ref[1:].isdigit()
               else ticket_diff(co, co.tickets.get(ref)["id"])["diff"])
+    elif args.cmd == "skills":
+        if args.action == "add":
+            if not args.source:
+                raise OrgError("Give a file or URL to add.")
+            from .skills import SkillError
+            try:
+                s = co.skills.add(args.source)
+            except (SkillError, OSError) as exc:
+                raise OrgError(str(exc)) from exc
+            print(f"Added skill '{s['name']}' ({s['file']}). It applies to " + (", ".join(s["kinds"]) or "every role") + ".")
+        for s in co.skills.all():
+            print(f"  {'on ' if s['enabled'] else 'off'}  {s['name']:<24} {s['title']}  · "
+                  + (", ".join(s["kinds"]) or "every role") + ("  · built in" if s["builtin"] else "  · company")
+                  + (f"\n       source: {s['source']}" if s["source"] else ""))
+        print("Built-in skills are switched on under skills: in org.yaml; company skills live in the skills/ folder.")
     elif args.cmd == "engines":
         import shutil
         from .engines import EngineError, run_cli

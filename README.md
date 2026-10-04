@@ -234,7 +234,12 @@ engine under `engines:` in `org.yaml`.
 
 **Local models and other keys.** Any OpenAI-compatible endpoint works, per agent:
 `ollama:<model>` and `lmstudio:<model>` (local, $0), `openai:<model>`, `openrouter:<model>` and
-`groq:<model>` (with `OPENAI_API_KEY`, `OPENROUTER_API_KEY` or `GROQ_API_KEY`). Add others under
+`groq:<model>` (with `OPENAI_API_KEY`, `OPENROUTER_API_KEY` or `GROQ_API_KEY`).
+Routers you run on your machine work too: **OmniRoute** (`omniroute:auto`, port 20128; many free
+providers, no keys needed) and **FreeLLMAPI** (`freellmapi:auto`, port 3001, your own free-tier
+keys, `FREELLMAPI_KEY`). Both are MIT-licensed and untested here; they send your prompts and code
+to whichever provider they pick, under that provider's terms, and free models are weaker, so they
+suit reviews and reports better than building. Add others under
 `endpoints:` in `org.yaml` (`base_url`, `key_env`, `free`). Local models must support tool calling.
 
 ```bash
@@ -274,6 +279,21 @@ open colour-coded diffs.
 orgforge watch Hari                               # Hari's latest run, step by step
 orgforge steer Hari "Use python3, not python, on this Mac" --as cto
 orgforge diff T-12
+```
+
+## Skills
+
+Skills are guidelines every agent of the listed kinds (and departments) works by, on every
+engine: the API, Claude Code and other CLIs, and local models. Built in and on by default:
+**Karpathy coding guidelines** (from
+[andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills), MIT): think
+before coding, simplicity first, surgical changes, goal-driven execution, for engineering, data,
+quality, security and platform roles. Switch built-in skills on or off under `skills:` in
+`org.yaml`; add your own as Markdown files in the company's `skills/` folder.
+
+```bash
+orgforge skills                                   # what's on, for whom
+orgforge skills add ~/notes/house-style.md         # or a URL, e.g. a CLAUDE.md on GitHub
 ```
 
 ## The office, memory and the app
@@ -536,6 +556,7 @@ Each role gets only the tools listed for it.
 | `orgforge/chat.py`        | CEO and CTO chat with agents                       |
 | `orgforge/engines.py`     | Coding CLI engines (Claude Code and others)        |
 | `orgforge/runs.py`        | Live run log and steering                          |
+| `orgforge/skills.py`      | Skills (built in: `skills/karpathy-guidelines.md`) |
 | `orgforge/sources.py`     | Existing repositories and GitHub issues            |
 | `orgforge/memory.py`      | Shared long-term memory                            |
 | `orgforge/telemetry.py`   | Office presence and live telemetry                 |

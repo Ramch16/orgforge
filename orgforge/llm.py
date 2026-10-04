@@ -286,6 +286,10 @@ ENDPOINTS: dict[str, dict] = {
     "openai": {"base_url": "https://api.openai.com/v1", "key_env": "OPENAI_API_KEY"},
     "openrouter": {"base_url": "https://openrouter.ai/api/v1", "key_env": "OPENROUTER_API_KEY"},
     "groq": {"base_url": "https://api.groq.com/openai/v1", "key_env": "GROQ_API_KEY"},
+    # Routers you run on this machine (MIT; from their READMEs, untested here). Both route to many providers,
+    # so your prompts and code go wherever they route; each provider's terms apply. Use "<router>:auto".
+    "omniroute": {"base_url": "http://localhost:20128/v1", "free": True},     # npm i -g omniroute; free providers by default
+    "freellmapi": {"base_url": "http://localhost:3001/v1", "key_env": "FREELLMAPI_KEY", "free": True},  # free tiers, your keys
 }
 
 

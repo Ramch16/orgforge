@@ -21,3 +21,9 @@ licensed and allow commercial use. Check each licence before you ship.
 Use of the Claude API is governed by Anthropic's commercial terms for your
 API account. Products your agents build may pull in their own dependencies;
 review those licences per project.
+
+## Bundled content
+
+`orgforge/skills/karpathy-guidelines.md` is the guidelines file from
+[andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills), MIT-licensed
+according to its README, included unchanged apart from a header naming its source.

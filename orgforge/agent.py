@@ -37,6 +37,7 @@ class AgentRuntime:
         self.tickets = None                 # set by Company; every agent on a project can use the tracker
         self.memory = None                  # set by Company; shared long-term memory
         self.runs = None                    # set by Company; live run log and steering
+        self.skills = None                  # set by Company; guidelines by kind of role
 
     def _system(self, agent: dict, role: dict, on_project: bool = False, chat_with: str | None = None,
                 extra: str = "") -> str:
@@ -116,6 +117,8 @@ class AgentRuntime:
             tools += [{"name": "remember", **MEMORY_TOOL_SPECS["remember"]}]
         meta = {**(meta or {}), "role": role["id"], "kind": role["kind"], "agent": agent["name"]}
         memories = self.memory.as_text(self.memory.recall(project_id, instructions)) if self.memory and project_id else ""
+        if self.skills and not chat_with:
+            memories = "\n\n".join(x for x in (self.skills.for_kind(role["kind"], role["department"]), memories) if x)
         if str(agent["model"]).startswith("cli:"):
             return self._run_cli(agent, role, names, instructions, ws, project_id, meta, history, chat_with, memories)
         messages: list[dict] = [*(history or []), {"role": "user", "content": instructions}]
