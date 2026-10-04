@@ -89,6 +89,14 @@ class MockProvider:
 
     def _script(self, meta: dict, step: int = 0) -> list[list[dict]]:
         kind, purpose = meta.get("kind"), meta.get("purpose", "")
+        if purpose == "chat":                   # asked for work in a chat: file it as a ticket
+            message = str(meta.get("message", ""))
+            if re.search(r"\b(add|fix|build|change|create|make|update|implement)\b", message, re.I):
+                owner = meta.get("role") if kind in ("builder", "designer", "product", "qa") else "backend_engineer"
+                return [[self._call("list_tickets"),
+                         self._call("create_ticket", title=message.strip().rstrip(".?!")[:80], description=message,
+                                    type="task", priority="medium", role=owner)]]
+            return [[self._call("list_tickets")]]
         key = re.sub(r"[^a-z0-9_]", "_", str(meta.get("task_key", "work")).lower())
         if kind == "product":
             return [[self._call("write_file", path="docs/PRD.md",
@@ -169,7 +177,10 @@ class MockProvider:
             taken = set(meta.get("taken") or ())
             text = next((n for n in MOCK_NAMES if n.lower() not in taken), "Agent")
             return LLMResponse(content=[{"type": "text", "text": text}], text=text, input_tokens=60, output_tokens=3)
-        step = sum(1 for m in messages if m["role"] == "assistant")
+        # Steps count from the latest instruction, so earlier chat history does not shift the script.
+        start = max((i for i, m in enumerate(messages) if m["role"] == "user" and isinstance(m["content"], str)),
+                    default=0)
+        step = sum(1 for m in messages[start:] if m["role"] == "assistant")
         script = self._script(meta, step)
         allowed = {t["name"] for t in tools or []}
         if step < len(script):
@@ -179,6 +190,15 @@ class MockProvider:
                 return LLMResponse(content=blocks, tool_calls=calls, stop_reason="tool_use",
                                    input_tokens=100, output_tokens=50)
         text = f"Done ({meta.get('role', 'agent')})."
+        if meta.get("purpose") == "chat":
+            filed = any("Filed T-" in str(b.get("content", "")) for m in messages if m["role"] == "user"
+                        and isinstance(m["content"], list) for b in m["content"])
+            ticket = re.search(r"Filed (T-\d+)", json.dumps(messages))
+            text = (f"Thanks, {meta.get('human', 'boss')}. I've filed {ticket.group(1)} for that; it goes through "
+                    "review like everything else, and you can follow it on the board." if filed and ticket else
+                    f"Hi {meta.get('human', 'there')}, {meta.get('agent', 'I')} here. Noted: "
+                    f"\"{str(meta.get('message', ''))[:120]}\". Ask me to add, fix or change something and I'll file "
+                    "a ticket for it.")
         return LLMResponse(content=[{"type": "text", "text": text}], text=text,
                            input_tokens=100, output_tokens=20)
 

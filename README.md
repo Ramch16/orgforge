@@ -171,6 +171,27 @@ it beyond your machine.
 | Workload hiring requests              | Whoever the department reports to |
 | Hire, fire, rate                      | CEO anywhere; CTO in CTO departments |
 
+## Talking to the team
+
+The CEO and CTO can talk to any agent directly. On the dashboard, click
+**Message** next to anyone in People. In the terminal, use `orgforge chat`.
+Each of you has a private conversation with each agent, and the agent
+remembers it.
+
+Agents answer in their own role. Pick the project the conversation is about
+and they can read its files and tickets, so you can ask Ram about the
+requirements, Sony about the design, or Badri what QA found. They cannot change
+code from a chat. When you ask for a change, they file a ticket for the right
+department, on your behalf, and tell you its id. The ticket goes through review
+and the release checks like any other, and starts the team if the project is
+building. Ticket ids in replies link to the ticket.
+
+```bash
+orgforge chat Sony "Why did you split the API into two services?" --project 1 --as cto
+orgforge chat Hari "Please add input validation to the signup form" --project 1 --as cto
+orgforge chat Sony --as cto                      # read the conversation
+```
+
 ## Parallel work and hiring for workload
 
 The team works up to `pipeline.max_parallel` tickets at the same time per
@@ -353,6 +374,7 @@ Each role gets only the tools listed for it.
 | `orgforge/default_org.yaml` | Default departments, roles, seats and policies   |
 | `orgforge/org.py`         | Departments, roles, hire, fire, replace, rehire    |
 | `orgforge/naming.py`      | Teammates name new hires                           |
+| `orgforge/chat.py`        | CEO and CTO chat with agents                       |
 | `orgforge/performance.py` | Scores and HR policy                               |
 | `orgforge/pipeline.py`    | Stages, task loop, human decisions                 |
 | `orgforge/tickets.py`     | Ticket tracker and the agents' ticket tools        |

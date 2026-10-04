@@ -6,6 +6,7 @@ import os
 import sys
 from pathlib import Path
 
+from .chat import ChatError
 from .company import Company
 from .org import KINDS, OrgError
 from .pipeline import PipelineError
@@ -90,6 +91,9 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("serve", help="Start the dashboard")
     p.add_argument("--host", default="127.0.0.1"); p.add_argument("--port", type=int, default=4700)
 
+    p = sub.add_parser("chat", help="Talk to an agent directly (no message: show your conversation)")
+    p.add_argument("agent"); p.add_argument("message", nargs="?")
+    p.add_argument("--project", type=int, help="Project the conversation is about (lets the agent read it)"); who(p)
     tk = sub.add_parser("ticket", help="Internal ticket tracker").add_subparsers(dest="ticket_cmd")
     p = tk.add_parser("list", help="Tickets, highest priority first")
     p.add_argument("--project", type=int); p.add_argument("--status", choices=STATUSES)
@@ -126,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     try:
         return _dispatch(args)
-    except (OrgError, PipelineError, TicketError, PermissionError, RuntimeError) as exc:
+    except (OrgError, PipelineError, TicketError, ChatError, PermissionError, RuntimeError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
@@ -182,6 +186,23 @@ def _dispatch(args) -> int:
         _org(co, args, role)
     elif args.cmd == "ticket":
         _ticket(co, args, role)
+    elif args.cmd == "chat":
+        if args.message:
+            print(f"Waiting for {co.org.agent(args.agent)['name']}...")
+            thread = co.chat.send(args.agent, role, args.message, project_id=args.project, wait=True)
+            reply = thread["messages"][-1]
+            print(f"\n{thread['agent']['name']}: {reply['body']}")
+            if args.project and "T-" in reply["body"]:
+                print(f"\nThe team picks up new tickets on the next run: orgforge run {args.project}")
+        else:
+            thread = co.chat.thread(args.agent, role)
+            a = thread["agent"]
+            print(f"{a['name']}, {a['title']} ({a['department']})")
+            for m in thread["messages"]:
+                who = co.s.human(role) if m["sender"] == "human" else a["name"]
+                print(f"\n{m['created_at'][:16].replace('T', ' ')}  {who}:\n  " + m["body"].replace("\n", "\n  "))
+            if not thread["messages"]:
+                print(f'\nNo messages yet. Start with: orgforge chat {a["name"]} "Hello" --as {role}')
     return 0
 
 

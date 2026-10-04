@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 
 from .agent import AgentRuntime
+from .chat import Chat
 from .config import ensure_org_file, load_settings, resolve_root
 from .db import DB
 from .llm import make_provider
@@ -42,6 +43,7 @@ class Company:
         self.tickets = Tickets(self.db, self.pipeline)
         self.runtime.tickets = self.tickets
         self.org.namer = make_namer(self.db, self.s, self.runtime.provider)
+        self.chat = Chat(self)
         if create:
             self.org.seed()
 

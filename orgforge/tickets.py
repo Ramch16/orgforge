@@ -236,7 +236,8 @@ class Tickets:
 
     # ---- agent tools -----------------------------------------------------
     def agent_tool(self, agent: dict, name: str, args: dict, project_id: int | None,
-                   current: int | None, result) -> str:
+                   current: int | None, result, requested_by: str | None = None) -> str:
+        """Run a ticket tool for an agent. `requested_by` names the CEO or CTO when the agent acts on their chat request."""
         if not project_id:
             raise TicketError("Tickets belong to a project; this assignment has none.")
 
@@ -268,12 +269,16 @@ class Tickets:
                                 "AS open FROM tasks WHERE project_id=? AND origin='agent'", project_id)
             stage = self.pipeline.project(project_id)["stage"]
             busy = (filed["open"] or 0) >= AGENT_OPEN_LIMIT or filed["total"] >= AGENT_TOTAL_LIMIT
-            status = "backlog" if busy or stage in REOPEN_STAGES else "todo"
+            status = "todo" if requested_by else "backlog" if busy or stage in REOPEN_STAGES else "todo"
             t = self.create(project_id, str(args["title"])[:200], str(args.get("description", ""))[:4000],
                             agent["name"], type=args.get("type", "task"), priority=args.get("priority", "medium"),
                             status=status, role=args.get("role"), origin="agent")
             if current:
                 note(self.db, current, agent["name"], f"Filed {t['ticket']} for {self.where(t['role'])}: {t['title']}")
+            if requested_by:                     # the CEO or CTO asked for this in a chat: it is their request
+                note(self.db, t["id"], agent["name"], f"Requested by {requested_by} in a chat with {agent['name']}.",
+                     kind="comment")
+                self._reopen(self.pipeline.project(project_id), requested_by)
             return (f"Filed {t['ticket']} for {self.where(t['role'])} ({t['status_label']})."
                     + (" It waits in the backlog for the CEO or CTO to triage." if status == "backlog" else ""))
         if name == "transfer_ticket":

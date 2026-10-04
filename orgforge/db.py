@@ -77,6 +77,16 @@ CREATE TABLE IF NOT EXISTS ticket_comments (
   body TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id INTEGER NOT NULL REFERENCES agents(id),
+  human TEXT NOT NULL CHECK (human IN ('ceo','cto')),
+  sender TEXT NOT NULL CHECK (sender IN ('human','agent')),
+  body TEXT NOT NULL DEFAULT '',
+  project_id INTEGER,
+  status TEXT NOT NULL DEFAULT 'sent',
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS reviews (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   agent_id INTEGER NOT NULL REFERENCES agents(id),

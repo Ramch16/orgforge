@@ -28,41 +28,58 @@ class AgentRuntime:
         self.db, self.s, self.org, self.provider = db, settings, org, provider
         self.tickets = None                 # set by Company; every agent on a project can use the tracker
 
-    def _system(self, agent: dict, role: dict, on_project: bool = False) -> str:
+    def _system(self, agent: dict, role: dict, on_project: bool = False, chat_with: str | None = None) -> str:
         parts = [
             f"You are {agent['name']}, {role['title']} at {self.s.company}, a software company staffed by AI "
             f"agents and led by two people: {self.s.ceo_name} (CEO) and {self.s.cto_name} (CTO).",
             role["prompt"],
+        ]
+        if chat_with:
+            parts.append(
+                f"You are in a direct chat with {chat_with}. Answer their questions about your work, the projects "
+                "and the tickets honestly and briefly, in your own voice. Use your tools to check facts in the "
+                "project's files and tickets rather than guessing, and say plainly when you do not know.\n"
+                "You cannot change code from a chat. When they ask for a change or new work, file a ticket "
+                "(create_ticket) for the role that should do it, so the team builds it through review, and tell "
+                "them the ticket id. Comment on an existing ticket instead when the request belongs to it.")
+            if agent["lessons"]:
+                parts.append("Feedback on record for this seat:\n" + agent["lessons"])
+            return "\n\n".join(parts)
+        parts.append(
             "Working rules:\n"
             "- All work happens in the project workspace through your tools. Paths are relative to its root.\n"
             "- Read what exists before changing it, and keep changes within your assignment.\n"
             "- If you can run commands, run what you build. Never report something as working unless you saw it work.\n"
             "- Your work is reviewed and scored, and the score decides whether you keep this seat.\n"
-            "- When you are finished, reply with a short plain summary: what you did, and anything left open.",
-        ]
+            "- When you are finished, reply with a short plain summary: what you did, and anything left open.")
         if on_project and self.tickets:
             parts.append(TICKET_RULES)
         if agent["lessons"]:
             parts.append("Feedback on record for this seat:\n" + agent["lessons"])
         return "\n\n".join(parts)
 
-    def run(self, agent: dict, instructions: str, ws: Workspace, *, project_id: int | None = None,
-            meta: dict | None = None, depth: int = 0) -> RunResult:
+    def run(self, agent: dict, instructions: str, ws: Workspace | None, *, project_id: int | None = None,
+            meta: dict | None = None, depth: int = 0, history: list[dict] | None = None,
+            only_tools: set[str] | None = None, chat_with: str | None = None) -> RunResult:
+        """One assignment, or one chat reply when `chat_with` is set (with `history` and a narrower tool set)."""
         role = self.org.role(agent["role"])
         names = json.loads(role["tools"])
+        if only_tools is not None:
+            names = [n for n in names if n in only_tools]
         if depth >= self.s.max_delegation_depth:
             names = [n for n in names if n != "delegate"]
         tools = [tool_schema(n) for n in names]
         if project_id and self.tickets:
-            names = names + [n for n in TICKET_TOOL_SPECS if n not in names]
-            tools += [{"name": n, **TICKET_TOOL_SPECS[n]} for n in TICKET_TOOL_SPECS]
+            extra = [n for n in TICKET_TOOL_SPECS if n not in names and (only_tools is None or n in only_tools)]
+            names = names + extra
+            tools += [{"name": n, **TICKET_TOOL_SPECS[n]} for n in extra]
         meta = {**(meta or {}), "role": role["id"], "kind": role["kind"], "agent": agent["name"]}
-        messages: list[dict] = [{"role": "user", "content": instructions}]
+        messages: list[dict] = [*(history or []), {"role": "user", "content": instructions}]
         result = RunResult()
 
         for turn in range(1, self.s.max_turns + 1):
             result.turns = turn
-            resp = self.provider.complete(model=agent["model"], system=self._system(agent, role, bool(project_id)), messages=messages,
+            resp = self.provider.complete(model=agent["model"], system=self._system(agent, role, bool(project_id), chat_with), messages=messages,
                                           tools=tools, max_tokens=self.s.max_tokens, meta=meta)
             self.db.run("UPDATE agents SET input_tokens=input_tokens+?, output_tokens=output_tokens+? WHERE id=?",
                         resp.input_tokens, resp.output_tokens, agent["id"])
@@ -101,7 +118,8 @@ class AgentRuntime:
     def _execute(self, agent, name, args, ws, result, project_id, meta, depth) -> str:
         if name in TICKET_TOOL_SPECS and self.tickets:
             try:
-                return self.tickets.agent_tool(agent, name, args, project_id, meta.get("ticket_id"), result)
+                return self.tickets.agent_tool(agent, name, args, project_id, meta.get("ticket_id"), result,
+                                               requested_by=meta.get("requested_by"))
             except TicketError as exc:
                 raise ToolError(str(exc)) from exc
         if name == "submit_plan":

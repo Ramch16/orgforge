@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from .chat import ChatError
 from .company import Company
 from .org import OrgError
 from .pipeline import STAGE_LABELS, STAGES, PipelineError
@@ -66,6 +67,11 @@ class Comment(BaseModel):
     body: str
 
 
+class Message(BaseModel):
+    body: str
+    project_id: int | None = None
+
+
 def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
     app = FastAPI(title="OrgForge", docs_url=None, redoc_url=None)
 
@@ -83,12 +89,14 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
                 pass                            # already written to the activity log
         threading.Thread(target=work, daemon=True).start()
 
+    co.chat.on_work = run_in_background
+
     def guard(fn):
         try:
             return fn()
         except PermissionError as exc:
             raise HTTPException(403, str(exc))
-        except (OrgError, PipelineError, TicketError) as exc:
+        except (OrgError, PipelineError, TicketError, ChatError) as exc:
             raise HTTPException(400, str(exc))
 
     def managed(role: str, ref: int) -> dict:
@@ -115,6 +123,8 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
             "ticket_meta": {"types": TYPES, "priorities": PRIORITIES, "statuses": STATUS_LABELS,
                             "roles": co.tickets.work_roles()},
             "events": co.events(60)[::-1],
+            "chats": co.db.all("SELECT agent_id, MAX(id) AS last_id, SUM(status='pending') AS pending FROM messages "
+                               "WHERE human=? GROUP BY agent_id", role),
         }
 
     @app.post("/api/projects")
@@ -160,6 +170,14 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
     @app.post("/api/tickets/{ref}/comments")
     def comment(ref: str, body: Comment, role: str = Depends(auth)) -> dict:
         return guard(lambda: co.tickets.comment(ref, co.s.human(role), body.body))
+
+    @app.get("/api/agents/{agent_id}/messages")
+    def messages(agent_id: int, role: str = Depends(auth)) -> dict:
+        return guard(lambda: co.chat.thread(agent_id, role))
+
+    @app.post("/api/agents/{agent_id}/messages")
+    def send_message(agent_id: int, body: Message, role: str = Depends(auth)) -> dict:
+        return guard(lambda: co.chat.send(agent_id, role, body.body, project_id=body.project_id or None))
 
     @app.post("/api/agents")
     def hire(body: Hire, role: str = Depends(auth)) -> dict:

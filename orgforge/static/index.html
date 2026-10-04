@@ -78,6 +78,13 @@
   .history .comment { border-left: 3px solid var(--cobalt); padding-left: .55rem; }
   .history .transfer, .history .handoff { border-left: 3px solid var(--warn); padding-left: .55rem; }
   .dept { font-size: .78rem; color: var(--soft); display: block; margin-bottom: .2rem; }
+  .chat-log { display: flex; flex-direction: column; gap: .5rem; max-height: min(52vh, 30rem); overflow-y: auto; padding: .6rem .1rem; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: .6rem 0; }
+  .bubble { max-width: 85%; padding: .5rem .7rem; border-radius: 10px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .92rem; }
+  .bubble.me { align-self: flex-end; background: var(--wash); }
+  .bubble.them { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); }
+  .bubble.failed { color: var(--bad); } .bubble.pending { color: var(--soft); font-style: italic; }
+  .bubble .when { display: block; font-size: .74rem; color: var(--soft); margin-bottom: .15rem; }
+  .bubble button.tlink { border: 0; padding: 0; background: none; color: var(--cobalt); font: inherit; text-decoration: underline; }
   tr[data-ticket] { cursor: pointer; } tr[data-ticket]:hover td { color: var(--cobalt); }
 </style>
 </head>
@@ -161,6 +168,16 @@
 
 <dialog id="ticket-dlg"><div id="ticket-body"></div></dialog>
 
+<dialog id="chat-dlg">
+  <div class="row" style="justify-content:space-between"><div><h2 id="chat-name" style="margin:0"></h2><span class="muted" id="chat-role"></span></div>
+    <button class="quiet" id="chat-close">Close</button></div>
+  <label class="field"><span>About project (lets them read its files and tickets)</span><select id="chat-project"></select></label>
+  <div class="chat-log" id="chat-log" aria-live="polite"></div>
+  <textarea id="chat-input" rows="3" placeholder="Ask a question, or ask for a change (they'll file a ticket). Ctrl/⌘+Enter to send."></textarea>
+  <p id="chat-error" class="muted" style="color:var(--bad)"></p>
+  <div class="row"><button class="primary" id="chat-send">Send</button><span class="muted">Requests become tickets and go through review.</span></div>
+</dialog>
+
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -195,6 +212,7 @@ async function refresh(force) {
   const busy = ["TEXTAREA", "INPUT", "SELECT"].includes(document.activeElement?.tagName);
   try { state = await api("/api/state"); } catch { return; }
   $("signin").hidden = true; $("app").hidden = false;
+  if (openChatId) loadChat(openChatId).catch(() => {});   // only redraws the messages, never the input
   if (busy && !force) return;             // don't redraw under someone typing
   render();
   if (openTicketId && !force) loadTicket(openTicketId).catch(() => {});
@@ -244,9 +262,11 @@ function render() {
     const rows = d.agents.filter(a => showFired || a.status !== "fired").map(a => {
       const s = a.score, cls = s == null ? "" : s < 45 ? "low" : s < 65 ? "mid" : "";
       const score = s == null ? `<span class="muted">no reviews yet</span>` : `<span class="bar"><i class="${cls}" style="width:${s}%"></i></span>${s.toFixed(0)} <span class="muted">(${a.evals})</span>`;
-      const actions = !canManage ? "" : a.status === "fired"
+      const chat = (state.chats || []).find(c => c.agent_id === a.id);
+      const talk = a.status === "fired" ? "" : `<button class="quiet" data-chat="${a.id}">${chat && chat.pending ? "Replying…" : "Message"}</button>`;
+      const actions = talk + (!canManage ? "" : a.status === "fired"
         ? `<button class="quiet" data-rehire="${a.id}">Rehire</button>`
-        : `<button class="quiet" data-fire="${a.id}" data-name="${esc(a.name)}">Replace</button>`;
+        : `<button class="quiet" data-fire="${a.id}" data-name="${esc(a.name)}">Replace</button>`);
       return `<tr class="${a.status === "fired" ? "gone" : ""}"><td>${esc(a.name)}${a.generation > 1 ? ` <span class="muted">gen ${a.generation}</span>` : ""}</td>
         <td>${esc(a.role_title)}</td><td><span class="chip ${a.status}">${a.status}</span></td><td>${score}</td>
         <td class="muted">${esc(a.model)}</td><td>${actions}</td></tr>`;
@@ -404,6 +424,55 @@ $("show-fired").onchange = render;
 $("signout").onclick = () => signOut();
 $("signin-btn").onclick = () => { token = $("token").value.trim(); sessionStorage.setItem("orgforge-token", token); $("token").value = ""; refresh(true); };
 $("token").onkeydown = e => { if (e.key === "Enter") $("signin-btn").click(); };
+
+let openChatId = null, chatShown = "";
+const linkTickets = html => html.replace(/\bT-(\d+)\b/g, '<button class="tlink" data-ticket="$1">T-$1</button>');
+
+async function loadChat(id, opening) {
+  const t = await api(`/api/agents/${id}/messages`);
+  if (opening) {
+    openChatId = id; chatShown = "";
+    $("chat-name").textContent = t.agent.name;
+    $("chat-role").textContent = `${t.agent.title} · ${t.agent.department}`;
+    const last = [...t.messages].reverse().find(m => m.project_id);
+    options($("chat-project"), [["", "No project"], ...state.projects.map(p => [p.id, p.name])], false);
+    $("chat-project").value = String(last ? last.project_id : (state.projects[0]?.id ?? ""));
+    $("chat-error").textContent = "";
+    if (!$("chat-dlg").open) $("chat-dlg").showModal();
+    $("chat-input").focus();
+  }
+  const sig = JSON.stringify(t.messages);
+  if (sig === chatShown) return;
+  chatShown = sig;
+  const me = state.you.name;
+  $("chat-log").innerHTML = t.messages.map(m => {
+    const mine = m.sender === "human", cls = mine ? "me" : `them ${m.status}`;
+    const body = m.status === "pending" ? `${esc(t.agent.name)} is replying…` : linkTickets(esc(m.body));
+    return `<div class="bubble ${cls}"><span class="when">${esc(mine ? me : t.agent.name)} · ${esc(m.created_at.slice(11, 16))}</span>${body}</div>`;
+  }).join("") || `<p class="muted">Say hello to ${esc(t.agent.name)}. Ask about their work, a project or a ticket.</p>`;
+  $("chat-log").scrollTop = $("chat-log").scrollHeight;
+  $("chat-send").disabled = t.pending;
+}
+
+async function sendChat() {
+  const body = $("chat-input").value.trim();
+  if (!body || !openChatId) return;
+  $("chat-error").textContent = "";
+  try {
+    await api(`/api/agents/${openChatId}/messages`, { body, project_id: Number($("chat-project").value) || null });
+    $("chat-input").value = "";
+    await loadChat(openChatId);
+  } catch (e) { if (e.message !== "unauthorized") $("chat-error").textContent = e.message; }
+}
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-chat]");
+  if (b) act(() => loadChat(Number(b.dataset.chat), true));
+});
+$("chat-send").onclick = sendChat;
+$("chat-input").onkeydown = e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendChat(); } };
+$("chat-close").onclick = () => $("chat-dlg").close();
+$("chat-dlg").addEventListener("close", () => { openChatId = null; chatShown = ""; });
 
 refresh(true);
 setInterval(refresh, 4000);
