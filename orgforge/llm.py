@@ -118,7 +118,15 @@ class MockProvider:
                         "6. Support: help guide\n" + ("7. Marketing: pricing and launch\n" if meta.get("selling") else "")))],
                     [self._call("submit_department_plan", summary="One small release; every department has its part.",
                                 tickets=tickets)]]
-        if purpose in ("ticket_reply", "status_report"):   # look at the tickets, then answer from the facts
+        if purpose == "ticket_reply":           # a question is answered and closed; a request is left for the team
+            message = str(meta.get("message", ""))
+            request = re.match(r"\s*(please\s+|(can|could|would) you\s+(please\s+)?)?(add|fix|build|change|create|"
+                               r"make|update|implement|write|remove)\b", message, re.I)
+            asks = "?" in message or re.search(r"\b(status|ready|update|progress|when|how|what|why|where)\b",
+                                               message, re.I)
+            return [[self._call("list_tickets")] + ([self._call("close_as_answered", reason="It asks for "
+                                                    "information only.")] if asks and not request else [])]
+        if purpose == "status_report":          # look at the tickets, then answer from the facts
             return [[self._call("list_tickets")]]
         if purpose == "triage":                 # Support triages customer feedback
             text = str(meta.get("feedback", "")).lower()
@@ -246,7 +254,9 @@ class MockProvider:
             facts = [l for l in str(meta["facts"]).splitlines() if l.strip()][:8]
             text = (f"Hi {meta.get('human', 'there')}, {meta.get('agent', 'I')} here. Here is where things stand:\n"
                     + "\n".join(facts))
-            if meta.get("ticket_status") == "backlog":
+            if "close_as_answered" in json.dumps(messages):
+                text += "\n\nThis only asks for information, so I've answered it here and closed the ticket."
+            elif meta.get("ticket_status") == "backlog":
                 text += "\n\nThis ticket is in the Backlog, so nobody will work on it until you move it to To do."
         if meta.get("purpose") == "chat" and re.search(r"Filed (T-\d+)", json.dumps(messages)):
             filed = any("Filed T-" in str(b.get("content", "")) for m in messages if m["role"] == "user"

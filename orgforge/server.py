@@ -231,8 +231,7 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
         t = guard(lambda: co.tickets.create(body.project_id, body.title, body.description, co.s.human(role),
                                             type=body.type, priority=body.priority, status=body.status,
                                             role=body.role or None))
-        run_in_background(t["project_id"])
-        return t
+        return t                                # the owner reads it first, then starts the team if it is work
 
     @app.post("/api/tickets/{ref}")
     def change_ticket(ref: str, body: TicketChange, role: str = Depends(auth)) -> dict:

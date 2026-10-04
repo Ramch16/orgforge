@@ -125,10 +125,17 @@ class Chat:
     # ---- replies on tickets -------------------------------------------------
     def ticket_note(self, ticket_id: int, by: str, text: str, filed: bool = False) -> None:
         """The CEO or CTO filed a ticket or commented on one: its owner replies on the ticket."""
-        if self.background:
-            threading.Thread(target=self.answer_ticket, args=(ticket_id, by, text, filed), daemon=True).start()
-        else:
+        def run() -> None:
             self.answer_ticket(ticket_id, by, text, filed)
+            t = self.co.tickets.get(ticket_id)
+            if filed and t["status"] == "todo":   # real work: only now does a finished or releasing product reopen
+                self.co.tickets._reopen(self.co.pipeline.project(t["project_id"]), by)
+            if self.background and t["status"] == "todo" and self.on_work:
+                self.on_work(t["project_id"])    # the team starts only after the owner has read it
+        if self.background:
+            threading.Thread(target=run, daemon=True).start()
+        else:
+            run()
 
     def answer_ticket(self, ticket_id: int, by: str, text: str, filed: bool = False) -> None:
         from .tickets import note
@@ -142,17 +149,23 @@ class Chat:
         facts = self.snapshot(p["id"])
         waiting = {"backlog": "It is in the Backlog, so nobody works on it until the CEO or CTO moves it to To do.",
                    "todo": "It is To do, so the team will pick it up."}.get(t["status"], "")
+        message = text or t["description"] or t["title"]
+        # Only a newly filed ticket can turn out to be just a question; a comment never closes real work.
+        can_close = filed and t["status"] in ("backlog", "todo") and t["origin"] == "human"
         ask = (f"{by} {'filed' if filed else 'commented on'} ticket {t['ticket']}, \"{t['title']}\" "
-               f"({t['status_label']}, owned by {t['department'] or t['role']}):\n\n{text or t['description'] or t['title']}"
+               f"({t['status_label']}, owned by {t['department'] or t['role']}):\n\n{message}"
                f"\n\n{waiting}\n\nCurrent status of project {p['id']}, \"{p['name']}\" (from the company's records):\n"
                f"{facts}\n\nReply to {by} as a comment on the ticket, in a few sentences. Answer any question from the "
                "facts, the tickets and the files. If it asks for work, say plainly what happens next. Do not promise "
-               "anything you cannot check.")
+               "anything you cannot check."
+               + ("\n\nIf the ticket only asks a question or for information and needs no work, answer it and call "
+                  "close_as_answered, so it is not built. If it asks for any work, do not call it." if can_close else ""))
         try:
             res = self.co.runtime.run(agent, ask, self.co.pipeline.workspace(p), project_id=p["id"],
                                       only_tools=READ_TOOLS, chat_with=by,
+                                      extra_tools=["close_as_answered"] if can_close else None,
                                       meta={"purpose": "ticket_reply", "human": by, "facts": facts,
-                                            "ticket_status": t["status"], "message": text})
+                                            "ticket_status": t["status"], "message": message})
             reply = res.text.strip() if res.completed else ""
         except Exception as exc:
             reply = ""
@@ -160,6 +173,12 @@ class Chat:
         if reply:
             note(self.db, t["id"], agent["name"], reply[:4000], kind="comment")
             self.db.log("ticket", f"{agent['name']} replied to {by} on {t['ticket']}.", p["id"], actor=agent["name"])
+            current = self.co.tickets.get(t["id"])
+            if res.answered and current["status"] in ("backlog", "todo"):
+                from .db import now
+                self.db.run("UPDATE tasks SET status='done', type='question', updated_at=? WHERE id=?", now(), t["id"])
+                note(self.db, t["id"], agent["name"], f"Closed as answered: {res.answered} No build work needed.")
+                self.db.log("ticket", f"{agent['name']} answered and closed {t['ticket']}.", p["id"], actor=agent["name"])
 
     @staticmethod
     def _alternate(history: list[dict]) -> list[dict]:

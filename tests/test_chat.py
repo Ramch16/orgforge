@@ -9,6 +9,7 @@ from orgforge.company import Company
 from orgforge.db import now
 from orgforge.llm import MockProvider
 from orgforge.server import create_app
+from orgforge.tickets import TicketError
 from test_tickets import built
 
 
@@ -138,10 +139,36 @@ def test_status_questions_get_answered_from_the_records(tmp_path):
 def test_ticket_owner_replies_to_the_ceo_and_cto(co):
     p = co.pipeline.create_project("APTV clone", "Clone an iOS app.")
     t = co.tickets.create(p["id"], "Check for status", "Is it ready?", "Niki")
-    first = co.tickets.get(t["id"])["history"][-1]
-    assert first["author"] == "Hari" and first["kind"] == "comment"         # owner of the backend ticket
-    assert "Backlog" in first["body"] and "APTV clone" in first["body"]
+    first = next(h for h in co.tickets.get(t["id"])["history"] if h["kind"] == "comment")
+    assert first["author"] == "Hari" and "APTV clone" in first["body"]       # the backend ticket's owner
+    assert co.tickets.get(t["id"])["status"] == "done"                        # just a question: answered, closed
     co.tickets.comment(t["ticket"], "Lucky", "any update?")
     assert co.tickets.get(t["id"])["history"][-1]["author"] == "Hari"
     co.tickets.comment(t["ticket"], "Hari", "Working on it")                # agents' own comments get no reply
     assert co.tickets.get(t["id"])["history"][-1]["body"] == "Working on it"
+
+
+def test_a_question_ticket_is_answered_and_closed_never_built(co):
+    p = built(co)                                                   # waiting for the CTO's release approval
+    [release] = co.pipeline.inbox("cto")
+    t = co.tickets.create(p["id"], "Request for status", "Is the application ready to test and deploy?", "Niki",
+                          priority="urgent", status="todo")
+    t = co.tickets.get(t["id"])
+    assert t["status"] == "done" and t["type"] == "question"
+    assert any(h["body"].startswith("Closed as answered") for h in t["history"])
+    assert co.pipeline.advance(p["id"])["stage"] == "release_approval"      # nothing was built
+    assert co.db.one("SELECT status FROM approvals WHERE id=?", release["id"])["status"] == "pending"
+    assert not co.db.one("SELECT 1 FROM ticket_comments WHERE task_id=? AND body LIKE 'Started%'", t["id"])
+
+
+def test_work_tickets_stay_open_and_comments_never_close_them(co):
+    p = co.pipeline.create_project("Greeter", "A tiny library.")
+    work = co.tickets.create(p["id"], "Add a farewell", "Please add a farewell function.", "Niki")
+    assert co.tickets.get(work["id"])["status"] == "backlog"
+    co.tickets.comment(work["ticket"], "Lucky", "Any update? Is it ready?")
+    assert co.tickets.get(work["id"])["status"] == "backlog"                # still open
+    q = co.tickets.create(p["id"], "Status?", "", "Niki", type="question")
+    assert co.tickets.get(q["id"])["status"] == "done"
+    co.db.run("UPDATE tasks SET status='backlog' WHERE id=?", q["id"])      # even if reopened by hand
+    with pytest.raises(TicketError, match="question"):
+        co.tickets.update(q["id"], "Niki", status="todo")

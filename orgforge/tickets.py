@@ -13,7 +13,7 @@ import json
 
 from .db import DB, now
 
-TYPES = ("task", "bug", "story")
+TYPES = ("task", "bug", "story", "question")      # questions are answered by the owner, never built
 PRIORITIES = ("urgent", "high", "medium", "low")
 STATUSES = ("backlog", "todo", "in_progress", "in_review", "done", "failed", "cancelled")
 STATUS_LABELS = {"backlog": "Backlog", "todo": "To do", "in_progress": "In progress", "in_review": "In review",
@@ -158,10 +158,11 @@ class Tickets:
         note(self.db, tid, by, f"Filed as {type}, {priority} priority, {STATUS_LABELS[status]}, "
                                f"for {self.where(role)}.")
         self.db.log("ticket", f"{by} filed {ticket_key(tid)} for {self.where(role)}: {title}", project_id, actor=by)
-        if status == "todo" and origin == "human":
-            self._reopen(project, by)
         if origin == "human" and self.on_human_note and self._human(by):
+            # The owner reads it first; a question is answered and closed, real work reopens a release.
             self.on_human_note(tid, by, description, True)
+        elif status == "todo" and origin == "human":
+            self._reopen(project, by)
         return self.get(tid)
 
     def comment(self, ref: int | str, by: str, body: str) -> dict:
@@ -224,6 +225,9 @@ class Tickets:
             if t["status"] not in OPEN or status not in (*OPEN, "cancelled"):
                 raise TicketError(f"The team owns {STATUS_LABELS[t['status']].lower()} tickets. "
                                   "You can move tickets between backlog, to do and cancelled.")
+            if status == "todo" and t["type"] == "question":
+                raise TicketError(f"{t['ticket']} is a question: its owner answers it on the ticket, and it is "
+                                  "never built. File a task, bug or story to ask for work.")
             if status == "backlog":
                 blocked = self._open_dependents(t)
                 if blocked:

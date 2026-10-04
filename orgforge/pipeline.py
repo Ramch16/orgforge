@@ -482,7 +482,8 @@ class Pipeline:
         plan = [t for t in tasks if t["origin"] == "plan"]
         if plan and all(t["status"] in ("done", "cancelled") for t in plan):
             done.add("@build")                  # department work that needs the finished product can start
-        return [t for t in tasks if t["status"] == "todo" and all(d in done for d in json.loads(t["depends_on"]))]
+        return [t for t in tasks if t["status"] == "todo" and t["type"] != "question"
+                and all(d in done for d in json.loads(t["depends_on"]))]
 
     def _next_task(self, pid: int) -> dict | None:
         ready = self._ready_tasks(pid)
@@ -515,7 +516,7 @@ class Pipeline:
                                    {"task_id": task["id"]})
                 self._stage(pid, "escalation")
                 return
-        stuck = self.db.all("SELECT key FROM tasks WHERE project_id=? AND origin!='stage' "
+        stuck = self.db.all("SELECT key FROM tasks WHERE project_id=? AND origin!='stage' AND type!='question' "
                             "AND status NOT IN ('done', 'cancelled', 'backlog')", p["id"])
         if stuck:
             raise PipelineError("Tasks cannot start because their dependencies never finish: "

@@ -22,6 +22,7 @@ class RunResult:
     assessment: dict | None = None
     dept_plan: dict | None = None
     filed: list[str] = field(default_factory=list)      # tickets this run filed
+    answered: str | None = None                          # a question ticket closed as answered (the reason)
     completed: bool = False
     turns: int = 0
     tool_log: list[str] = field(default_factory=list)
@@ -153,6 +154,9 @@ class AgentRuntime:
                 {"role": t["role"], "title": str(t["title"])[:200], "description": str(t.get("description", ""))[:4000],
                  "after_build": bool(t.get("after_build"))} for t in tickets][:20]}
             return f"Plan received: {len(result.dept_plan['tickets'])} department ticket(s)."
+        if name == "close_as_answered":
+            result.answered = str(args.get("reason", "")) or "Answered; no work needed."
+            return "The ticket will be closed as answered once you reply."
         if name == "submit_review":
             score = float(args["score"])
             if not math.isfinite(score) or not 0 <= score <= 100 or args["verdict"] not in ("approve", "request_changes"):

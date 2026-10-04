@@ -105,6 +105,11 @@ TOOL_SPECS: dict[str, dict] = {
             ["summary", "tickets"],
         ),
     },
+    "close_as_answered": {
+        "description": "Close a ticket that only asks a question or for information and needs no work, after "
+                       "answering it in your reply. Never use it for a ticket that asks for work.",
+        "input_schema": _obj({"reason": {"type": "string", "description": "Why no work is needed"}}, ["reason"]),
+    },
     "submit_review": {
         "description": "Submit your verdict on the work you were asked to check. Call exactly once.",
         "input_schema": _obj(
