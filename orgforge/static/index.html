@@ -84,7 +84,7 @@
   .bubble.them { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); }
   .bubble.failed { color: var(--bad); } .bubble.pending { color: var(--soft); font-style: italic; }
   .bubble .when { display: block; font-size: .74rem; color: var(--soft); margin-bottom: .15rem; }
-  .bubble button.tlink { border: 0; padding: 0; background: none; color: var(--cobalt); font: inherit; text-decoration: underline; }
+  button.tlink { border: 0; padding: 0; background: none; color: var(--cobalt); font: inherit; text-decoration: underline; }
   .money { font-variant-numeric: tabular-nums; }
   .budgetbar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: .2rem 0 .1rem; }
   .budgetbar i { display: block; height: 100%; background: var(--good); } .budgetbar i.mid { background: var(--warn); } .budgetbar i.over { background: var(--bad); }
@@ -103,6 +103,94 @@
   .report { white-space: pre-wrap; font-size: .92rem; }
   .fb { border-top: 1px solid var(--line); padding: .55rem 0; font-size: .9rem; }
   tr[data-ticket] { cursor: pointer; } tr[data-ticket]:hover td { color: var(--cobalt); }
+  /* ---- layout: sidebar, pages, tiles ---- */
+  :root { --shadow: 0 1px 2px rgb(15 23 42 / .06), 0 1px 1px rgb(15 23 42 / .04); --radius: 10px; }
+  .shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 100vh; }
+  .side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: .15rem; padding: 1rem .7rem; border-right: 1px solid var(--line); background: var(--panel); }
+  .brand { display: flex; align-items: center; gap: .6rem; padding: .2rem .5rem 1rem; }
+  .logo { width: 32px; height: 32px; border-radius: 9px; background: var(--cobalt); color: var(--panel); display: grid; place-items: center; font-weight: 750; flex: none; }
+  .brand b { display: block; line-height: 1.2; overflow-wrap: anywhere; } .brand div span { font-size: .76rem; color: var(--soft); }
+  .nav { display: flex; align-items: center; gap: .65rem; width: 100%; border: 0; background: none; padding: .5rem .6rem; border-radius: 8px; color: var(--soft); font-weight: 560; text-align: left; }
+  .nav svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .nav:hover { background: var(--wash); color: var(--ink); }
+  .nav.on { background: var(--wash); color: var(--cobalt); }
+  .badge { margin-left: auto; min-width: 1.35rem; padding: 0 .4rem; border-radius: 99px; background: var(--bad); color: var(--panel); font-size: .74rem; font-weight: 750; text-align: center; line-height: 1.35rem; }
+  .side .me { margin-top: auto; border-top: 1px solid var(--line); padding: .8rem .5rem 0; font-size: .86rem; display: flex; justify-content: space-between; align-items: center; gap: .4rem; }
+  .content { padding: 1.7rem 2.1rem 3rem; max-width: 1260px; width: 100%; }
+  .page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+  .page-head h1 { font-size: 1.55rem; letter-spacing: -.02em; } .page-head p { margin: .25rem 0 0; color: var(--soft); }
+  .back { border: 0; background: none; color: var(--soft); padding: 0; margin-bottom: .4rem; font-size: .88rem; }
+  .back:hover { color: var(--cobalt); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .8rem; margin-bottom: 1.4rem; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: .9rem 1rem; box-shadow: var(--shadow); text-align: left; width: 100%; }
+  button.tile:hover { border-color: var(--cobalt); }
+  .tile .n { display: block; font-size: 1.75rem; font-weight: 720; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .tile .l { display: block; color: var(--soft); font-size: .84rem; }
+  .tile.alert { border-color: var(--bad); } .tile.alert .n { color: var(--bad); }
+  .cols { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 1.2rem; align-items: start; }
+  @media (max-width: 1080px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+  .card { box-shadow: var(--shadow); border-radius: var(--radius); margin-bottom: 1rem; }
+  .card-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-bottom: .5rem; }
+  .card-head h2 { margin: 0; font-size: 1rem; }
+  .list-row { display: flex; align-items: center; gap: .8rem; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); padding: .6rem .3rem; border-radius: 0; color: var(--ink); }
+  .list-row:last-child { border-bottom: 0; }
+  button.list-row:hover { background: var(--wash); }
+  .grow { flex: 1; min-width: 0; }
+  .ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+  .pcard { text-align: left; width: 100%; padding: 1rem 1.1rem; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); display: block; color: var(--ink); }
+  .pcard:hover { border-color: var(--cobalt); }
+  .ptitle { font-size: 1.03rem; font-weight: 650; }
+  .progress { display: block; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: .6rem 0 .35rem; }
+  .progress i { display: block; height: 100%; background: var(--cobalt); border-radius: 3px; }
+  .progress.slim { height: 4px; margin: .3rem 0 0; }
+  .stepper { display: flex; overflow-x: auto; padding: .2rem 0 .5rem; margin: .2rem 0 1.1rem; }
+  .step { flex: 1 0 92px; position: relative; text-align: center; font-size: .74rem; color: var(--soft); padding: 22px .2rem 0; line-height: 1.25; }
+  .step::before { content: ""; position: absolute; top: 8px; left: 0; right: 0; height: 3px; background: var(--line); }
+  .step:first-child::before { left: 50%; } .step:last-child::before { right: 50%; }
+  .step i { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); width: 15px; height: 15px; border-radius: 50%; background: var(--panel); border: 3px solid var(--line); z-index: 1; }
+  .step.past::before, .step.now::before { background: var(--cobalt); }
+  .step.past i { background: var(--cobalt); border-color: var(--cobalt); }
+  .step.now i { border-color: var(--warn); background: var(--warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 22%, transparent); }
+  .step.now { color: var(--ink); font-weight: 650; }
+  .actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .avatar { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: .92rem; flex: none; }
+  .dept-head { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; margin: 1.2rem 0 .5rem; }
+  .dept-head h2 { margin: 0; font-size: 1rem; }
+  .people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(255px, 1fr)); gap: .7rem; }
+  .dgrid { columns: 330px; column-gap: 1rem; }
+  .dgrid .card { break-inside: avoid; display: inline-block; width: 100%; margin: 0 0 1rem; }
+  .prow { display: flex; gap: .7rem; align-items: center; padding: .55rem 0; border-top: 1px solid var(--line); }
+  .prow.gone { opacity: .55; }
+  .prow .bar { width: 46px; }
+  .person { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: .75rem .85rem; display: flex; gap: .7rem; align-items: flex-start; box-shadow: var(--shadow); }
+  .person.gone { opacity: .6; }
+  .person .bar { width: 60px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; background: var(--panel); padding: .35rem .8rem; color: var(--soft); font-weight: 600; }
+  .seg button.on { background: var(--wash); color: var(--cobalt); }
+  .empty { text-align: center; padding: 1.6rem 1rem; color: var(--soft); }
+  .summary { white-space: pre-wrap; font-size: .88rem; color: var(--soft); margin: .45rem 0 .2rem; max-height: 4.5em; overflow: hidden; }
+  .summary.open { max-height: 28rem; overflow: auto; }
+  .decision { border-left-width: 4px; }
+  .kind { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--soft); }
+  .day { font-size: .76rem; font-weight: 700; color: var(--soft); text-transform: uppercase; letter-spacing: .05em; margin: 1rem 0 .2rem; }
+  .ev { display: flex; gap: .7rem; padding: .35rem 0; border-bottom: 1px solid var(--line); font-size: .88rem; }
+  .ev .t { color: var(--soft); flex: none; width: 4.8rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .ev .a { font-weight: 600; flex: none; }
+  #error { position: fixed; right: 1rem; bottom: 1rem; max-width: min(420px, calc(100vw - 2rem)); min-height: 0; background: var(--bad); color: var(--panel); padding: .7rem 1rem; border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .22); z-index: 50; }
+  #error:empty { display: none; }
+  #signin { margin-top: 14vh; }
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: minmax(0, 1fr); }
+    .side { position: sticky; top: 0; height: auto; flex-direction: row; align-items: center; overflow-x: auto; padding: .45rem .5rem; z-index: 5; border-right: 0; border-bottom: 1px solid var(--line); }
+    .brand { padding: 0 .3rem 0 0; } .brand div { display: none; }
+    .nav { width: auto; white-space: nowrap; padding: .4rem .6rem; } .nav svg { display: none; }
+    .badge { margin-left: .3rem; }
+    .side .me { margin: 0 0 0 auto; border: 0; padding: 0 .2rem; } .side .me .who { display: none; }
+    .content { padding: 1.1rem 1rem 3rem; }
+    .page-head h1 { font-size: 1.3rem; }
+  }
 </style>
 </head>
 <body>
@@ -115,31 +203,49 @@
 </div>
 
 <div id="app" hidden>
-  <header>
-    <div><h1 id="company"></h1><p id="whoami"></p></div>
-    <div class="row"><span id="error"></span><button id="signout">Sign out</button></div>
-  </header>
-  <main>
-    <aside id="decisions">
-      <h2>Waiting for a decision</h2>
-      <div id="inbox"></div>
-    </aside>
-    <div>
-      <section>
-        <h2>Projects</h2>
-        <div class="card">
-          <h3>New idea or project</h3>
-          <div style="margin:.5rem 0"><input id="p-name" placeholder="Name"></div>
-          <textarea id="p-brief" placeholder="Describe the idea: the problem, who it is for, and what it should do."></textarea>
-          <label class="muted row" style="margin-top:.5rem;flex-wrap:nowrap;align-items:flex-start"><input type="checkbox" id="p-idea" checked style="width:auto;margin-top:.25rem">
-            <span>Assess it first: Ram checks feasibility, internal use versus selling, and revenue with Engineering, Marketing and Legal. Lucky signs off, then Niki decides.</span></label>
-          <div class="row" style="margin-top:.5rem"><button class="primary" id="p-start">Submit idea</button>
-            <label class="muted row" style="flex-wrap:nowrap">Budget $<input id="p-budget" type="number" min="0" step="5" style="width:6rem" placeholder="default"></label></div>
+  <div class="shell">
+    <nav class="side" aria-label="Main">
+      <div class="brand"><span class="logo" id="logo" aria-hidden="true">O</span><div><b id="company"></b><span>OrgForge</span></div></div>
+      <button class="nav" data-go="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
+      <button class="nav" data-go="decisions"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg>Decisions<span class="badge" id="b-decisions" hidden></span></button>
+      <button class="nav" data-go="projects"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Projects</button>
+      <button class="nav" data-go="tickets"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></svg>Tickets</button>
+      <button class="nav" data-go="team"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg>Team</button>
+      <button class="nav" data-go="costs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M17 6.5c0-1.9-2.2-3-5-3s-5 1.3-5 3.5 2.2 3 5 3.5 5 1.5 5 3.5-2.2 3.5-5 3.5-5-1.1-5-3"/></svg>Costs</button>
+      <button class="nav" data-go="activity"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Activity</button>
+      <div class="me"><span class="who" id="whoami"></span><button class="quiet" id="signout">Sign out</button></div>
+    </nav>
+
+    <div class="content" role="main">
+      <section class="view" data-view="home">
+        <div class="page-head"><div><h1 id="greet"></h1><p id="greet-sub"></p></div>
+          <button class="primary" data-new-idea>New idea</button></div>
+        <div class="tiles" id="tiles"></div>
+        <div class="cols">
+          <div>
+            <div class="card"><div class="card-head"><h2>Needs your decision</h2><button class="quiet" data-go="decisions">See all</button></div><div id="home-decisions"></div></div>
+            <div class="card"><div class="card-head"><h2>Projects</h2><button class="quiet" data-go="projects">See all</button></div><div id="home-projects"></div></div>
+          </div>
+          <div class="card"><div class="card-head"><h2>Recent activity</h2><button class="quiet" data-go="activity">See all</button></div><div id="home-activity"></div></div>
         </div>
-        <div id="projects"></div>
       </section>
-      <section>
-        <div class="row" style="justify-content:space-between;margin-bottom:.7rem"><h2 style="margin:0">Tickets</h2>
+
+      <section class="view" data-view="decisions" hidden>
+        <div class="page-head"><div><h1>Decisions</h1><p>Approvals that only Niki or Lucky can make. The team keeps working until one is needed.</p></div>
+          <div class="seg" role="group" aria-label="Show"><button data-dfilter="mine" class="on">Mine</button><button data-dfilter="all">Everyone's</button></div></div>
+        <div id="inbox"></div>
+      </section>
+
+      <section class="view" data-view="projects" hidden>
+        <div class="page-head"><div><h1>Projects</h1><p>Ideas being assessed, products being built, and releases.</p></div>
+          <button class="primary" data-new-idea>New idea</button></div>
+        <div class="pgrid" id="projects"></div>
+      </section>
+
+      <section class="view" data-view="project" hidden><div id="project-view"></div></section>
+
+      <section class="view" data-view="tickets" hidden>
+        <div class="page-head"><div><h1>Tickets</h1><p>Every piece of work, from every department.</p></div>
           <button class="primary" id="t-new">New ticket</button></div>
         <div class="filters">
           <select id="f-project" aria-label="Project"></select>
@@ -149,30 +255,45 @@
         </div>
         <div class="board" id="board"></div>
       </section>
-      <section>
-        <h2>Costs</h2>
+
+      <section class="view" data-view="team" hidden>
+        <div class="page-head"><div><h1>Team</h1><p id="team-sub"></p></div>
+          <div class="actions" style="align-items:center"><label class="muted row" style="flex-wrap:nowrap"><input type="checkbox" id="show-fired" style="width:auto"> Former agents</label>
+            <button class="primary" data-hire>Hire</button></div></div>
+        <div id="people"></div>
+      </section>
+
+      <section class="view" data-view="costs" hidden>
+        <div class="page-head"><div><h1>Costs</h1><p>What the AI work has cost, estimated from Anthropic list prices.</p></div></div>
         <div id="costs"></div>
       </section>
-      <section>
-        <h2>People</h2>
-        <div id="people"></div>
-        <div class="card">
-          <h3>Hire an agent</h3>
-          <div class="grid2" style="margin:.5rem 0">
-            <select id="h-role" aria-label="Role"></select>
-            <input id="h-name" placeholder="Name (blank: the team picks one)">
-          </div>
-          <button id="h-go">Hire</button>
-          <label class="muted" style="margin-left:.75rem"><input type="checkbox" id="show-fired" style="width:auto"> Show former agents</label>
-        </div>
-      </section>
-      <section>
-        <h2>Activity</h2>
+
+      <section class="view" data-view="activity" hidden>
+        <div class="page-head"><div><h1>Activity</h1><p>The latest events across the company.</p></div>
+          <select id="a-project" aria-label="Project" style="width:auto"></select></div>
         <div class="card" id="log"></div>
       </section>
     </div>
-  </main>
+  </div>
+  <div id="error" role="alert"></div>
 </div>
+
+<dialog id="idea-dlg">
+  <div class="row" style="justify-content:space-between"><h2 style="margin:0">New idea or project</h2><button class="quiet" data-close="idea-dlg">Close</button></div>
+  <label class="field"><span>Name</span><input id="p-name" placeholder="e.g. Leave Tracker"></label>
+  <label class="field"><span>Description</span><textarea id="p-brief" rows="5" placeholder="The problem, who it is for, and what it should do."></textarea></label>
+  <label class="muted row" style="flex-wrap:nowrap;align-items:flex-start;margin:.4rem 0"><input type="checkbox" id="p-idea" checked style="width:auto;margin-top:.25rem">
+    <span>Assess it first: Ram checks feasibility, internal use versus selling, and revenue with Engineering, Marketing and Legal. Lucky signs off, then Niki decides.</span></label>
+  <label class="field"><span>Budget in US dollars (blank: the company default)</span><input id="p-budget" type="number" min="0" step="1" placeholder="default"></label>
+  <div class="row" style="margin-top:.6rem"><button class="primary" id="p-start">Submit idea</button><button data-close="idea-dlg">Cancel</button></div>
+</dialog>
+
+<dialog id="hire-dlg">
+  <div class="row" style="justify-content:space-between"><h2 style="margin:0">Hire an agent</h2><button class="quiet" data-close="hire-dlg">Close</button></div>
+  <label class="field"><span>Role</span><select id="h-role"></select></label>
+  <label class="field"><span>Name (blank: a teammate picks one)</span><input id="h-name"></label>
+  <div class="row" style="margin-top:.6rem"><button class="primary" id="h-go">Hire</button><button data-close="hire-dlg">Cancel</button></div>
+</dialog>
 
 <dialog id="new-dlg">
   <h2>New ticket</h2>
@@ -248,88 +369,256 @@ async function refresh(force) {
   if (openTicketId && !force) loadTicket(openTicketId).catch(() => {});
 }
 
-function render() {
-  const me = state.you.role;
-  $("company").textContent = state.company;
-  $("whoami").textContent = `Signed in as ${state.you.name}, ${me.toUpperCase()}`;
-  document.title = `${state.approvals.filter(a => a.required_role === me).length || ""} ${state.company}`.trim();
+// ---- pages and navigation ----
+const VIEWS = ["home", "decisions", "projects", "project", "tickets", "team", "costs", "activity"];
+let view = "home", viewId = null, dfilter = "mine";
+const expanded = new Set(), showDone = new Set(), painted = {}, projReports = {};
+const WAITING = ["idea_review", "idea_decision", "plan_approval", "prd_approval", "architecture_approval", "release_approval", "signoff"];
+const TROUBLE = ["escalation", "contract_review", "release_blocked", "paused"];
+const KIND = { prd: "Requirements", architecture: "Design and plan", release: "Release", signoff: "Sign-off", escalation: "Escalation",
+  feasibility: "Technical sign-off", idea_decision: "Idea decision", plan: "Plan of action", budget: "Budget", hire: "Hiring",
+  hr: "People", contract: "Acceptance checks", release_blocked: "Release blocked" };
 
-  $("inbox").innerHTML = state.approvals.length ? state.approvals.map(a => {
-    const mine = a.required_role === me;
-    return `<div class="card decision ${mine ? "" : "other"}">
-      <h3>${esc(a.title)}</h3>
-      <div class="muted">${mine ? "Your call" : `With ${esc(state.humans[a.required_role])} (${a.required_role.toUpperCase()})`}</div>
-      <pre>${esc(a.summary)}</pre>
-      ${["release", "signoff"].includes(a.kind) && a.project_id ? `<button class="quiet" data-review="${a.project_id}">Open product review</button>` : ""}
-      ${mine ? `<textarea data-draft="${a.id}" placeholder="${a.kind === "idea_decision" ? "Your reasons (optional)" : "What should change? Required to send back."}">${esc(drafts[a.id] || "")}</textarea>
-      <div class="row" style="margin-top:.5rem">
-        ${a.kind === "idea_decision" ? `
-        <button class="primary" data-decide="approved" data-choice="internal" data-id="${a.id}">Build for internal use</button>
-        <button class="primary" data-decide="approved" data-choice="commercial" data-id="${a.id}">Build to sell</button>
-        <button data-decide="rejected" data-choice="park" data-id="${a.id}">Park</button>
-        <button data-decide="rejected" data-choice="drop" data-id="${a.id}">Drop</button>` : `
-        ${a.kind === "release_blocked" ? `<span class="muted">Checks must pass before release. Send repair guidance to retry.</span>` : `<button class="primary" data-decide="approved" data-id="${a.id}">Approve</button>`}
-        <button data-decide="rejected" data-id="${a.id}">Send back</button>`}
-      </div>` : ""}
-    </div>`;
-  }).join("") : `<div class="card muted">Nothing needs you right now. The team keeps working until it does.</div>`;
+function paint(id, html) { if (painted[id] !== html) { painted[id] = html; $(id).innerHTML = html; } }
+function badge(id, n) { $(id).hidden = !n; $(id).textContent = n || ""; }
+function hue(s) { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
+function avatar(name, dept) { return `<span class="avatar" style="background:hsl(${hue(dept)} 42% 46%)" aria-hidden="true">${esc((name || "?")[0].toUpperCase())}</span>`; }
+function ago(ts) {
+  const s = (Date.now() - new Date(ts).getTime()) / 1000;
+  return s < 60 ? "just now" : s < 3600 ? `${Math.floor(s / 60)}m ago` : s < 86400 ? `${Math.floor(s / 3600)}h ago` : `${Math.floor(s / 86400)}d ago`;
+}
+function tone(stage) { return stage === "done" ? "done" : TROUBLE.includes(stage) ? "fired" : WAITING.includes(stage) ? "probation" : stage === "dropped" || stage === "parked" ? "cancelled" : "in_review"; }
+function stageChip(p) { return `<span class="chip ${tone(p.stage)}">${esc(p.stage_label)}</span>`; }
+function chips(p) {
+  return (p.version ? ` <span class="chip done">v${p.version}</span>` : "")
+    + (p.purpose ? ` <span class="chip ${p.purpose === "commercial" ? "active" : "in_review"}">${p.purpose === "commercial" ? "To sell" : "Internal"}</span>` : "");
+}
+function steps(p) {
+  const order = state.stages.map(s => s.id), ideaPath = !!p.purpose || state.idea_stages.includes(p.stage) || ["parked", "dropped"].includes(p.stage);
+  const list = state.stages.filter(s => ![...TROUBLE, "parked", "dropped"].includes(s.id) && (ideaPath || !state.idea_stages.includes(s.id)));
+  const where = p.stage === "paused" ? (p.paused_stage || "build") : ["parked", "dropped"].includes(p.stage) ? "idea_decision" : p.stage;
+  let at = list.findIndex(s => s.id === where);
+  if (at < 0) { const pos = order.indexOf(where); list.forEach((s, i) => { if (order.indexOf(s.id) <= pos) at = i; }); }
+  const done = p.stage === "done";
+  return { list, at: Math.max(0, at), done, pct: done ? 100 : Math.round(Math.max(0, at) / (list.length - 1) * 100) };
+}
+function counts(pid) {
+  const t = state.tickets.filter(x => x.project_id === pid && x.status !== "cancelled");
+  return { total: t.length, done: t.filter(x => x.status === "done").length, open: t.filter(x => ["todo", "in_progress", "in_review", "failed"].includes(x.status)).length };
+}
+function route() {
+  const [v, id] = (location.hash.replace(/^#\/?/, "") || "home").split("/");
+  view = VIEWS.includes(v) ? v : "home";
+  viewId = id ? Number(id) : null;
+  if (view === "project" && !viewId) view = "projects";
+  document.querySelectorAll(".view").forEach(s => s.hidden = s.dataset.view !== view);
+  document.querySelectorAll(".nav").forEach(n => n.classList.toggle("on", n.dataset.go === view || (view === "project" && n.dataset.go === "projects")));
+  if (state) render();
+}
+window.addEventListener("hashchange", () => { route(); window.scrollTo(0, 0); });
 
-  const order = state.stages.map(s => s.id);
-  $("projects").innerHTML = state.projects.map(p => {
-    const at = order.indexOf(p.stage);
-    const skip = ["escalation", "contract_review", "release_blocked", "parked", "dropped", ...(p.purpose || state.idea_stages.includes(p.stage) ? [] : state.idea_stages)];
-    const track = state.stages.filter(s => !skip.includes(s.id)).map(s => {
-      const i = order.indexOf(s.id);
-      return `<span title="${esc(s.label)}" class="${p.stage === "done" || i < at ? "past" : i === at ? "now" : ""}"></span>`;
-    }).join("");
-    const tasks = p.tasks.length ? `<table><tr><th>Ticket</th><th>Task</th><th>Owner</th><th>Status</th></tr>${p.tasks.map(t =>
-      `<tr data-ticket="${t.id}"><td class="key">T-${t.id}</td><td>${esc(t.title)}${t.attempts ? ` <span class="muted">sent back ${t.attempts}×</span>` : ""}</td>
-       <td>${esc(t.assignee || "")}</td><td><span class="chip ${t.status}">${esc(state.ticket_meta.statuses[t.status] || t.status)}</span></td></tr>`).join("")}</table>` : "";
-    return `<div class="card">
-      <div class="row" style="justify-content:space-between"><h3>${esc(p.name)} ${p.version ? `<span class="chip done">v${p.version}</span>` : ""} ${p.purpose ? `<span class="chip ${p.purpose === "commercial" ? "active" : "in_review"}">${p.purpose === "commercial" ? "To sell" : "Internal"}</span>` : ""}</h3><span class="muted">${esc(p.stage_label)}</span></div>
-      <div class="track">${track}</div>
-      <div class="muted">${esc(p.workspace)}</div>${tasks}
-      ${budgetLine(p)}
-      <div class="row">
-      ${p.stage === "parked" ? (me === "ceo" ? `<button class="quiet" data-revisit="${p.id}">Revisit this idea</button>` : "")
-        : ["done", "dropped", "paused"].includes(p.stage) ? "" : `<button class="quiet" data-run="${p.id}">Resume work</button>`}
-      ${state.idea_stages.includes(p.stage) && p.stage !== "plan_approval" ? "" : `<button class="quiet" data-review="${p.id}">Review product</button>`}
-      <button class="quiet" data-report="${p.id}">Status report</button>
-      ${built(p) ? `<button class="quiet" data-feedback="${p.id}">Customer feedback</button>` : ""}
+function decisionCard(a, me) {
+  const mine = a.required_role === me, p = state.projects.find(x => x.id === a.project_id), open = expanded.has(a.id);
+  const long = a.summary.length > 220 || a.summary.split("\n").length > 3;
+  return `<div class="card decision ${mine ? "" : "other"}">
+    <div class="row" style="justify-content:space-between"><span class="kind">${esc(KIND[a.kind] || a.kind)}${p ? ` · <button class="quiet" style="padding:0" data-project="${p.id}">${esc(p.name)}</button>` : ""}</span>
+      <span class="muted">${mine ? "Your call" : `With ${esc(state.humans[a.required_role])} (${a.required_role.toUpperCase()})`} · ${ago(a.created_at)}</span></div>
+    <h3 style="margin-top:.3rem">${esc(a.title)}</h3>
+    <div class="summary ${open ? "open" : ""}">${linkTickets(esc(a.summary))}</div>
+    ${long ? `<button class="quiet" style="padding:0" data-expand-toggle="${a.id}">${open ? "Show less" : "Read more"}</button>` : ""}
+    ${["release", "signoff"].includes(a.kind) && a.project_id ? `<button class="quiet" style="padding:0;margin-left:.8rem" data-review="${a.project_id}">Open product review</button>` : ""}
+    ${mine ? `<textarea data-draft="${a.id}" style="margin-top:.6rem" rows="2" placeholder="${a.kind === "idea_decision" ? "Your reasons (optional)" : ["hire", "budget", "hr"].includes(a.kind) ? "Note (optional)" : "What should change? Required to send back."}">${esc(drafts[a.id] || "")}</textarea>
+    <div class="actions" style="margin-top:.5rem">
+      ${a.kind === "idea_decision" ? `
+      <button class="primary" data-decide="approved" data-choice="internal" data-id="${a.id}">Build for internal use</button>
+      <button class="primary" data-decide="approved" data-choice="commercial" data-id="${a.id}">Build to sell</button>
+      <button data-decide="rejected" data-choice="park" data-id="${a.id}">Park</button>
+      <button data-decide="rejected" data-choice="drop" data-id="${a.id}">Drop</button>` : `
+      ${a.kind === "release_blocked" ? `<span class="muted">Checks must pass before release. Send repair guidance to retry.</span>` : `<button class="primary" data-decide="approved" data-id="${a.id}">Approve</button>`}
+      <button data-decide="rejected" data-id="${a.id}">${a.kind === "budget" ? "Stop work" : a.kind === "hire" ? "Decline" : "Send back"}</button>`}
+    </div>` : ""}
+  </div>`;
+}
+
+function projectRow(p) {
+  const s = steps(p), c = counts(p.id);
+  return `<button class="list-row" data-project="${p.id}">
+    <span class="grow"><span class="row" style="justify-content:space-between;flex-wrap:nowrap"><b class="ellip">${esc(p.name)}</b>${stageChip(p)}</span>
+      <span class="progress slim"><i style="width:${s.pct}%"></i></span>
+      <span class="muted">${c.done} of ${c.total} tickets done · ${usd(spentOf(p.id))}${p.budget ? ` of ${usd(p.budget)}` : ""}</span></span></button>`;
+}
+
+function renderHome(me, mine) {
+  const h = new Date().getHours(), active = state.projects.filter(p => !["done", "dropped", "parked"].includes(p.stage));
+  const working = state.tickets.filter(t => ["in_progress", "in_review"].includes(t.status)).length;
+  const todo = state.tickets.filter(t => t.status === "todo").length;
+  $("greet").textContent = `${h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"}, ${state.you.name}`;
+  $("greet-sub").textContent = `${mine.length ? `${mine.length} decision${mine.length > 1 ? "s" : ""} waiting for you` : "Nothing needs you right now"} · ${active.length} active project${active.length === 1 ? "" : "s"}`;
+  paint("tiles", `
+    <button class="tile ${mine.length ? "alert" : ""}" data-go="decisions"><span class="n">${mine.length}</span><span class="l">Waiting for you</span></button>
+    <button class="tile" data-go="projects"><span class="n">${active.length}</span><span class="l">Active projects</span></button>
+    <button class="tile" data-go="tickets"><span class="n">${working}</span><span class="l">Being worked on · ${todo} to do</span></button>
+    <button class="tile" data-go="costs"><span class="n money">${usd(state.costs.total.cost)}</span><span class="l">Spent so far</span></button>`);
+  paint("home-decisions", mine.slice(0, 4).map(a => {
+    const p = state.projects.find(x => x.id === a.project_id);
+    return `<button class="list-row" data-go="decisions" data-expand="${a.id}"><span class="grow"><span class="kind">${esc(KIND[a.kind] || a.kind)}</span>
+      <span class="ellip" style="display:block">${esc(a.title)}</span></span><span class="muted">${p ? esc(p.name) : ""}</span></button>`;
+  }).join("") + (mine.length > 4 ? `<p class="muted">and ${mine.length - 4} more</p>` : "") || `<div class="empty">Nothing needs you right now. The team keeps working until it does.</div>`);
+  paint("home-projects", state.projects.filter(p => p.stage !== "dropped").slice(0, 6).map(projectRow).join("")
+    || `<div class="empty">No projects yet. <button class="quiet" data-new-idea>Submit your first idea</button></div>`);
+  paint("home-activity", state.events.slice(0, 14).map(e => `<div class="ev"><span class="t">${ago(e.ts).replace(" ago", "")}</span>
+    <span class="grow"><span class="a">${esc(e.actor)}</span> ${linkTickets(esc(e.message))}</span></div>`).join("") || `<div class="empty">Nothing yet.</div>`);
+}
+
+function renderProjects() {
+  paint("projects", state.projects.map(p => {
+    const s = steps(p), c = counts(p.id), next = (state.next_steps || {})[p.stage] || "";
+    return `<button class="pcard" data-project="${p.id}">
+      <span class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><span class="ptitle">${esc(p.name)}</span><span>${chips(p)}</span></span>
+      <span class="row" style="margin-top:.35rem">${stageChip(p)}</span>
+      <span class="progress"><i style="width:${s.pct}%"></i></span>
+      <span class="muted" style="display:block">${c.done} of ${c.total} tickets done${c.open ? ` · ${c.open} open` : ""} · ${usd(spentOf(p.id))}${p.budget ? ` of ${usd(p.budget)}` : ""}</span>
+      ${next ? `<span style="display:block;margin-top:.45rem;font-size:.9rem">Next: ${esc(next)}</span>` : ""}
+    </button>`;
+  }).join("") || `<div class="card empty" style="grid-column:1/-1">No projects yet. Submit an idea to get started.<br><br><button class="primary" data-new-idea>New idea</button></div>`);
+}
+
+async function loadProjectReport(pid) {
+  const now = Date.now();
+  if (projReports[pid] && now - projReports[pid].at < 8000) return;
+  projReports[pid] = { at: now, list: (projReports[pid] || {}).list || [] };
+  try { projReports[pid].list = await api(`/api/projects/${pid}/reports`); if (view === "project" && viewId === pid) renderProject(); } catch {}
+}
+
+function renderProject() {
+  if (view !== "project") return;
+  const me = state.you.role, p = state.projects.find(x => x.id === viewId);
+  if (!p) return paint("project-view", `<button class="back" data-go="projects">← Projects</button><div class="card empty">That project does not exist.</div>`);
+  loadProjectReport(p.id);
+  const s = steps(p), c = counts(p.id), next = (state.next_steps || {})[p.stage] || "";
+  const pm = state.departments.flatMap(d => d.agents).find(a => a.role === "product_manager" && a.status !== "fired");
+  const decisions = state.approvals.filter(a => a.project_id === p.id);
+  const tickets = state.tickets.filter(t => t.project_id === p.id);
+  const open = tickets.filter(t => !["done", "cancelled"].includes(t.status)), closed = tickets.filter(t => ["done", "cancelled"].includes(t.status));
+  const row = t => `<tr data-ticket="${t.id}"><td class="key">${esc(t.ticket)}</td><td>${esc(t.title)}</td><td class="muted">${esc(t.department)}</td>
+    <td>${esc(t.assignee || "")}</td><td><span class="chip ${t.status}">${esc(t.status_label)}</span></td></tr>`;
+  const report = ((projReports[p.id] || {}).list || []).find(r => r.status === "sent");
+  const events = state.events.filter(e => e.project_id === p.id).slice(0, 10);
+  paint("project-view", `
+    <button class="back" data-go="projects">← Projects</button>
+    <div class="page-head"><div><h1>${esc(p.name)}${chips(p)}</h1><p>${stageChip(p)} <span style="margin-left:.3rem">${c.done} of ${c.total} tickets done · ${usd(spentOf(p.id))} spent</span></p></div>
+      <div class="actions">
+        ${state.idea_stages.includes(p.stage) && p.stage !== "plan_approval" ? "" : `<button class="primary" data-review="${p.id}">Review product</button>`}
+        <button data-report="${p.id}">Status report</button>
+        ${built(p) ? `<button data-feedback="${p.id}">Customer feedback</button>` : ""}
+        ${pm ? `<button data-chat="${pm.id}">Message ${esc(pm.name)}</button>` : ""}
+        ${p.stage === "parked" && me === "ceo" ? `<button data-revisit="${p.id}">Revisit this idea</button>` : ""}
+        ${["done", "dropped", "paused", "parked"].includes(p.stage) ? "" : `<button class="quiet" data-run="${p.id}">Resume work</button>`}
+      </div></div>
+    <div class="stepper">${s.list.map((st, i) => `<div class="step ${s.done || i < s.at ? "past" : i === s.at ? "now" : ""}"><i></i>${esc(st.label)}</div>`).join("")}</div>
+    <div class="cols">
+      <div>
+        ${next || decisions.length ? `<div class="card"><div class="card-head"><h2>Next step</h2></div><p style="margin:0 0 .3rem">${esc(next)}</p>
+          ${TROUBLE.includes(p.stage) ? `<p class="muted" style="color:var(--bad)">${esc(p.stage_label)}</p>` : ""}</div>` : ""}
+        ${decisions.map(a => decisionCard(a, me)).join("")}
+        <div class="card"><div class="card-head"><h2>Tickets</h2><span class="muted">${open.length} open · ${closed.length} closed</span></div>
+          ${open.length ? `<table>${open.map(row).join("")}</table>` : `<p class="muted">No open tickets.</p>`}
+          ${closed.length ? `<button class="quiet" style="padding:.4rem 0 0" data-showdone="${p.id}">${showDone.has(p.id) ? "Hide" : "Show"} ${closed.length} closed ticket${closed.length === 1 ? "" : "s"}</button>
+            ${showDone.has(p.id) ? `<table style="margin-top:.4rem">${closed.map(row).join("")}</table>` : ""}` : ""}
+        </div>
       </div>
-    </div>`;
-  }).join("") || `<p class="muted">No projects yet. Write a brief above to start one.</p>`;
+      <div>
+        <div class="card"><div class="card-head"><h2>Budget</h2></div>${budgetLine(p)}</div>
+        <div class="card"><div class="card-head"><h2>Latest status report</h2><button class="quiet" data-report="${p.id}">All reports</button></div>
+          ${report ? `<div class="muted">${esc(report.author)} · ${ago(report.created_at)} · ${esc(report.trigger)}</div><div class="report" style="margin-top:.4rem;max-height:16rem;overflow:auto">${linkTickets(esc(report.body))}</div>`
+            : `<p class="muted">No report yet. <button class="quiet" data-report="${p.id}">Ask for one</button></p>`}</div>
+        <div class="card"><div class="card-head"><h2>Activity</h2></div>
+          ${events.map(e => `<div class="ev"><span class="t">${ago(e.ts).replace(" ago", "")}</span><span class="grow"><span class="a">${esc(e.actor)}</span> ${linkTickets(esc(e.message))}</span></div>`).join("") || `<p class="muted">Nothing yet.</p>`}</div>
+      </div>
+    </div>`);
+}
 
-  const showFired = $("show-fired").checked;
-  $("people").innerHTML = state.departments.map(d => {
+function renderPeople(me) {
+  const showFired = $("show-fired").checked, staff = state.departments.flatMap(d => d.agents.filter(a => a.status !== "fired"));
+  $("team-sub").textContent = `${staff.length} agents in ${state.departments.filter(d => d.agents.some(a => a.status !== "fired")).length} departments, led by ${state.humans.ceo} (CEO) and ${state.humans.cto} (CTO).`;
+  paint("people", `<div class="dgrid">${state.departments.map(d => {
     const canManage = me === "ceo" || d.reports_to === "cto";
-    const rows = d.agents.filter(a => showFired || a.status !== "fired").map(a => {
-      const s = a.score, cls = s == null ? "" : s < 45 ? "low" : s < 65 ? "mid" : "";
-      const score = s == null ? `<span class="muted">no reviews yet</span>` : `<span class="bar"><i class="${cls}" style="width:${s}%"></i></span>${s.toFixed(0)} <span class="muted">(${a.evals})</span>`;
-      const chat = (state.chats || []).find(c => c.agent_id === a.id);
-      const talk = a.status === "fired" ? "" : `<button class="quiet" data-chat="${a.id}">${chat && chat.pending ? "Replying…" : "Message"}</button>`;
-      const actions = talk + (!canManage ? "" : a.status === "fired"
-        ? `<button class="quiet" data-rehire="${a.id}">Rehire</button>`
-        : `<button class="quiet" data-fire="${a.id}" data-name="${esc(a.name)}">Replace</button>`);
-      return `<tr class="${a.status === "fired" ? "gone" : ""}"><td>${esc(a.name)}${a.generation > 1 ? ` <span class="muted">gen ${a.generation}</span>` : ""}</td>
-        <td>${esc(a.role_title)}</td><td><span class="chip ${a.status}">${a.status}</span></td><td>${score}</td>
-        <td class="muted">${esc(a.model)}</td><td>${actions}</td></tr>`;
-    }).join("");
-    return `<div class="card"><div class="row" style="justify-content:space-between"><h3>${esc(d.name)}</h3>
-      <span class="muted">Reports to ${esc(state.humans[d.reports_to])}</span></div>
-      ${rows ? `<table><tr><th>Name</th><th>Role</th><th>Standing</th><th>Score</th><th>Model</th><th></th></tr>${rows}</table>` : `<p class="muted">No agents. Hire one below.</p>`}</div>`;
-  }).join("");
+    const people = d.agents.filter(a => showFired || a.status !== "fired");
+    if (!people.length && !showFired) return "";
+    return `<div class="card"><div class="card-head"><h2>${esc(d.name)}</h2><span class="muted">Reports to ${esc(state.humans[d.reports_to])}</span></div>
+      ${people.map(a => {
+        const s = a.score, cls = s == null ? "" : s < 45 ? "low" : s < 65 ? "mid" : "";
+        const chat = (state.chats || []).find(c => c.agent_id === a.id);
+        const now = state.tickets.find(t => t.assignee === a.name && ["in_progress", "in_review"].includes(t.status));
+        return `<div class="prow ${a.status === "fired" ? "gone" : ""}">${avatar(a.name, d.name)}
+          <div class="grow"><div class="row" style="justify-content:space-between;flex-wrap:nowrap;gap:.4rem"><b class="ellip">${esc(a.name)}${a.generation > 1 ? ` <span class="muted">gen ${a.generation}</span>` : ""}</b>
+            ${a.status === "active" ? "" : `<span class="chip ${a.status}">${esc(a.status)}</span>`}</div>
+            <div class="muted ellip">${esc(a.role_title)} · ${s == null ? "no reviews yet" : `<span class="bar"><i class="${cls}" style="width:${s}%"></i></span>${s.toFixed(0)}`}</div>
+            ${now ? `<div class="muted ellip">Working on <button class="quiet" style="padding:0" data-ticket="${now.id}">${esc(now.ticket)}</button></div>` : ""}</div>
+          <div class="actions" style="flex-direction:column;align-items:flex-end;gap:.1rem">
+            ${a.status === "fired" ? "" : `<button class="quiet" style="padding:0" data-chat="${a.id}">${chat && chat.pending ? "Replying…" : "Message"}</button>`}
+            ${!canManage ? "" : a.status === "fired" ? `<button class="quiet" style="padding:0" data-rehire="${a.id}">Rehire</button>` : `<button class="quiet" style="padding:0;color:var(--soft)" data-fire="${a.id}" data-name="${esc(a.name)}">Replace</button>`}
+          </div></div>`;
+      }).join("")}</div>`;
+  }).join("")}</div>`);
+}
+
+function renderActivity() {
+  const pick = $("a-project").value;
+  options($("a-project"), [["", "All projects"], ...state.projects.map(p => [p.id, p.name])]);
+  const list = state.events.filter(e => !$("a-project").value || String(e.project_id) === $("a-project").value);
+  let day = "";
+  paint("log", list.map(e => {
+    const d = new Date(e.ts).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+    const head = d !== day ? `<div class="day">${esc(d)}</div>` : ""; day = d;
+    return head + `<div class="ev"><span class="t">${esc(new Date(e.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }))}</span><span class="grow"><span class="a">${esc(e.actor)}</span> ${linkTickets(esc(e.message))}</span></div>`;
+  }).join("") || `<div class="empty">Nothing yet.</div>`);
+  if (pick && $("a-project").value !== pick) $("a-project").value = pick;
+}
+
+function render() {
+  const me = state.you.role, mine = state.approvals.filter(a => a.required_role === me);
+  $("company").textContent = state.company;
+  $("logo").textContent = (state.company[0] || "O").toUpperCase();
+  $("whoami").innerHTML = `<b>${esc(state.you.name)}</b> · ${me.toUpperCase()}`;
+  document.title = `${mine.length ? `(${mine.length}) ` : ""}${state.company}`;
+  badge("b-decisions", mine.length);
+  renderHome(me, mine);
+  const list = state.approvals.filter(a => dfilter === "all" || a.required_role === me);
+  paint("inbox", list.map(a => decisionCard(a, me)).join("") || `<div class="card empty">${dfilter === "mine" ? "Nothing needs you right now. The team keeps working until it does." : "No decisions are waiting."}</div>`);
+  renderProjects();
+  renderProject();
+  renderPeople(me);
+  renderActivity();
 
   const pick = $("h-role").value;
   $("h-role").innerHTML = state.departments.filter(d => me === "ceo" || d.reports_to === "cto")
     .flatMap(d => d.roles.map(r => `<option value="${esc(r.id)}">${esc(r.title)} (${esc(d.name)})</option>`)).join("");
   if (pick) $("h-role").value = pick;
-
-  $("log").innerHTML = state.events.map(e =>
-    `<div><span class="muted">${esc(e.ts.slice(11, 19))} ${esc(e.actor)}</span> ${esc(e.message)}</div>`).join("") || "Nothing yet.";
   renderTickets();
   renderCosts();
 }
+
+document.addEventListener("click", e => {
+  const go = e.target.closest("[data-go]");
+  if (go) { if (go.dataset.expand) expanded.add(Number(go.dataset.expand)); location.hash = "#/" + go.dataset.go; return; }
+  const pr = e.target.closest("[data-project]");
+  if (pr) { location.hash = "#/project/" + pr.dataset.project; return; }
+  const ex = e.target.closest("[data-expand-toggle]");
+  if (ex) { const id = Number(ex.dataset.expandToggle); expanded.has(id) ? expanded.delete(id) : expanded.add(id); render(); return; }
+  const df = e.target.closest("[data-dfilter]");
+  if (df) { dfilter = df.dataset.dfilter; document.querySelectorAll("[data-dfilter]").forEach(b => b.classList.toggle("on", b === df)); render(); return; }
+  const sd = e.target.closest("[data-showdone]");
+  if (sd) { const id = Number(sd.dataset.showdone); showDone.has(id) ? showDone.delete(id) : showDone.add(id); render(); return; }
+  if (e.target.closest("[data-new-idea]")) { $("idea-dlg").showModal(); $("p-name").focus(); return; }
+  if (e.target.closest("[data-hire]")) { $("hire-dlg").showModal(); return; }
+  const cl = e.target.closest("[data-close]");
+  if (cl) $(cl.dataset.close).close();
+});
+$("a-project").onchange = renderActivity;
+let errorTimer = null;
+new MutationObserver(() => { clearTimeout(errorTimer); if ($("error").textContent) errorTimer = setTimeout(() => { $("error").textContent = ""; }, 7000); })
+  .observe($("error"), { childList: true, characterData: true, subtree: true });
 
 const usd = n => "$" + (n >= 100 ? n.toFixed(0) : n >= 1 ? n.toFixed(2) : n.toFixed(4));
 const built = p => !["idea", "idea_review", "idea_decision", "plan", "plan_approval", "prd", "prd_approval", "architecture", "architecture_approval", "dropped", "parked"].includes(p.stage);
@@ -599,11 +888,12 @@ document.addEventListener("click", e => {
 $("p-idea").onchange = () => { $("p-start").textContent = $("p-idea").checked ? "Submit idea" : "Start building"; };
 $("p-start").onclick = () => act(async () => {
   const budget = $("p-budget").value === "" ? null : Number($("p-budget").value);
-  await api("/api/projects", { name: $("p-name").value, brief: $("p-brief").value, idea: $("p-idea").checked, budget });
-  $("p-budget").value = "";
-  $("p-name").value = ""; $("p-brief").value = "";
+  const created = await api("/api/projects", { name: $("p-name").value, brief: $("p-brief").value, idea: $("p-idea").checked, budget });
+  $("p-budget").value = ""; $("p-name").value = ""; $("p-brief").value = "";
+  $("idea-dlg").close();
+  location.hash = "#/project/" + created.id;
 });
-$("h-go").onclick = () => act(async () => { await api("/api/agents", { role: $("h-role").value, name: $("h-name").value }); $("h-name").value = ""; });
+$("h-go").onclick = () => act(async () => { await api("/api/agents", { role: $("h-role").value, name: $("h-name").value }); $("h-name").value = ""; $("hire-dlg").close(); });
 $("show-fired").onchange = render;
 $("signout").onclick = () => signOut();
 $("signin-btn").onclick = () => { token = $("token").value.trim(); sessionStorage.setItem("orgforge-token", token); $("token").value = ""; refresh(true); };
@@ -658,6 +948,7 @@ $("chat-input").onkeydown = e => { if (e.key === "Enter" && (e.ctrlKey || e.meta
 $("chat-close").onclick = () => $("chat-dlg").close();
 $("chat-dlg").addEventListener("close", () => { openChatId = null; chatShown = ""; });
 
+route();
 refresh(true);
 setInterval(refresh, 4000);
 </script>

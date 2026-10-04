@@ -17,6 +17,7 @@ from .chat import ChatError
 from .company import Company
 from .costs import summary as cost_summary
 from .feedback import FeedbackError
+from .reports import NEXT_STEP
 from .review import read_file as review_file, review as review_product
 from .tools import ToolError
 from .org import OrgError
@@ -137,6 +138,7 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
             "humans": {"ceo": co.s.ceo_name, "cto": co.s.cto_name},
             "stages": [{"id": s, "label": STAGE_LABELS[s]} for s in STAGES],
             "idea_stages": IDEA_STAGES,
+            "next_steps": NEXT_STEP,
             "departments": co.org.chart(include_fired=True),
             "projects": co.pipeline.overview(),
             "approvals": co.pipeline.inbox(),
