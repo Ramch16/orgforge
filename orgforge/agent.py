@@ -18,6 +18,8 @@ class RunResult:
     plan: list[dict] | None = None
     review: dict | None = None
     transfer: dict | None = None
+    assessment: dict | None = None
+    dept_plan: dict | None = None
     completed: bool = False
     turns: int = 0
     tool_log: list[str] = field(default_factory=list)
@@ -60,12 +62,14 @@ class AgentRuntime:
 
     def run(self, agent: dict, instructions: str, ws: Workspace | None, *, project_id: int | None = None,
             meta: dict | None = None, depth: int = 0, history: list[dict] | None = None,
-            only_tools: set[str] | None = None, chat_with: str | None = None) -> RunResult:
+            only_tools: set[str] | None = None, chat_with: str | None = None,
+            extra_tools: list[str] | None = None) -> RunResult:
         """One assignment, or one chat reply when `chat_with` is set (with `history` and a narrower tool set)."""
         role = self.org.role(agent["role"])
         names = json.loads(role["tools"])
         if only_tools is not None:
             names = [n for n in names if n in only_tools]
+        names += [n for n in (extra_tools or []) if n not in names]      # stage-specific, e.g. submit_assessment
         if depth >= self.s.max_delegation_depth:
             names = [n for n in names if n != "delegate"]
         tools = [tool_schema(n) for n in names]
@@ -130,6 +134,22 @@ class AgentRuntime:
             validate_plan(tasks, {a["role"] for a in self.org.staff(kind="builder")})
             result.plan = tasks
             return f"Plan received: {len(tasks)} task(s)."
+        if name == "submit_assessment":
+            if args.get("recommendation") not in ("build_internal", "build_to_sell", "park", "drop") or \
+                    args.get("feasibility") not in ("achievable", "achievable_with_risks", "not_achievable"):
+                raise ToolError("Use a listed recommendation and feasibility.")
+            result.assessment = {k: str(args.get(k, "")) for k in ("recommendation", "feasibility", "summary")}
+            return "Assessment received."
+        if name == "submit_department_plan":
+            roles = {r["id"] for r in self.tickets.work_roles()} if self.tickets else set()
+            tickets = args.get("tickets") or []
+            for t in tickets:
+                if not isinstance(t, dict) or t.get("role") not in roles or not str(t.get("title", "")).strip():
+                    raise ToolError("Each ticket needs a title and a staffed role: " + ", ".join(sorted(roles)))
+            result.dept_plan = {"summary": str(args.get("summary", "")), "tickets": [
+                {"role": t["role"], "title": str(t["title"])[:200], "description": str(t.get("description", ""))[:4000],
+                 "after_build": bool(t.get("after_build"))} for t in tickets][:20]}
+            return f"Plan received: {len(result.dept_plan['tickets'])} department ticket(s)."
         if name == "submit_review":
             score = float(args["score"])
             if not math.isfinite(score) or not 0 <= score <= 100 or args["verdict"] not in ("approve", "request_changes"):

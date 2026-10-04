@@ -111,10 +111,12 @@
       <section>
         <h2>Projects</h2>
         <div class="card">
-          <h3>Start a project</h3>
-          <div style="margin:.5rem 0"><input id="p-name" placeholder="Product name"></div>
-          <textarea id="p-brief" placeholder="What should the team build? Who is it for? What must the first release do?"></textarea>
-          <div class="row" style="margin-top:.5rem"><button class="primary" id="p-start">Start project</button></div>
+          <h3>New idea or project</h3>
+          <div style="margin:.5rem 0"><input id="p-name" placeholder="Name"></div>
+          <textarea id="p-brief" placeholder="Describe the idea: the problem, who it is for, and what it should do."></textarea>
+          <label class="muted row" style="margin-top:.5rem;flex-wrap:nowrap;align-items:flex-start"><input type="checkbox" id="p-idea" checked style="width:auto;margin-top:.25rem">
+            <span>Assess it first: Ram checks feasibility, internal use versus selling, and revenue with Engineering, Marketing and Legal. Lucky signs off, then Niki decides.</span></label>
+          <div class="row" style="margin-top:.5rem"><button class="primary" id="p-start">Submit idea</button></div>
         </div>
         <div id="projects"></div>
       </section>
@@ -230,10 +232,15 @@ function render() {
       <h3>${esc(a.title)}</h3>
       <div class="muted">${mine ? "Your call" : `With ${esc(state.humans[a.required_role])} (${a.required_role.toUpperCase()})`}</div>
       <pre>${esc(a.summary)}</pre>
-      ${mine ? `<textarea data-draft="${a.id}" placeholder="What should change? Required to send back.">${esc(drafts[a.id] || "")}</textarea>
+      ${mine ? `<textarea data-draft="${a.id}" placeholder="${a.kind === "idea_decision" ? "Your reasons (optional)" : "What should change? Required to send back."}">${esc(drafts[a.id] || "")}</textarea>
       <div class="row" style="margin-top:.5rem">
+        ${a.kind === "idea_decision" ? `
+        <button class="primary" data-decide="approved" data-choice="internal" data-id="${a.id}">Build for internal use</button>
+        <button class="primary" data-decide="approved" data-choice="commercial" data-id="${a.id}">Build to sell</button>
+        <button data-decide="rejected" data-choice="park" data-id="${a.id}">Park</button>
+        <button data-decide="rejected" data-choice="drop" data-id="${a.id}">Drop</button>` : `
         ${a.kind === "release_blocked" ? `<span class="muted">Checks must pass before release. Send repair guidance to retry.</span>` : `<button class="primary" data-decide="approved" data-id="${a.id}">Approve</button>`}
-        <button data-decide="rejected" data-id="${a.id}">Send back</button>
+        <button data-decide="rejected" data-id="${a.id}">Send back</button>`}
       </div>` : ""}
     </div>`;
   }).join("") : `<div class="card muted">Nothing needs you right now. The team keeps working until it does.</div>`;
@@ -241,7 +248,8 @@ function render() {
   const order = state.stages.map(s => s.id);
   $("projects").innerHTML = state.projects.map(p => {
     const at = order.indexOf(p.stage);
-    const track = state.stages.filter(s => !["escalation", "contract_review", "release_blocked"].includes(s.id)).map(s => {
+    const skip = ["escalation", "contract_review", "release_blocked", "parked", "dropped", ...(p.purpose || state.idea_stages.includes(p.stage) ? [] : state.idea_stages)];
+    const track = state.stages.filter(s => !skip.includes(s.id)).map(s => {
       const i = order.indexOf(s.id);
       return `<span title="${esc(s.label)}" class="${p.stage === "done" || i < at ? "past" : i === at ? "now" : ""}"></span>`;
     }).join("");
@@ -249,10 +257,11 @@ function render() {
       `<tr data-ticket="${t.id}"><td class="key">T-${t.id}</td><td>${esc(t.title)}${t.attempts ? ` <span class="muted">sent back ${t.attempts}×</span>` : ""}</td>
        <td>${esc(t.assignee || "")}</td><td><span class="chip ${t.status}">${esc(state.ticket_meta.statuses[t.status] || t.status)}</span></td></tr>`).join("")}</table>` : "";
     return `<div class="card">
-      <div class="row" style="justify-content:space-between"><h3>${esc(p.name)}</h3><span class="muted">${esc(p.stage_label)}</span></div>
+      <div class="row" style="justify-content:space-between"><h3>${esc(p.name)} ${p.purpose ? `<span class="chip ${p.purpose === "commercial" ? "active" : "in_review"}">${p.purpose === "commercial" ? "To sell" : "Internal"}</span>` : ""}</h3><span class="muted">${esc(p.stage_label)}</span></div>
       <div class="track">${track}</div>
       <div class="muted">${esc(p.workspace)}</div>${tasks}
-      ${p.stage === "done" ? "" : `<button class="quiet" data-run="${p.id}">Resume work</button>`}
+      ${p.stage === "parked" ? (me === "ceo" ? `<button class="quiet" data-revisit="${p.id}">Revisit this idea</button>` : "")
+        : ["done", "dropped"].includes(p.stage) ? "" : `<button class="quiet" data-run="${p.id}">Resume work</button>`}
     </div>`;
   }).join("") || `<p class="muted">No projects yet. Write a brief above to start one.</p>`;
 
@@ -407,7 +416,8 @@ $("f-text").oninput = renderTickets;
 document.addEventListener("input", e => { if (e.target.dataset.draft) drafts[e.target.dataset.draft] = e.target.value; });
 document.addEventListener("click", e => {
   const d = e.target.dataset;
-  if (d.decide) act(async () => { await api(`/api/approvals/${d.id}`, { decision: d.decide, feedback: drafts[d.id] || "" }); delete drafts[d.id]; });
+  if (d.decide) act(async () => { await api(`/api/approvals/${d.id}`, { decision: d.decide, feedback: drafts[d.id] || "", choice: d.choice || "" }); delete drafts[d.id]; });
+  else if (d.revisit) act(() => api(`/api/projects/${d.revisit}/revisit`, {}));
   else if (d.run) act(() => api(`/api/projects/${d.run}/run`, {}));
   else if (d.rehire) act(() => api(`/api/agents/${d.rehire}/rehire`, {}));
   else if (d.fire) {
@@ -415,8 +425,9 @@ document.addEventListener("click", e => {
     if (reason) act(() => api(`/api/agents/${d.fire}/fire`, { reason, replace: true }));
   }
 });
+$("p-idea").onchange = () => { $("p-start").textContent = $("p-idea").checked ? "Submit idea" : "Start building"; };
 $("p-start").onclick = () => act(async () => {
-  await api("/api/projects", { name: $("p-name").value, brief: $("p-brief").value });
+  await api("/api/projects", { name: $("p-name").value, brief: $("p-brief").value, idea: $("p-idea").checked });
   $("p-name").value = ""; $("p-brief").value = "";
 });
 $("h-go").onclick = () => act(async () => { await api("/api/agents", { role: $("h-role").value, name: $("h-name").value }); $("h-name").value = ""; });

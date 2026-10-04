@@ -82,6 +82,29 @@ TOOL_SPECS: dict[str, dict] = {
             ["tasks"],
         ),
     },
+    "submit_assessment": {
+        "description": "Submit your assessment of an idea, after writing docs/ASSESSMENT.md. Call exactly once.",
+        "input_schema": _obj(
+            {"recommendation": {"type": "string", "enum": ["build_internal", "build_to_sell", "park", "drop"]},
+             "feasibility": {"type": "string", "enum": ["achievable", "achievable_with_risks", "not_achievable"]},
+             "summary": {"type": "string", "description": "Three to six sentences the CEO and CTO can decide on"}},
+            ["recommendation", "feasibility", "summary"],
+        ),
+    },
+    "submit_department_plan": {
+        "description": "Submit the plan of action, after writing docs/PLAN.md, with a ticket for each piece of "
+                       "department work beyond the standard requirements, design, build, QA and audits. Call once.",
+        "input_schema": _obj(
+            {"summary": {"type": "string", "description": "The plan in a few sentences"},
+             "tickets": {"type": "array", "items": _obj(
+                 {"role": {"type": "string", "description": "Role id that owns it, e.g. support_specialist"},
+                  "title": _STR,
+                  "description": {"type": "string", "description": "What to deliver and how to tell it is done"},
+                  "after_build": {"type": "boolean", "description": "True if it needs the finished product"}},
+                 ["role", "title", "description", "after_build"])}},
+            ["summary", "tickets"],
+        ),
+    },
     "submit_review": {
         "description": "Submit your verdict on the work you were asked to check. Call exactly once.",
         "input_schema": _obj(

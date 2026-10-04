@@ -22,13 +22,17 @@ from .config import Settings
 from .db import DB, now
 from .org import Org
 from .performance import Performance
-from .tickets import PRIORITY_ORDER, note, ticket_key, where
+from .tickets import PRIORITY_ORDER, WORK_KINDS, note, ticket_key, where
 from .tools import Workspace
 from .validation import CONTRACT, CONTRACT_GUIDE, validate_plan, verify_product
 
-STAGES = ["prd", "prd_approval", "architecture", "architecture_approval", "build",
-          "escalation", "contract_review", "release_blocked", "release_approval", "signoff", "done"]
+IDEA_STAGES = ["idea", "idea_review", "idea_decision", "plan", "plan_approval"]
+STAGES = [*IDEA_STAGES, "prd", "prd_approval", "architecture", "architecture_approval", "build",
+          "escalation", "contract_review", "release_blocked", "release_approval", "signoff", "done", "parked", "dropped"]
 STAGE_LABELS = {
+    "idea": "Assessing the idea", "idea_review": "Technical sign-off with CTO", "idea_decision": "Decision with CEO",
+    "plan": "Planning across departments", "plan_approval": "Plan with CEO and CTO",
+    "parked": "Parked", "dropped": "Dropped",
     "contract_review": "Acceptance checks changed, with CTO",
     "release_blocked": "Release checks need attention",
     "prd": "Writing requirements", "prd_approval": "Requirements with CEO",
@@ -37,6 +41,24 @@ STAGE_LABELS = {
     "release_approval": "Release with CTO", "signoff": "Sign-off with CEO", "done": "Ready for deployment",
 }
 HUMAN_APPROVED, HUMAN_REJECTED = 92, 35
+PURPOSES = {"internal": "for internal use", "commercial": "to sell"}
+RECOMMENDATIONS = {"build_internal": "build it for internal use", "build_to_sell": "build it to sell",
+                   "park": "park it for now", "drop": "drop it"}
+FEASIBILITY = {"achievable": "achievable", "achievable_with_risks": "achievable, with risks",
+               "not_achievable": "not achievable as described"}
+# Colleagues the product manager consults on an idea: (role id, or kind for the architect), file, question.
+CONSULTS = [
+    ("planner", "docs/assessment/FEASIBILITY.md", "Feasibility review",
+     "Is this technically achievable? Give a rough size (small, medium or large, and about how many build tickets), "
+     "the main components, the technical risks, and what it would need (data, integrations, infrastructure)."),
+    ("product_marketer", "docs/assessment/MARKET.md", "Market review",
+     "Who would use it? Is it better kept for internal use or sold? Name the likely customers, the alternatives "
+     "they use today, possible pricing or revenue models, and how strong the demand looks. Be explicit about "
+     "what you are unsure of."),
+    ("compliance_officer", "docs/assessment/LEGAL.md", "Legal review",
+     "What legal, privacy, data-protection or licensing risks does it carry, and would anything stop it being "
+     "sold or used?"),
+]
 
 
 class PipelineError(Exception):
@@ -104,18 +126,19 @@ class Pipeline:
         return target.read_text(errors="replace") if target.is_file() else ""
 
     # ---- projects --------------------------------------------------------
-    def create_project(self, name: str, brief: str, by: str = "ceo") -> dict:
+    def create_project(self, name: str, brief: str, by: str = "ceo", idea: bool = False) -> dict:
+        """A project that starts building, or with `idea` an idea that is assessed and decided first."""
         ts = now()
-        pid = self.db.run("INSERT INTO projects (name, brief, created_at, updated_at) VALUES (?,?,?,?)",
-                          name, brief, ts, ts)
+        pid = self.db.run("INSERT INTO projects (name, brief, stage, author, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+                          name, brief, "idea" if idea else "prd", by, ts, ts)
         slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40] or "project"
         path = self.s.workspaces / f"{pid:03d}-{slug}"
         self.db.run("UPDATE projects SET workspace=? WHERE id=?", str(path), pid)
         ws = Workspace(path)
         ws.init_repo()
         ws.write_file("BRIEF.md", f"# {name}\n\n{brief}\n")
-        ws.commit("Brief from the CEO")
-        self.db.log("project", f"New project: {name}", pid, actor=by)
+        ws.commit(f"{'Idea' if idea else 'Brief'} from {by}")
+        self.db.log("project", f"New {'idea' if idea else 'project'}: {name}", pid, actor=by)
         return self.project(pid)
 
     def advance(self, pid: int) -> dict:
@@ -125,7 +148,8 @@ class Pipeline:
             return self.project(pid)          # already running in another thread
         try:
             self.db.run("UPDATE tasks SET status='todo' WHERE project_id=? AND status IN ('in_progress', 'in_review') AND origin!='stage'", pid)
-            steps = {"prd": self._prd, "architecture": self._architecture, "build": self._build}
+            steps = {"idea": self._idea, "plan": self._plan, "prd": self._prd, "architecture": self._architecture,
+                     "build": self._build}
             while (stage := self.project(pid)["stage"]) in steps:
                 steps[stage](self.project(pid))
         except Exception as exc:
@@ -136,6 +160,137 @@ class Pipeline:
         return self.project(pid)
 
     # ---- stages ----------------------------------------------------------
+    def _idea(self, p: dict) -> None:
+        """Product leads an assessment of the idea, with feasibility, market and legal input from colleagues."""
+        ws, pid = self.workspace(p), p["id"]
+        pm = self.org.pick(kind="product")
+        if not pm:
+            raise PipelineError("Nobody can assess ideas. Hire a role of kind 'product' (e.g. product manager).")
+        author = p["author"] or self.s.ceo_name
+        lead = self._stage_ticket(pid, "stage-assessment", f"Assess the idea: {p['name']}", pm, p["brief"],
+                                  reporter=author)
+        for ref, path, label, question in CONSULTS:
+            colleague = self.org.pick(kind=ref) if ref == "planner" else self.org.pick(role=ref)
+            if not colleague or colleague["id"] == pm["id"]:
+                continue
+            note(self.db, lead, pm["name"], f"Asked {colleague['name']}, {where(self.db, colleague['role'])}, "
+                 f"for a {label.lower()}.", kind="handoff")
+            ticket = self._stage_ticket(pid, f"stage-consult-{colleague['role']}", f"{label}: {p['name']}", colleague,
+                                        question, reporter=pm["name"], handoff=where(self.db, pm["role"]))
+            ask = (f"{pm['name']} ({where(self.db, pm['role'])}) is assessing an idea from {author} and asks for your "
+                   f"{label.lower()}.\n\nThe idea, \"{p['name']}\":\n{p['brief']}\n\n{question}\n\n"
+                   f"Write your answer to {path}. Keep it short and concrete.")
+            if p["feedback"]:
+                ask += f"\n\nThe previous assessment was sent back with this feedback; take it into account:\n{p['feedback']}"
+            res = self.runtime.run(colleague, ask, ws, project_id=pid,
+                                   meta={"purpose": "consult", "file": path, "ticket_id": ticket})
+            if not self._read(ws, path):
+                ws.write_file(path, f"# {label}\n\n{res.text or '(no answer)'}\n")
+            ws.commit(f"{label} ({colleague['name']})")
+            self._stage_status(pid, f"stage-consult-{colleague['role']}", "done", colleague["name"],
+                               f"Written to {path}.", kind="handoff")
+        ask = (f"{author} has an idea, \"{p['name']}\":\n\n{p['brief']}\n\nAssess whether the company should build it. "
+               "Read your colleagues' input in docs/assessment/. Write docs/ASSESSMENT.md with: the problem and who it "
+               "is for; whether it is better for internal use or to sell; feasibility; rough effort and cost (agents, "
+               "tickets, model usage); revenue options if sold; risks; and your recommendation. Be honest when the "
+               "answer is not to build it. Then call submit_assessment.")
+        if p["feedback"]:
+            ask += f"\n\nYour previous assessment was sent back. Address this:\n{p['feedback']}"
+        self.db.log("work", f"{pm['name']} is assessing the idea.", pid, actor=pm["name"])
+        res = self.runtime.run(pm, ask, ws, project_id=pid, meta={"purpose": "assessment", "ticket_id": lead},
+                               extra_tools=["submit_assessment"])
+        if not res.assessment:
+            res = self.runtime.run(pm, "Your assessment is in docs/ASSESSMENT.md. Call submit_assessment now.", ws,
+                                   project_id=pid, meta={"purpose": "assessment", "ticket_id": lead},
+                                   extra_tools=["submit_assessment"])
+        if not res.assessment:
+            raise PipelineError(f"{pm['name']} did not submit an assessment. Run the project again to retry.")
+        ws.commit(f"Idea assessment ({pm['name']})")
+        a = res.assessment
+        self._stage_status(pid, "stage-assessment", "in_review", pm["name"],
+                           f"Recommends: {RECOMMENDATIONS[a['recommendation']]}. Feasibility: "
+                           f"{FEASIBILITY[a['feasibility']]}. Sent to {self._boss('cto')} for technical sign-off.",
+                           kind="handoff")
+        self._approval(pid, "feasibility", "cto", f"Technical sign-off: {p['name']}",
+                       self._assessment_summary(ws, a) + "\n\nApprove if the technical assessment is sound. Send back "
+                       f"with your concerns otherwise. {self._boss('ceo')} decides after you.", {"assessment": a})
+        self._stage(pid, "idea_review", "")
+
+    def _assessment_summary(self, ws: Workspace, a: dict) -> str:
+        return (f"Recommendation: {RECOMMENDATIONS[a['recommendation']]}\nFeasibility: {FEASIBILITY[a['feasibility']]}\n\n"
+                f"{a['summary']}\n\n----- docs/ASSESSMENT.md -----\n{self._read(ws, 'docs/ASSESSMENT.md')}")
+
+    def _plan(self, p: dict) -> None:
+        """After a go decision, product writes one plan of action and assigns department tickets."""
+        ws, pid = self.workspace(p), p["id"]
+        pm = self.org.pick(kind="product")
+        if not pm:
+            raise PipelineError("Nobody can plan the work. Hire a role of kind 'product' (e.g. product manager).")
+        purpose = PURPOSES.get(p["purpose"], "")
+        selling = p["purpose"] == "commercial"
+        ticket = self._stage_ticket(pid, "stage-plan", f"Plan of action: {p['name']}", pm,
+                                    f"Plan the work across departments to build {p['name']} {purpose}.",
+                                    reporter=self.s.ceo_name)
+        roles = "\n".join(f"- {r['id']}: {r['title']} ({r['department']})" for r in self._work_roles())
+        ask = (f"{self._boss('ceo')} decided to build \"{p['name']}\" {purpose}. Read docs/ASSESSMENT.md.\n\n"
+               "Write docs/PLAN.md, the plan of action across departments: goals; scope of the first release; what "
+               "each department does and in what order (Product requirements, Design, Engineering design and build, "
+               "Quality and Security checks, Legal, Support" + (", Marketing pricing and launch" if selling else "")
+               + "); milestones; risks.\n\nRequirements, UX design, architecture and build, QA and audits happen "
+               "automatically. File department tickets only for other work, such as help docs for Support and terms "
+               "and privacy for Legal" + (", and pricing and a launch plan for Marketing" if selling else
+                                          ". It is for internal use, so do not plan marketing or pricing work")
+               + ". Set after_build for work that needs the finished product. Then call submit_department_plan.\n\n"
+               f"Roles that can own tickets:\n{roles}")
+        if p["feedback"]:
+            ask += f"\n\nYour previous plan was sent back. Address this:\n{p['feedback']}"
+        self.db.log("work", f"{pm['name']} is planning the work across departments.", pid, actor=pm["name"])
+        meta = {"purpose": "plan_of_action", "ticket_id": ticket, "selling": selling}
+        res = self.runtime.run(pm, ask, ws, project_id=pid, meta=meta, extra_tools=["submit_department_plan"])
+        if not res.dept_plan:
+            res = self.runtime.run(pm, "The plan is in docs/PLAN.md. Call submit_department_plan now.", ws,
+                                   project_id=pid, meta=meta, extra_tools=["submit_department_plan"])
+        if not res.dept_plan:
+            raise PipelineError(f"{pm['name']} did not submit a plan. Run the project again to retry.")
+        ws.commit(f"Plan of action ({pm['name']})")
+        plan = res.dept_plan
+        listing = "\n".join(f"- {where(self.db, t['role'])}: {t['title']}" + (" (after the build)" if t["after_build"] else "")
+                             for t in plan["tickets"]) or "- (no extra department tickets)"
+        body = (f"{plan['summary']}\n\nDepartment tickets:\n{listing}\n\n----- docs/PLAN.md -----\n"
+                f"{self._read(ws, 'docs/PLAN.md')}")
+        self._stage_status(pid, "stage-plan", "in_review", pm["name"],
+                           f"Plan shared with {self._boss('ceo')} and {self._boss('cto')} for approval.", kind="handoff")
+        payload = {"tickets": plan["tickets"], "planner": pm["name"]}
+        self._approval(pid, "plan", "ceo", f"Plan of action for {p['name']}: business side",
+                       body + "\n\nApprove the business side: scope, launch, pricing, support and legal work.", payload)
+        self._approval(pid, "plan", "cto", f"Plan of action for {p['name']}: technical side",
+                       body + "\n\nApprove the technical side: scope, order of work, and what Engineering, Quality "
+                       "and Security take on.", payload)
+        self._stage(pid, "plan_approval", "")
+
+    def _work_roles(self) -> list[dict]:
+        marks = ",".join("?" * len(WORK_KINDS))
+        return self.db.all(f"SELECT DISTINCT r.id, r.title, d.name AS department FROM roles r JOIN agents a ON "
+                           f"a.role=r.id AND a.status!='fired' JOIN departments d ON d.id=r.department WHERE r.kind "
+                           f"IN ({marks}) ORDER BY d.name, r.title", *WORK_KINDS)
+
+    def revisit(self, pid: int, by: str) -> dict:
+        """Bring a parked idea back to the CEO for a fresh decision."""
+        p = self.project(pid)
+        if p["stage"] != "parked":
+            raise PipelineError(f"{p['name']} is not parked.")
+        a = self.db.one("SELECT payload FROM approvals WHERE project_id=? AND kind='idea_decision' ORDER BY id DESC "
+                        "LIMIT 1", pid)
+        assessment = json.loads(a["payload"]).get("assessment") if a else None
+        summary = (self._assessment_summary(self.workspace(p), assessment) if assessment
+                   else self._read(self.workspace(p), "docs/ASSESSMENT.md"))
+        self._approval(pid, "idea_decision", "ceo", f"Decide again: {p['name']}",
+                       "This idea was parked and is back for a decision.\n\n" + summary,
+                       {"assessment": assessment})
+        self._stage(pid, "idea_decision")
+        self.db.log("project", f"{p['name']} is back for a decision.", pid, actor=by)
+        return self.project(pid)
+
     def _prd(self, p: dict) -> None:
         ws = self.workspace(p)
         pm = self.org.pick(kind="product")
@@ -147,6 +302,9 @@ class Pipeline:
         ask = (f"The CEO's brief for a new product, \"{p['name']}\":\n\n{p['brief']}\n\n"
                "Write the requirements document to docs/PRD.md. Include numbered, testable acceptance criteria, "
                "main user journeys, error cases, data persistence, required integrations, and explicit exclusions.")
+        if p["purpose"]:
+            ask += (f"\n\nThis product was assessed and planned, and is being built {PURPOSES[p['purpose']]}. Read "
+                    "docs/ASSESSMENT.md and docs/PLAN.md first, and keep the requirements within the planned scope.")
         if p["feedback"]:
             ask += f"\n\nThe CEO sent the previous version back. Revise docs/PRD.md to address this:\n{p['feedback']}"
         self.db.log("work", f"{pm['name']} is writing the requirements.", p["id"], actor=pm["name"])
@@ -259,6 +417,9 @@ class Pipeline:
         """To-do tickets whose dependencies are finished, most urgent first."""
         tasks = self.db.all(f"SELECT * FROM tasks WHERE project_id=? AND origin!='stage' ORDER BY {PRIORITY_ORDER}, id", pid)
         done = {t["key"] for t in tasks if t["status"] in ("done", "cancelled")}
+        plan = [t for t in tasks if t["origin"] == "plan"]
+        if plan and all(t["status"] in ("done", "cancelled") for t in plan):
+            done.add("@build")                  # department work that needs the finished product can start
         return [t for t in tasks if t["status"] == "todo" and all(d in done for d in json.loads(t["depends_on"]))]
 
     def _next_task(self, pid: int) -> dict | None:
@@ -673,7 +834,7 @@ class Pipeline:
         return tid
 
     # ---- human decisions -------------------------------------------------
-    def decide(self, approval_id: int, role: str, decision: str, feedback: str = "") -> dict:
+    def decide(self, approval_id: int, role: str, decision: str, feedback: str = "", choice: str = "") -> dict:
         """Record a CEO/CTO decision. Returns the approval. Call advance() on its project afterwards."""
         a = self.db.one("SELECT * FROM approvals WHERE id=?", approval_id)
         if not a:
@@ -685,7 +846,12 @@ class Pipeline:
         if decision not in ("approved", "rejected"):
             raise PipelineError("Decision must be 'approved' or 'rejected'.")
         feedback = feedback.strip()
-        if decision == "rejected" and not feedback and a["kind"] not in ("hr", "hire"):
+        if a["kind"] == "idea_decision":
+            allowed = ("internal", "commercial") if decision == "approved" else ("park", "drop")
+            if choice not in allowed:
+                raise PipelineError("Decide the idea with one of: build it for internal use (internal), build it to "
+                                    "sell (commercial), park it (park), or drop it (drop).")
+        if decision == "rejected" and not feedback and a["kind"] not in ("hr", "hire", "idea_decision"):
             raise PipelineError("Say what needs to change when you reject, so the team can act on it.")
         who, ok, pid = self.s.human(role), decision == "approved", a["project_id"]
         payload = json.loads(a["payload"])
@@ -700,7 +866,60 @@ class Pipeline:
         self.db.log("decision", f"{a['title']}: {decision}" + (f" — {feedback}" if feedback else ""), pid, actor=who)
 
         kind = a["kind"]
-        if kind in ("prd", "architecture"):
+        if kind == "feasibility":
+            if ok:
+                p = self.project(pid)
+                self._stage_status(pid, "stage-assessment", "in_review", who,
+                                   f"Technical sign-off by {who}." + (f" {feedback}" if feedback else ""), kind="comment")
+                self._approval(pid, "idea_decision", "ceo", f"Decide: {p['name']}",
+                               f"{who} (CTO) signed off the technical assessment."
+                               + (f"\nTheir note: {feedback}" if feedback else "") + "\n\n"
+                               + self._assessment_summary(self.workspace(p), payload["assessment"])
+                               + "\n\nChoose: build it for internal use, build it to sell, park it, or drop it.",
+                               payload)
+                self._stage(pid, "idea_decision")
+            else:
+                self._stage_status(pid, "stage-assessment", "todo", who, f"Sent back by {who}: {feedback}", kind="comment")
+                self._stage(pid, "idea", feedback)
+        elif kind == "idea_decision":
+            label = {"internal": "build it for internal use", "commercial": "build it to sell", "park": "park it",
+                     "drop": "drop it"}[choice]
+            body = f"{who} decided to {label}." + (f" {feedback}" if feedback else "")
+            if choice in PURPOSES:
+                self.db.run("UPDATE projects SET purpose=? WHERE id=?", choice, pid)
+                self._stage_status(pid, "stage-assessment", "done", who, body)
+                self._stage(pid, "plan", "")
+            else:
+                self._stage_status(pid, "stage-assessment", "done" if choice == "park" else "cancelled", who, body)
+                self._stage(pid, "parked" if choice == "park" else "dropped")
+            self.db.log("project", body, pid, actor=who)
+        elif kind == "plan":
+            if not ok:
+                self.db.run("UPDATE approvals SET status='withdrawn', decided_at=? WHERE project_id=? AND kind='plan' "
+                            "AND status='pending'", now(), pid)
+                self._stage_status(pid, "stage-plan", "todo", who, f"Sent back by {who}: {feedback}", kind="comment")
+                self._stage(pid, "plan", feedback)
+            elif not self.db.one("SELECT 1 FROM approvals WHERE project_id=? AND kind='plan' AND status='pending'", pid):
+                created = []
+                for t in payload["tickets"]:
+                    ts = now()
+                    tid = self.db.run(
+                        "INSERT INTO tasks (project_id, key, title, description, role, depends_on, status, type, "
+                        "priority, origin, reporter, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        pid, "pending", t["title"], t["description"], t["role"],
+                        json.dumps(["@build"] if t["after_build"] else []), "todo", "task", "medium", "dept",
+                        payload.get("planner", "OrgForge"), ts, ts)
+                    self.db.run("UPDATE tasks SET key=? WHERE id=?", f"dept-{tid}", tid)
+                    note(self.db, tid, payload.get("planner", "OrgForge"), f"From the plan of action, for "
+                         f"{where(self.db, t['role'])}." + (" Starts once the build is finished." if t["after_build"] else ""))
+                    created.append(ticket_key(tid))
+                self._stage_status(pid, "stage-plan", "done", who,
+                                   f"Plan approved by {self._boss('ceo')} and {self._boss('cto')}. Department tickets: "
+                                   + (", ".join(created) or "none") + ".", kind="handoff")
+                self._stage(pid, "prd", "")
+            else:
+                self.db.log("decision", f"Plan approved by {who}; waiting for the other sign-off.", pid, actor=who)
+        elif kind in ("prd", "architecture"):
             for author in payload.get("agent_ids") or [payload.get("agent_id")]:
                 if author and self.org.agent(author)["status"] != "fired":
                     self.perf.record(author, HUMAN_APPROVED if ok else HUMAN_REJECTED, source="human", reviewer=who,

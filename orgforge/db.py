@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS projects (
   stage TEXT NOT NULL DEFAULT 'prd',
   workspace TEXT NOT NULL DEFAULT '',
   feedback TEXT NOT NULL DEFAULT '',
+  purpose TEXT NOT NULL DEFAULT '',
+  author TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -145,6 +147,11 @@ class DB:
         for column, default in (("type", "task"), ("priority", "medium"), ("origin", "plan"), ("reporter", "OrgForge")):
             if column not in have:
                 self.conn.execute(f"ALTER TABLE tasks ADD COLUMN {column} TEXT NOT NULL DEFAULT '{default}'")
+        # 0.7 added the idea stage: what a product is for, and who proposed it.
+        have = {r["name"] for r in self.conn.execute("PRAGMA table_info(projects)")}
+        for column in ("purpose", "author"):
+            if column not in have:
+                self.conn.execute(f"ALTER TABLE projects ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
         # Companies created before 0.2 limited role kinds in the table itself. Lift that.
         sql = self.conn.execute("SELECT sql FROM sqlite_master WHERE name='roles'").fetchone()["sql"]
         if "CHECK (kind IN" not in sql:

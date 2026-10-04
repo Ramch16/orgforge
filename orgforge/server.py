@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from .chat import ChatError
 from .company import Company
 from .org import OrgError
-from .pipeline import STAGE_LABELS, STAGES, PipelineError
+from .pipeline import IDEA_STAGES, STAGE_LABELS, STAGES, PipelineError
 from .tickets import PRIORITIES, STATUS_LABELS, TYPES, TicketError
 
 STATIC = Path(__file__).with_name("static")
@@ -22,11 +22,13 @@ STATIC = Path(__file__).with_name("static")
 class NewProject(BaseModel):
     name: str
     brief: str
+    idea: bool = False
 
 
 class Decision(BaseModel):
     decision: str
     feedback: str = ""
+    choice: str = ""
 
 
 class Hire(BaseModel):
@@ -116,6 +118,7 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
             "you": {"role": role, "name": co.s.human(role)},
             "humans": {"ceo": co.s.ceo_name, "cto": co.s.cto_name},
             "stages": [{"id": s, "label": STAGE_LABELS[s]} for s in STAGES],
+            "idea_stages": IDEA_STAGES,
             "departments": co.org.chart(include_fired=True),
             "projects": co.pipeline.overview(),
             "approvals": co.pipeline.inbox(),
@@ -131,7 +134,8 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
     def new_project(body: NewProject, role: str = Depends(auth)) -> dict:
         if not body.name.strip() or not body.brief.strip():
             raise HTTPException(400, "A project needs a name and a brief.")
-        project = guard(lambda: co.pipeline.create_project(body.name.strip(), body.brief.strip(), by=co.s.human(role)))
+        project = guard(lambda: co.pipeline.create_project(body.name.strip(), body.brief.strip(), by=co.s.human(role),
+                                                           idea=body.idea))
         run_in_background(project["id"])
         return project
 
@@ -141,9 +145,15 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
         run_in_background(pid)
         return project
 
+    @app.post("/api/projects/{pid}/revisit")
+    def revisit(pid: int, role: str = Depends(auth)) -> dict:
+        if role != "ceo":
+            raise HTTPException(403, "Parked ideas go back to the CEO; only the CEO can revisit them.")
+        return guard(lambda: co.pipeline.revisit(pid, co.s.human(role)))
+
     @app.post("/api/approvals/{aid}")
     def decide(aid: int, body: Decision, role: str = Depends(auth)) -> dict:
-        approval = guard(lambda: co.pipeline.decide(aid, role, body.decision, body.feedback))
+        approval = guard(lambda: co.pipeline.decide(aid, role, body.decision, body.feedback, choice=body.choice))
         if approval["project_id"]:
             run_in_background(approval["project_id"])
         return approval

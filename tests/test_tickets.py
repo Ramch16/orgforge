@@ -269,7 +269,7 @@ def test_agent_ticket_limits(co):
         co.tickets.agent_tool(agent, "transfer_ticket", {"ticket": t["ticket"], "role": roles[MAX_TRANSFERS % 2]},
                               other["id"], None, result)
     with pytest.raises(TicketError, match="cannot own tickets"):
-        co.tickets.agent_tool(agent, "create_ticket", {**ask, "role": "security_auditor"}, other["id"], None, result)
+        co.tickets.agent_tool(agent, "create_ticket", {**ask, "role": "code_reviewer"}, other["id"], None, result)
 
 
 def test_humans_transfer_tickets_between_departments(co, capsys):

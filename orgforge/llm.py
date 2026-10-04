@@ -89,9 +89,39 @@ class MockProvider:
 
     def _script(self, meta: dict, step: int = 0) -> list[list[dict]]:
         kind, purpose = meta.get("kind"), meta.get("purpose", "")
+        if purpose == "consult":                # a colleague's input on an idea
+            return [[self._call("write_file", path=meta["file"],
+                                content=f"# Input from {meta.get('agent')}\n\nLooks achievable as a small first "
+                                        "release. Main risk: unclear demand; start small and measure.\n")]]
+        if purpose == "assessment":
+            return [[self._call("write_file", path="docs/ASSESSMENT.md", content=(
+                        "# Assessment\n\n## Problem and users\nA small tool the team can use right away.\n\n"
+                        "## Internal or sell\nStart internal; it could be sold once proven.\n\n"
+                        "## Feasibility\nAchievable: small, about three build tickets.\n\n"
+                        "## Effort and cost\nA few agents for a short project; low model cost.\n\n"
+                        "## Revenue\nSubscription later, if it proves useful.\n\n## Risks\nUnclear demand.\n\n"
+                        "## Recommendation\nBuild it for internal use first.\n"))],
+                    [self._call("submit_assessment", recommendation="build_internal", feasibility="achievable",
+                                summary="Small, achievable, useful internally; could be sold later. Build it for "
+                                        "internal use first.")]]
+        if purpose == "plan_of_action":
+            tickets = [{"role": "support_specialist", "title": "Write the help guide", "after_build": True,
+                        "description": "A short guide covering setup and the main use, in docs/HELP.md."},
+                       {"role": "compliance_officer", "title": "Terms of use and privacy notice", "after_build": False,
+                        "description": "docs/legal/TERMS.md and docs/legal/PRIVACY.md for the first release."}]
+            if meta.get("selling"):
+                tickets.append({"role": "product_marketer", "title": "Pricing and launch plan", "after_build": False,
+                                "description": "docs/marketing/LAUNCH.md: pricing, target customers and launch steps."})
+            return [[self._call("write_file", path="docs/PLAN.md", content=(
+                        "# Plan of action\n\n1. Product: requirements\n2. Design: user experience\n"
+                        "3. Engineering: design and build\n4. Quality and Security: checks\n5. Legal: terms and privacy\n"
+                        "6. Support: help guide\n" + ("7. Marketing: pricing and launch\n" if meta.get("selling") else "")))],
+                    [self._call("submit_department_plan", summary="One small release; every department has its part.",
+                                tickets=tickets)]]
         if purpose == "chat":                   # asked for work in a chat: file it as a ticket
             message = str(meta.get("message", ""))
-            if re.search(r"\b(add|fix|build|change|create|make|update|implement)\b", message, re.I):
+            if re.match(r"\s*(please\s+|(can|could|would) you\s+(please\s+)?)?(add|fix|build|change|create|make|update|implement)\b",
+                        message, re.I):
                 owner = meta.get("role") if kind in ("builder", "designer", "product", "qa") else "backend_engineer"
                 return [[self._call("list_tickets"),
                          self._call("create_ticket", title=message.strip().rstrip(".?!")[:80], description=message,

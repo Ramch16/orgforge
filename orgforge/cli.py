@@ -28,6 +28,8 @@ def _print_inbox(co: Company, role: str | None) -> None:
         for line in a["summary"].splitlines()[:25]:
             print(f"    {line}")
     print("\nDecide with: orgforge approve <id> --as <ceo|cto>   or   orgforge reject <id> --as <ceo|cto> --note \"...\"")
+    if any(a["kind"] == "idea_decision" for a in items):
+        print("Decide ideas with: orgforge idea decide <id> internal|commercial|park|drop --note \"...\"")
 
 
 def _print_status(co: Company) -> None:
@@ -91,6 +93,13 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("serve", help="Start the dashboard")
     p.add_argument("--host", default="127.0.0.1"); p.add_argument("--port", type=int, default=4700)
 
+    ia = sub.add_parser("idea", help="Ideas: assess, decide, revisit").add_subparsers(dest="idea_cmd")
+    p = ia.add_parser("new", help="Submit an idea; Ram assesses it with Engineering, Marketing and Legal")
+    p.add_argument("name"); p.add_argument("--brief"); p.add_argument("--brief-file"); p.add_argument("--no-run", action="store_true"); who(p)
+    p = ia.add_parser("decide", help="CEO: decide an assessed idea")
+    p.add_argument("id", type=int, help="Approval id of the decision"); p.add_argument("choice", choices=["internal", "commercial", "park", "drop"])
+    p.add_argument("--note", default=""); p.add_argument("--no-run", action="store_true")
+    p = ia.add_parser("revisit", help="CEO: bring a parked idea back for a decision"); p.add_argument("project", type=int)
     p = sub.add_parser("chat", help="Talk to an agent directly (no message: show your conversation)")
     p.add_argument("agent"); p.add_argument("message", nargs="?")
     p.add_argument("--project", type=int, help="Project the conversation is about (lets the agent read it)"); who(p)
@@ -186,6 +195,8 @@ def _dispatch(args) -> int:
         _org(co, args, role)
     elif args.cmd == "ticket":
         _ticket(co, args, role)
+    elif args.cmd == "idea":
+        _idea(co, args, role)
     elif args.cmd == "chat":
         if args.message:
             print(f"Waiting for {co.org.agent(args.agent)['name']}...")
@@ -204,6 +215,28 @@ def _dispatch(args) -> int:
             if not thread["messages"]:
                 print(f'\nNo messages yet. Start with: orgforge chat {a["name"]} "Hello" --as {role}')
     return 0
+
+
+def _idea(co: Company, args, role: str) -> None:
+    cmd = args.idea_cmd or "new"
+    if cmd == "new":
+        brief = Path(args.brief_file).read_text() if args.brief_file else args.brief
+        if not brief:
+            raise PipelineError("Describe the idea with --brief or --brief-file.")
+        project = co.pipeline.create_project(args.name, brief, by=co.s.human(role), idea=True)
+        print(f"Idea {project['id']} submitted: {project['name']}")
+        if not args.no_run:
+            _advance(co, project["id"])
+    elif cmd == "decide":
+        decision = "approved" if args.choice in ("internal", "commercial") else "rejected"
+        approval = co.pipeline.decide(args.id, "ceo", decision, args.note, choice=args.choice)
+        print(f"#{approval['id']} decided by the CEO: {args.choice}.")
+        if approval["project_id"] and not args.no_run:
+            _advance(co, approval["project_id"])
+    elif cmd == "revisit":
+        project = co.pipeline.revisit(args.project, co.s.ceo_name)
+        print(f"{project['name']} is back with the CEO for a decision.")
+        _print_inbox(co, "ceo")
 
 
 def _print_ticket_row(t: dict) -> None:

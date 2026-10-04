@@ -171,6 +171,42 @@ it beyond your machine.
 | Workload hiring requests              | Whoever the department reports to |
 | Hire, fire, rate                      | CEO anywhere; CTO in CTO departments |
 
+## From idea to plan of action
+
+Not every idea should be built. Submit it as an idea (the default on the
+dashboard, or `orgforge idea new`) and the company decides first:
+
+1. **Assessment.** The product manager (Ram) leads it. He asks Engineering
+   (Sony) whether it is achievable and how big it is, Marketing (Anshu) who
+   would use or pay for it and whether to keep it internal or sell it, and
+   Legal (Srujana) about legal and data risks. Each answer is a ticket. Ram
+   then writes `docs/ASSESSMENT.md`: problem, users, internal use or selling,
+   feasibility, effort and cost, revenue options, risks and his recommendation.
+   You can chat with any of them while it happens.
+2. **Technical sign-off.** The CTO (Lucky) confirms the technical assessment,
+   or sends it back with concerns for Ram to reassess.
+3. **Decision.** The CEO (Niki) chooses: build it for internal use, build it to
+   sell, park it, or drop it. A parked idea can be revisited later.
+4. **Plan of action.** Ram writes `docs/PLAN.md`, one plan across departments,
+   and assigns a ticket to each department that has work beyond the standard
+   steps: for example help docs for Support, terms and privacy for Legal, and
+   pricing and a launch plan for Marketing (only when selling). Work that needs
+   the finished product waits for the build. The CEO approves the business side
+   and the CTO the technical side; either can send it back.
+5. **Build.** Requirements, design, build, checks and release then run as
+   usual, with the department tickets alongside.
+
+```bash
+orgforge idea new "Leave Tracker" --brief "Staff request leave and managers approve it" --as ceo
+orgforge approve 7 --as cto                      # technical sign-off
+orgforge idea decide 8 commercial --note "Worth selling to small firms"
+orgforge approve 9 --as ceo && orgforge approve 10 --as cto   # the plan, both sides
+orgforge idea revisit 3                          # bring a parked idea back
+```
+
+Choose "Start building" (or `orgforge new`) to skip the assessment when the
+decision is already made.
+
 ## Talking to the team
 
 The CEO and CTO can talk to any agent directly. On the dashboard, click
