@@ -510,4 +510,5 @@ Each role gets only the tools listed for it.
 
 ## Licence
 
-Proprietary, all rights reserved. See `LICENSE` and `NOTICE.md`.
+MIT. Use it, change it and build on it, commercially too; keep the copyright notice. See `LICENSE`,
+and `NOTICE.md` for third-party packages. Contributions are welcome: see `CONTRIBUTING.md`.

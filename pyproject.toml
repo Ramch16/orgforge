@@ -8,6 +8,7 @@ version = "0.10.0"
 description = "An AI-staffed software company you run as CEO, with a human CTO: agents plan, build, review and ship software, and get replaced when they underperform."
 readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
 dependencies = [
   "pyyaml>=6",
   "anthropic>=0.40",
