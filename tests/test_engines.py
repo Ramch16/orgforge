@@ -138,3 +138,25 @@ def test_shared_memory_reaches_later_agents(co):
     co.runtime.provider.complete = spy
     co.runtime.run(co.org.agent("Hari"), "Build the JWT login", co.pipeline.workspace(p), project_id=p["id"])
     assert "What the team has learned" in seen[0] and "JWT tokens in cookies" in seen[0]
+
+
+def test_a_usage_limit_pauses_work_without_blaming_anyone(cli, tmp_path):
+    co, say, calls = cli
+    limited = tmp_path / "limited_cli.py"                 # answers like Claude Code at its session limit
+    limited.write_text("import json, sys\nsys.stdin.read()\nprint(json.dumps({'type': 'result', 'is_error': True, "
+                       "'result': \"You've hit your session limit - resets 10:10pm\"}))\n")
+    co.s.engines["limited"] = {**BUILTIN_ENGINES["claude-code"], "command": [sys.executable, str(limited)]}
+    for name in ("Hari", "Pavan", "Badri"):
+        on_cli(co, name, "cli:limited")
+    p = co.pipeline.create_project("Greeter", "A tiny library.")
+    co.db.run("UPDATE projects SET stage='build' WHERE id=?", p["id"])
+    co.tickets.create(p["id"], "Core engine", "Build it.", "Lucky", status="todo", role="backend_engineer")
+    with pytest.raises(Exception, match="paused.*session limit"):
+        co.pipeline.advance(p["id"])
+    t = next(t for t in co.tickets.search(p["id"]) if t["title"] == "Core engine")
+    assert t["status"] == "todo" and t["attempts"] == 0                     # no rework counted
+    assert not co.pipeline.inbox("cto")                                     # no escalation
+    assert not co.db.one("SELECT 1 FROM reviews")                           # no scores
+    assert co.db.one("SELECT 1 FROM events WHERE kind='paused' AND message LIKE '%Nothing was counted%'")
+    assert not co.db.one("SELECT 1 FROM events WHERE kind='error'")
+    assert co.runs.recent(co.org.agent("Hari")["id"])[0]["status"] == "failed"

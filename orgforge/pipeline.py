@@ -241,9 +241,23 @@ class Pipeline:
 
     def advance(self, pid: int) -> dict:
         """Run the project forward until it needs a human or is finished."""
+        from .engines import EngineUnavailable
         lock = self._locks.setdefault(pid, threading.Lock())
         if not lock.acquire(blocking=False):
             return self.project(pid)          # already running in another thread
+        try:
+            return self._advance(pid)
+        except EngineUnavailable as exc:
+            self.db.run("UPDATE tasks SET status='todo' WHERE project_id=? AND status IN ('in_progress','in_review') "
+                        "AND origin!='stage'", pid)
+            self.db.log("paused", f"Work paused: {exc}. Nothing was counted against the team. "
+                        f"Resume once it is back (Resume work, or `orgforge run {pid}`).", pid)
+            raise PipelineError(f"Work paused: {exc}. Nothing was counted against the team; resume once it is back "
+                                f"with Resume work or `orgforge run {pid}`.") from exc
+        finally:
+            lock.release()
+
+    def _advance(self, pid: int) -> dict:
         try:
             self.db.run("UPDATE tasks SET status='todo' WHERE project_id=? AND status IN ('in_progress', 'in_review') AND origin!='stage'", pid)
             steps = {"idea": self._idea, "plan": self._plan, "prd": self._prd, "architecture": self._architecture,
@@ -255,10 +269,10 @@ class Pipeline:
                 steps[stage](self.project(pid))
             self.write_reports(pid)
         except Exception as exc:
-            self.db.log("error", f"{type(exc).__name__}: {exc}", pid)
+            from .engines import EngineUnavailable
+            if not isinstance(exc, EngineUnavailable):   # a pause is logged by advance(), not as an error
+                self.db.log("error", f"{type(exc).__name__}: {exc}", pid)
             raise
-        finally:
-            lock.release()
         return self.project(pid)
 
     # ---- budgets and reports ---------------------------------------------

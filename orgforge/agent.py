@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from .config import Settings
 from .costs import record_usage
-from .engines import ACTIONS, EngineError, actions_to_calls, parse_block, protocol, run_cli
+from .engines import ACTIONS, EngineError, EngineUnavailable, actions_to_calls, parse_block, protocol, run_cli
 from .memory import MEMORY_TOOL_SPECS
 from .runs import describe_call
 from .db import DB
@@ -195,6 +195,8 @@ class AgentRuntime:
         try:
             out = run_cli(engine, system=system, prompt=prompt, cwd=str(ws.root) if ws else None, model=model,
                           write=can_write, run=can_run, timeout=self.s.cli_timeout)
+        except EngineUnavailable as exc:      # a usage limit is nobody's failure: stop, don't score or rework
+            raise EngineUnavailable(f"{engine_name} is unavailable: {exc}") from exc
         except EngineError as exc:
             result.text = f"(The {engine_name} engine failed: {exc})"
             return result

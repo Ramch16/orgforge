@@ -77,6 +77,14 @@ class EngineError(RuntimeError):
     pass
 
 
+class EngineUnavailable(EngineError):
+    """The engine refused to work (usage limit, rate limit, not signed in). Nobody failed: pause and resume later."""
+
+
+UNAVAILABLE = re.compile(r"session limit|usage limit|rate limit|limit reached|hit your .{0,30}limit|quota|"
+                         r"not logged in|please run /login|overloaded", re.I)
+
+
 def protocol(names: list[str]) -> str:
     """How the CLI agent reports OrgForge actions, limited to the ones this run allows."""
     rows = [f'  "{ACTIONS[n][0]}": {ACTIONS[n][1]}' for n in names if n in ACTIONS]
@@ -124,12 +132,17 @@ def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: s
     """Run one CLI turn. Reading is always allowed; editing files and running commands only when granted."""
     if engine.get("system") == "prompt":    # no system-prompt flag: the role and rules lead the prompt
         prompt = f"{system}\n\n---\n\n{prompt}"
-    fill = {"system": system, "prompt": prompt, "model": model}
-    argv = [part.format(**fill) for part in engine["command"]]
+    fill = {"{system}": system, "{prompt}": prompt, "{model}": model}
+
+    def put(part: str) -> str:                      # only our placeholders; other braces stay as written
+        for key, value in fill.items():
+            part = part.replace(key, value)
+        return part
+    argv = [put(part) for part in engine["command"]]
     if engine.get("level_args"):
         argv += list(engine["level_args"].get("write" if write else "read", []))
     if model and engine.get("model_args"):
-        argv += [part.format(**fill) for part in engine["model_args"]]
+        argv += [put(part) for part in engine["model_args"]]
     tools = engine.get("tools") or {}
     allowed = list(tools.get("read", [])) + (list(tools.get("write", [])) if write else []) \
         + (list(tools.get("run", [])) if run else [])
@@ -164,4 +177,6 @@ def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: s
                    output_tokens=int(usage.get("output_tokens", 0)))
     if out["is_error"] and not out["text"]:
         out["text"] = (proc.stderr or "").strip()[:2000]
+    if out["is_error"] and UNAVAILABLE.search(out["text"]):
+        raise EngineUnavailable(out["text"].strip()[:300])
     return out
