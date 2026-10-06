@@ -1,6 +1,6 @@
 [package]
 name = "vittics-builder-desktop"
-version = "0.20.0"
+version = "0.20.1"
 description = "Vittics Builder desktop app"
 edition = "2021"
 rust-version = "1.77"

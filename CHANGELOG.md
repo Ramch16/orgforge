@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.20.1 (in progress)
+## 0.20.1 — 2026-10-06
 - **Choose how your agents think, in the app.** A new install could not be set up without a terminal:
   it defaulted to the Anthropic API with no way to enter a key, and the desktop app could not switch
   agents to a subscription. Now a banner on every page says when agents cannot work and why, and
