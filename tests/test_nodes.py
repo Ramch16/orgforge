@@ -1,4 +1,5 @@
 import io
+import os
 import json
 import socket
 import sys
@@ -84,7 +85,7 @@ def test_pairing_proves_the_code_both_ways_and_works_once(co, server, tmp_path, 
     config = wc.join(server, pairing["code"].lower().replace("-", " "))      # forgiving about how it is typed
     node = co.db.one("SELECT * FROM nodes")
     assert config["secret"] == node["secret"] and config["name"] == "laptop"
-    assert oct(wc.CONFIG.stat().st_mode & 0o777) == "0o600"
+    assert os.name == "nt" or oct(wc.CONFIG.stat().st_mode & 0o777) == "0o600"
     assert co.db.one("SELECT code FROM node_pairings")["code"] == ""          # forgotten once used
     with pytest.raises(wc.WorkerError, match="wrong, used or expired"):
         wc.join(server, pairing["code"])

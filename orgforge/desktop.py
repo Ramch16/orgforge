@@ -33,7 +33,7 @@ def login_path() -> str:
     shell = os.environ.get("SHELL") or "/bin/zsh"
     found = ""
     try:
-        out = subprocess.run([shell, "-ilc", "printf '__PATH__%s' \"$PATH\""], capture_output=True, text=True,
+        out = subprocess.run([shell, "-ilc", "printf '__PATH__%s' \"$PATH\""], capture_output=True, text=True, encoding="utf-8", errors="replace",
                              timeout=10, stdin=subprocess.DEVNULL)
         if "__PATH__" in out.stdout:
             found = out.stdout.rsplit("__PATH__", 1)[1].strip()
@@ -46,13 +46,13 @@ def login_path() -> str:
 def desktop_tokens(root: Path) -> dict[str, str]:
     path = root / ".orgforge" / "desktop.json"
     if path.exists():
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         if data.get("ceo") and data.get("cto") and data["ceo"] != data["cto"]:
             return {"ceo": data["ceo"], "cto": data["cto"]}
     path.parent.mkdir(parents=True, exist_ok=True)
     tokens = {"ceo": secrets.token_urlsafe(24), "cto": secrets.token_urlsafe(24)}
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(tokens))
+    tmp.write_text(json.dumps(tokens), encoding="utf-8")
     os.chmod(tmp, 0o600)
     tmp.replace(path)
     return tokens

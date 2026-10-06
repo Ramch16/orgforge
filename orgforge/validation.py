@@ -50,7 +50,7 @@ def validate_plan(tasks: list[dict], roles: set[str]) -> None:
 
 
 def read_contract(ws: Workspace) -> dict:
-    data = json.loads(ws.resolve(CONTRACT).read_text())
+    data = json.loads(ws.resolve(CONTRACT).read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError('product.json must be an object.')
     for key in ('name', 'setup', 'run'):
@@ -76,7 +76,7 @@ def verify_product(ws: Workspace) -> dict:
         contract = read_contract(ws)
         report['contract_sha256'] = hashlib.sha256(ws.resolve(CONTRACT).read_bytes()).hexdigest()
         for path in ('README.md', 'docs/OPERATIONS.md'):
-            if not ws.resolve(path).is_file() or not ws.resolve(path).read_text().strip():
+            if not ws.resolve(path).is_file() or not ws.resolve(path).read_text(encoding="utf-8").strip():
                 report['errors'].append(f'Missing delivery documentation: {path}')
         for check in contract['checks']:
             try:

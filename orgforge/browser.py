@@ -94,7 +94,7 @@ def journey(ws, config, args):
                         target = ws.resolve(step.get('path') or '.orgforge/browser/screenshot.png')
                         target.parent.mkdir(parents=True, exist_ok=True)
                         page.screenshot(path=str(target), full_page=True, timeout=remaining)
-                        screenshots.append(str(target.relative_to(ws.root)))
+                        screenshots.append(target.relative_to(ws.root).as_posix())
                 if blocked:
                     raise ToolError('Browser journey attempted requests outside its allowed origins.')
                 return json.dumps({'url': page.url, 'title': page.title(), 'steps_passed': len(steps),

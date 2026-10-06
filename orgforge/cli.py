@@ -266,17 +266,17 @@ def _dispatch(args) -> int:
             co.workers.enable(args.id,args.action=='enable');result={'id':args.id,'enabled':args.action=='enable'}
         else:
             if not args.name or args.project is None or not args.kind:raise ValueError('Worker add needs name, project and kind.')
-            result=co.workers.add(args.name,args.project,args.kind,args.interval,json.loads(Path(args.config).read_text()) if args.config else {})
+            result=co.workers.add(args.name,args.project,args.kind,args.interval,json.loads(Path(args.config).read_text(encoding="utf-8")) if args.config else {})
         print(json.dumps(result,indent=2))
     elif args.cmd=='observe':
         print(json.dumps(co.observability.ingest(args.project,args.source,args.title,args.body,args.severity),indent=2))
     elif args.cmd=='arena':
-        print(json.dumps(co.arena.compete(args.project,args.goal,json.loads(Path(args.candidates).read_text()),args.check),indent=2))
+        print(json.dumps(co.arena.compete(args.project,args.goal,json.loads(Path(args.candidates).read_text(encoding="utf-8")),args.check),indent=2))
     elif args.cmd=='assess':
         if args.kind=='board':result=co.assessments.board(args.project)
         elif args.kind=='customers':
             if not args.journeys:raise ValueError('Customer evaluation needs a journey JSON file.')
-            result=co.assessments.customers(args.project,json.loads(Path(args.journeys).read_text()))
+            result=co.assessments.customers(args.project,json.loads(Path(args.journeys).read_text(encoding="utf-8")))
         elif args.kind=='red-team':result=co.assessments.red_team(args.project,args.check)
         elif args.kind=='dependencies':result=co.security.dependencies(args.project)
         else:result=co.security.scan(args.project)
@@ -285,17 +285,17 @@ def _dispatch(args) -> int:
         if args.action=='list':result=co.marketplace.list()
         elif args.action=='register':
             if not args.bundle:raise ValueError('Registration needs a bundle JSON file.')
-            bundle=json.loads(Path(args.bundle).read_text());result=co.marketplace.register(bundle['manifest'],bundle['assets'])
+            bundle=json.loads(Path(args.bundle).read_text(encoding="utf-8"));result=co.marketplace.register(bundle['manifest'],bundle['assets'])
         else:result=co.marketplace.install(args.name,args.sha256)
         print(json.dumps(result,indent=2))
     elif args.cmd=='federation':
-        payload=json.loads(Path(args.payload).read_text())
+        payload=json.loads(Path(args.payload).read_text(encoding="utf-8"))
         if args.action=='receive':result=co.federation.receive(payload)
         elif args.action=='sign':result=co.federation.envelope(args.peer,args.kind,payload)
         else:result=co.federation.send(args.peer,args.kind,payload)
         print(json.dumps(result,indent=2))
     elif args.cmd == "new":
-        brief = Path(args.brief_file).read_text() if args.brief_file else args.brief
+        brief = Path(args.brief_file).read_text(encoding="utf-8") if args.brief_file else args.brief
         if not brief:
             raise PipelineError("Give the brief with --brief or --brief-file.")
         project = co.pipeline.create_project(args.name, brief, by=co.s.ceo_name)
@@ -581,7 +581,7 @@ def _dispatch(args) -> int:
 def _idea(co: Company, args, role: str) -> None:
     cmd = args.idea_cmd or "new"
     if cmd == "new":
-        brief = Path(args.brief_file).read_text() if args.brief_file else args.brief
+        brief = Path(args.brief_file).read_text(encoding="utf-8") if args.brief_file else args.brief
         if not brief:
             raise PipelineError("Describe the idea with --brief or --brief-file.")
         project = co.pipeline.create_project(args.name, brief, by=co.s.human(role), idea=True)
@@ -683,7 +683,7 @@ def _org(co: Company, args, role: str) -> None:
     elif cmd == "sync":
         import yaml
         from .config import DEFAULT_ORG
-        raw = yaml.safe_load(Path(args.source or DEFAULT_ORG).read_text()) or {}
+        raw = yaml.safe_load(Path(args.source or DEFAULT_ORG).read_text(encoding="utf-8")) or {}
         added = co.org.sync(raw, by=by)
         for what, items in added.items():
             print(f"Added {len(items)} {what}" + (f": {', '.join(items)}" if items else ""))

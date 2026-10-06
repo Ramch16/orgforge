@@ -77,7 +77,7 @@ def version_tuple(text: str) -> tuple[int, ...]:
 def _run(argv: list[str], timeout: int = 15) -> tuple[int, str]:
     from .platforms import UnsafeCommand, safe_argv
     try:
-        p = subprocess.run(safe_argv(argv), capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(safe_argv(argv), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
         return p.returncode, (p.stdout + p.stderr).strip()
     except (OSError, subprocess.TimeoutExpired, UnsafeCommand) as exc:
         return 127, str(exc)
@@ -192,7 +192,7 @@ class Machine:
         contract = root / "product.json"
         if contract.is_file():
             try:
-                data = json.loads(contract.read_text())
+                data = json.loads(contract.read_text(encoding="utf-8"))
                 commands = [("setup", data.get("setup", ""))] + [(f"check {c.get('id')}", c.get("command", ""))
                                                                  for c in data.get("checks") or [] if isinstance(c, dict)]
             except (ValueError, AttributeError):

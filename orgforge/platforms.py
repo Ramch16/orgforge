@@ -50,7 +50,7 @@ def shell_command(command: str) -> tuple[list[str] | str, bool]:
 def unshim(path: str) -> list[str] | None:
     """The Node script behind an npm .cmd wrapper, as [node, script]."""
     try:
-        text = Path(path).read_text(errors="replace")
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
     m = NPM_SHIM.search(text)

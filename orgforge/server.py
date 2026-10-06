@@ -186,7 +186,7 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
-        return (STATIC / "index.html").read_text()
+        return (STATIC / "index.html").read_text(encoding="utf-8")
 
     # Installable app: manifest, icons and a pass-through service worker.
     @app.get("/manifest.webmanifest")

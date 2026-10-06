@@ -17,12 +17,22 @@ def bin_dir(tmp_path, monkeypatch):
     """A PATH holding only git (the pipeline needs it) plus whatever fake tools a test adds."""
     d = tmp_path / "bin"
     d.mkdir()
-    os.symlink(shutil.which("git"), d / "git")
-    monkeypatch.setenv("PATH", str(d))
+    if os.name == "nt":            # symlinks need admin rights on Windows; cmd.exe runs the .cmd launchers
+        monkeypatch.setenv("PATH", os.pathsep.join([str(d), os.path.dirname(shutil.which("git")),
+                                                    os.path.join(os.environ["SYSTEMROOT"], "System32")]))
+    else:
+        os.symlink(shutil.which("git"), d / "git")
+        monkeypatch.setenv("PATH", str(d))
 
     def tool(name, body="print('1.0.0')", code=0):
+        script = f"import sys, os, json\n{body}\nsys.exit({code})\n"
+        if os.name == "nt":
+            (d / f"{name}.py").write_text(script, encoding="utf-8")
+            f = d / f"{name}.cmd"
+            f.write_text(f'@"{sys.executable}" "%~dp0{name}.py" %*\r\n', encoding="utf-8")
+            return f
         f = d / name
-        f.write_text(f"#!{sys.executable}\nimport sys, os, json\n{body}\nsys.exit({code})\n")
+        f.write_text(f"#!{sys.executable}\n{script}", encoding="utf-8")
         f.chmod(f.stat().st_mode | stat.S_IEXEC)
         return f
     return d, tool
@@ -114,7 +124,9 @@ def test_install_runs_the_recipe_and_verifies(co, bin_dir, monkeypatch):
     monkeypatch.setattr(m, "system", lambda: "macos")
     log = d.parent / "brew.log"
     tool("brew", f"open({str(log)!r}, 'a').write(' '.join(sys.argv[1:]) + '\\n')\n"
-                 f"p = os.path.join({str(d)!r}, 'go'); open(p, 'w').write('#!/bin/sh\\necho go version go1.27.1')\n"
+                 f"windows = os.name == 'nt'\n"
+                 f"p = os.path.join({str(d)!r}, 'go.cmd' if windows else 'go')\n"
+                 "open(p, 'w').write('@echo go version go1.27.1' if windows else '#!/bin/sh\\necho go version go1.27.1')\n"
                  "os.chmod(p, 0o755)")
     row = co.machine.install("go", by="Lucky")
     assert row["status"] == "installed" and row["command"] == "brew install go"

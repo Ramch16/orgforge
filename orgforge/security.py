@@ -19,11 +19,11 @@ class Security:
             if path.is_symlink() or not path.is_file() or path.stat().st_size>500000:continue
             if scanned>=1000:raise ValueError('Security scan exceeds the 1000-file bound; configure a narrower project.')
             scanned+=1
-            try:text=path.read_text()
+            try:text=path.read_text(encoding="utf-8")
             except UnicodeError:continue
             for index,line in enumerate(text.splitlines(),1):
                 if re.search(r'\b(?:sk-ant-|sk-proj-)[A-Za-z0-9_-]{20,}',line):
-                    findings.append({'path':str(relative),'line':index,'kind':'embedded API credential'})
+                    findings.append({'path':relative.as_posix(),'line':index,'kind':'embedded API credential'})
         report={'checked_at':now(),'files_scanned':scanned,'findings':findings,'passed':not findings}
         if findings:
             self.co.observability.ingest(project_id,'security-scan','Possible embedded credentials found',json.dumps(findings),severity='critical')

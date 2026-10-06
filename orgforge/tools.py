@@ -214,25 +214,25 @@ class Workspace:
         target = self.resolve(path)
         if not target.is_file():
             raise ToolError(f"No file at '{path}'.")
-        return _clip(target.read_text(errors="replace"))
+        return _clip(target.read_text(encoding="utf-8", errors="replace"))
 
     def write_file(self, path: str, content: str) -> str:
         target = self.resolve(path)
         if target == self.root or ".git" in target.relative_to(self.root).parts:
             raise ToolError(f"'{path}' is not a writable file path.")
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content)
+        target.write_text(content, encoding="utf-8", newline="")   # exactly what the agent wrote
         return f"Wrote {path} ({len(content)} characters)."
 
     def replace_in_file(self, path: str, old: str, new: str) -> str:
         target = self.resolve(path)
         if not target.is_file():
             raise ToolError(f"No file at '{path}'.")
-        text = target.read_text()
+        text = target.read_text(encoding="utf-8")
         count = text.count(old)
         if count != 1:
             raise ToolError(f"`old` occurs {count} times in '{path}'; it must occur exactly once.")
-        target.write_text(text.replace(old, new, 1))
+        target.write_text(text.replace(old, new, 1), encoding="utf-8", newline="")
         return f"Edited {path}."
 
     def list_files(self, path: str = ".") -> str:
@@ -243,7 +243,7 @@ class Workspace:
         for dirpath, dirnames, filenames in os.walk(base):
             dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
             for name in sorted(filenames):
-                found.append(str((Path(dirpath) / name).relative_to(self.root)))
+                found.append((Path(dirpath) / name).relative_to(self.root).as_posix())
                 if len(found) >= 400:
                     return "\n".join(found) + "\n... (more files not shown)"
         return "\n".join(found) or "(empty)"
@@ -265,7 +265,7 @@ class Workspace:
             args, shell = shell_command(command)
             kwargs = dict(args=args, shell=shell, cwd=self.root)
         try:
-            proc = subprocess.run(capture_output=True, text=True, timeout=timeout, env=env, **kwargs)
+            proc = subprocess.run(capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout, env=env, **kwargs)
         except subprocess.TimeoutExpired:
             raise ToolError(f"Command timed out after {timeout}s.")
         except FileNotFoundError as exc:
@@ -291,7 +291,7 @@ class Workspace:
         with _GIT_LOCK:
             proc = subprocess.run(
                 ["git", "-c", "user.name=OrgForge", "-c", "user.email=orgforge@localhost", *args],
-                cwd=self.root, capture_output=True, text=True,
+                cwd=self.root, capture_output=True, text=True, encoding="utf-8", errors="replace",
             )
         if proc.returncode:
             raise ToolError(f"Git {args[0]} failed: {_clip(proc.stderr)}")
@@ -310,18 +310,18 @@ class Workspace:
         (shared=False) the patterns go in .git/info/exclude, so their files and history are left alone."""
         if not shared:
             exclude = self.root / ".git" / "info" / "exclude"
-            have = exclude.read_text().splitlines() if exclude.exists() else []
+            have = exclude.read_text(encoding="utf-8").splitlines() if exclude.exists() else []
             missing = [p for p in GITIGNORE if p not in have]
             if missing:
                 exclude.parent.mkdir(parents=True, exist_ok=True)
-                exclude.write_text("\n".join(have + missing) + "\n")
+                exclude.write_text("\n".join(have + missing) + "\n", encoding="utf-8")
             return False
         target = self.root / ".gitignore"
-        have = target.read_text().splitlines() if target.exists() else []
+        have = target.read_text(encoding="utf-8").splitlines() if target.exists() else []
         missing = [p for p in GITIGNORE if p not in have]
         if not missing:
             return False
-        target.write_text("\n".join(have + (["# Added by OrgForge"] if have else []) + missing) + "\n")
+        target.write_text("\n".join(have + (["# Added by OrgForge"] if have else []) + missing) + "\n", encoding="utf-8")
         with _GIT_LOCK:
             tracked = self.git("ls-files", "-ci", "--exclude-standard").splitlines()
             if tracked:

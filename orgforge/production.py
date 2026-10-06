@@ -185,7 +185,7 @@ class Production:
             from .platforms import shell_command
             args, shell = shell_command(command)
             proc = subprocess.run(args, shell=shell, cwd=project["workspace"], env=environ, capture_output=True,
-                                  text=True, timeout=timeout)
+                                  text=True, encoding="utf-8", errors="replace", timeout=timeout)
         except subprocess.TimeoutExpired:
             return False, f"timed out after {timeout}s"
         output = (proc.stdout + ("\n" + proc.stderr if proc.stderr else "")).strip()

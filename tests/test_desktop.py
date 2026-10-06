@@ -4,6 +4,8 @@ import subprocess
 import sys
 import urllib.request
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from orgforge import desktop
@@ -13,10 +15,13 @@ from orgforge.server import create_app
 def test_tokens_are_created_once_privately_and_kept(tmp_path):
     first = desktop.desktop_tokens(tmp_path)
     path = tmp_path / ".orgforge" / "desktop.json"
-    assert first["ceo"] != first["cto"] and oct(path.stat().st_mode & 0o777) == "0o600"
+    assert first["ceo"] != first["cto"]
+    if os.name != "nt":                                                # Windows: the user profile's ACL protects it
+        assert oct(path.stat().st_mode & 0o777) == "0o600"
     assert desktop.desktop_tokens(tmp_path) == first                 # survives restarts
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows apps get the user's PATH already")
 def test_apps_get_a_terminal_like_path(monkeypatch):
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
     path = desktop.login_path().split(":")

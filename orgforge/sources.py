@@ -34,13 +34,13 @@ def repo_url(ref: str) -> str:
 def clone(ref: str, dest: Path, branch: str) -> str:
     """Clone into dest and start a working branch. Returns the branch the work starts from."""
     url = repo_url(ref)
-    proc = subprocess.run(["git", "clone", "-q", url, str(dest)], capture_output=True, text=True, timeout=600)
+    proc = subprocess.run(["git", "clone", "-q", url, str(dest)], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
     if proc.returncode:
         shutil.rmtree(dest, ignore_errors=True)
         raise SourceError(f"Could not clone {ref}: {proc.stderr.strip()[:300]}"
                           + (" For a private GitHub repo, run `gh auth setup-git` once." if "github.com" in url else ""))
     base = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=dest, capture_output=True,
-                          text=True).stdout.strip() or "main"
+                          text=True, encoding="utf-8", errors="replace").stdout.strip() or "main"
     subprocess.run(["git", "checkout", "-q", "-b", branch], cwd=dest, check=True)
     return base
 
@@ -53,7 +53,7 @@ def github_issue(ref: str) -> dict:
     if not shutil.which("gh"):
         raise SourceError("Reading GitHub issues needs the GitHub CLI (gh). Install it and run `gh auth login`.")
     proc = subprocess.run(["gh", "issue", "view", m.group(2), "--repo", m.group(1), "--json",
-                           "title,body,url,number,labels"], capture_output=True, text=True, timeout=60)
+                           "title,body,url,number,labels"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
     if proc.returncode:
         raise SourceError(f"Could not read {ref}: {proc.stderr.strip()[:300]}")
     data = json.loads(proc.stdout)

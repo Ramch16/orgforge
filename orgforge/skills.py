@@ -49,11 +49,11 @@ class Skills:
     def all(self) -> list[dict]:
         out = []
         for f in sorted(BUILTIN.glob("*.md")):
-            skill = parse(f.read_text(), f.stem)
+            skill = parse(f.read_text(encoding="utf-8"), f.stem)
             out.append({**skill, "builtin": True, "enabled": skill["name"] in self.s.skills})
         if self.folder.is_dir():
             for f in sorted(self.folder.glob("*.md")):
-                out.append({**parse(f.read_text(), f.stem), "builtin": False, "file": str(f)})
+                out.append({**parse(f.read_text(encoding="utf-8"), f.stem), "builtin": False, "file": str(f)})
         return out
 
     def for_kind(self, kind: str, department: str | None = None) -> str:
@@ -77,7 +77,7 @@ class Skills:
             path = Path(ref).expanduser()
             if not path.is_file():
                 raise SkillError(f"No file at {path}.")
-            text, stem = path.read_text(), path.stem
+            text, stem = path.read_text(encoding="utf-8"), path.stem
         if stem.upper() == "CLAUDE":
             stem = "imported-guidelines"
         skill = parse(text, re.sub(r"[^a-z0-9-]+", "-", stem.lower()).strip("-") or "skill")
@@ -85,5 +85,5 @@ class Skills:
             raise SkillError("That file has no guideline text.")
         self.folder.mkdir(parents=True, exist_ok=True)
         target = self.folder / f"{skill['name']}.md"
-        target.write_text(text if HEADER.match(text) else f"---\nname: {skill['name']}\nsource: {ref}\n---\n{text}")
+        target.write_text(text if HEADER.match(text) else f"---\nname: {skill['name']}\nsource: {ref}\n---\n{text}", encoding="utf-8")
         return {**skill, "file": str(target)}

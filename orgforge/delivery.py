@@ -24,7 +24,7 @@ def export_product(pipeline, pid: int, destination: Path) -> Path:
     os.close(fd)
     try:
         result = subprocess.run(['git', 'archive', '--format=zip', f'--output={temp}', 'release'],
-                                cwd=ws.root, capture_output=True, text=True)
+                                cwd=ws.root, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if result.returncode:
             raise PipelineError(f'Could not export release: {result.stderr}')
         # Link atomically without replacing an output created concurrently.

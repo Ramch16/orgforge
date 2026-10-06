@@ -170,7 +170,7 @@ def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: s
         raise EngineError(str(exc)) from exc
     try:
         proc = subprocess.run(argv, input=prompt if engine.get("prompt", "stdin") == "stdin" else None,
-                              capture_output=True, text=True, cwd=workdir, env=env, timeout=timeout)
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=workdir, env=env, timeout=timeout)
     except FileNotFoundError as exc:
         raise EngineError(f"'{argv[0]}' is not installed or not on PATH.") from exc
     except subprocess.TimeoutExpired as exc:

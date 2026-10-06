@@ -141,7 +141,7 @@ class Pipeline:
     @staticmethod
     def _read(ws: Workspace, path: str) -> str:
         target = ws.resolve(path)
-        return target.read_text(errors="replace") if target.is_file() else ""
+        return target.read_text(encoding="utf-8", errors="replace") if target.is_file() else ""
 
     # ---- projects --------------------------------------------------------
     def create_project(self, name: str, brief: str, by: str = "ceo", idea: bool = False,

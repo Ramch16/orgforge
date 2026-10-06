@@ -14,7 +14,7 @@ def hashes(root):
     result={}
     for path in sorted(root.rglob('*')):
         if path.is_symlink():raise ValueError('Arena snapshots cannot contain symbolic links.')
-        if path.is_file():result[str(path.relative_to(root))]=hashlib.sha256(path.read_bytes()).hexdigest()
+        if path.is_file():result[path.relative_to(root).as_posix()]=hashlib.sha256(path.read_bytes()).hexdigest()   # '/' on Windows too
     return result
 
 

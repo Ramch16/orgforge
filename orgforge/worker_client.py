@@ -52,7 +52,7 @@ def info() -> dict:
 def save(config: dict) -> None:
     CONFIG.parent.mkdir(parents=True, exist_ok=True)
     tmp = CONFIG.with_suffix(".tmp")
-    tmp.write_text(json.dumps(config, indent=2))
+    tmp.write_text(json.dumps(config, indent=2), encoding="utf-8")
     os.chmod(tmp, 0o600)                       # holds the secret
     tmp.replace(CONFIG)
 
@@ -60,7 +60,7 @@ def save(config: dict) -> None:
 def load() -> dict:
     if not CONFIG.exists():
         raise WorkerError("This computer has not joined a company yet: run `orgforge worker join <url> <code>`.")
-    return json.loads(CONFIG.read_text())
+    return json.loads(CONFIG.read_text(encoding="utf-8"))
 
 
 def join(url: str, code: str, insecure: bool = False) -> dict:
@@ -157,7 +157,7 @@ class Worker:
 
     def _snapshot(self, folder: Path) -> None:
         self._git(folder, "init", "-q")
-        (folder / ".git" / "info" / "exclude").write_text("\n".join(f"{d}/" for d in sorted(SKIP_DIRS - {".git"})) + "\n")
+        (folder / ".git" / "info" / "exclude").write_text("\n".join(f"{d}/" for d in sorted(SKIP_DIRS - {".git"})) + "\n", encoding="utf-8")
         self._git(folder, "add", "-A")
         self._git(folder, "commit", "-q", "--allow-empty", "-m", "snapshot")
 

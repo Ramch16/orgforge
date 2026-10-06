@@ -2,8 +2,9 @@ import json
 import sys
 
 import pytest
+from pathlib import Path
 
-PY = sys.executable
+PY = Path(sys.executable).as_posix()          # Git Bash runs these on Windows: '/' paths
 
 
 def decide_next(co, role, decision="approved", feedback=""):
@@ -31,11 +32,11 @@ def prod(co, tmp_path):
         "import json, os, sys\n"
         f"open({str(log)!r}, 'a').write(json.dumps({{'args': sys.argv[1:], 'cwd': os.getcwd(), "
         "'token': os.environ.get('DEPLOY_TOKEN'), 'other': os.environ.get('OTHER_SECRET')}) + '\\n')\n")
-    check = f"{PY} -c \"import sys; sys.exit(0 if open({str(healthy)!r}).read() == 'yes' else 1)\""
+    check = f"{PY} -c \"import sys; sys.exit(0 if open('{healthy.as_posix()}').read() == 'yes' else 1)\""
 
     def env(name, **extra):
-        return {"name": name, "deploy": f"{PY} {script} deploy {name} {{version}} {{commit}}",
-                "health": check, "rollback": f"{PY} {script} rollback {name} {{previous}}",
+        return {"name": name, "deploy": f"{PY} {script.as_posix()} deploy {name} {{version}} {{commit}}",
+                "health": check, "rollback": f"{PY} {script.as_posix()} rollback {name} {{previous}}",
                 "health_retries": 2, "health_interval_seconds": 0, **extra}
 
     def configure(*envs, **extra):
@@ -108,7 +109,7 @@ def test_a_healthy_rollback_is_reported_and_rejecting_sends_it_back(co, prod, tm
     configure, env, calls, healthy = prod
     flaky = tmp_path / "flaky.py"                                        # unhealthy only for version 2
     flaky.write_text("import sys\nsys.exit(1 if sys.argv[1] == '2' else 0)\n")
-    configure(env("production", health=f"{PY} {flaky} {{version}}"))
+    configure(env("production", health=f"{PY} {flaky.as_posix()} {{version}}"))
     p = to_signoff(co)
     assert decide_next(co, "ceo")["stage"] == "live"
     co.tickets.create(p["id"], "Add a farewell", "Say goodbye too.", "Niki", status="todo", role="backend_engineer")

@@ -33,7 +33,7 @@ def review(co, pid: int) -> dict:
 
     def load(path: str):
         try:
-            return json.loads(ws.resolve(path).read_text()) if path in files else None
+            return json.loads(ws.resolve(path).read_text(encoding="utf-8")) if path in files else None
         except (OSError, ValueError, ToolError):
             return None
 

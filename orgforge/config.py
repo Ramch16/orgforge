@@ -84,7 +84,7 @@ def ensure_org_file(root: Path) -> Path:
 def load_settings(root: str | os.PathLike | None = None) -> Settings:
     root = resolve_root(root)
     org_file = root / "org.yaml"
-    raw = yaml.safe_load((org_file if org_file.exists() else DEFAULT_ORG).read_text()) or {}
+    raw = yaml.safe_load((org_file if org_file.exists() else DEFAULT_ORG).read_text(encoding="utf-8")) or {}
     llm, sandbox = raw.get("llm", {}), raw.get("sandbox", {})
     pipeline, humans = raw.get("pipeline", {}), raw.get("humans", {})
     hr_known = {k: v for k, v in raw.get("hr", {}).items() if k in HRPolicy.__dataclass_fields__}
