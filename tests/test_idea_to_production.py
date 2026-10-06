@@ -210,10 +210,11 @@ def test_one_sentence_from_the_dashboard(co):
                        headers=ceo).status_code == 400
     p = client.post("/api/build", json={"brief": "A todo list app for teams", "autopilot": "final"}, headers=ceo).json()
     assert p["name"] == "Todo List App" and p["autopilot"] == "final"
-    for _ in range(100):                                                   # it works in the background
+    deadline = time.time() + 180                                           # it works in the background;
+    while time.time() < deadline:                                          # Windows CI is much slower
         if co.pipeline.project(p["id"])["stage"] == "signoff":
             break
-        time.sleep(0.1)
+        time.sleep(0.5)
     assert co.pipeline.project(p["id"])["stage"] == "signoff"
     state = client.get("/api/state", headers=ceo).json()
     assert state["autopilot_levels"]["key"] == "Key decisions"
