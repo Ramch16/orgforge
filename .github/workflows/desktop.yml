@@ -1,0 +1,52 @@
+name: desktop
+
+# Builds the desktop app installers (unsigned) and smoke-tests the bundled backend on each platform.
+on:
+  push:
+    branches: ["v[0-9]*"]
+    paths: ["desktop/**", "orgforge/**", "pyproject.toml", ".github/workflows/desktop.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            bundles: nsis
+            artifact: OrgForge-windows-installer
+            files: desktop/src-tauri/target/release/bundle/nsis/*.exe
+          - os: macos-latest
+            bundles: app,dmg
+            artifact: OrgForge-macos-dmg
+            files: desktop/src-tauri/target/release/bundle/dmg/*.dmg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: Install OrgForge and PyInstaller
+        run: pip install -e ".[desktop]"
+      - name: Bundle the backend
+        run: python desktop/scripts/build_server.py
+      - name: Smoke-test the bundled backend
+        run: python desktop/scripts/smoke_server.py
+      - name: Install the Tauri CLI
+        working-directory: desktop
+        run: npm ci
+      - name: Build the app
+        working-directory: desktop
+        run: npx tauri build --bundles ${{ matrix.bundles }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+          retention-days: 14

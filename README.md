@@ -452,6 +452,9 @@ The app is not signed yet: macOS asks for confirmation on first open (Control-cl
 Open). Signing and notarising need an Apple Developer ID; a Windows build needs a Windows machine.
 `orgforge desktop` runs the same backend from a terminal.
 
+The `desktop` workflow on GitHub builds both installers (Windows `.exe`, macOS `.dmg`) on pushes to
+version branches, or on demand from the Actions tab; download them from the run's artifacts.
+
 ## Worker machines
 
 Lend another computer's coding CLIs to the company: a spare laptop, a desktop with more memory, a

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.18.0 (in progress)
+- **Windows.** The tests now run on Windows (and macOS) in CI, and pass. Commands (product checks,
+  deploy and health commands, agents' commands) run in Git Bash from Git for Windows, never WSL's
+  bash. CLIs installed by npm as `.cmd` wrappers are started through their Node script so cmd.exe
+  never re-reads agents' prompts; other batch wrappers are refused when an argument could inject
+  commands. The doctor recognises the Microsoft Store's python shortcut; workspaces enable long
+  paths; Windows commands are added to the denied list.
+- Fixed on Windows: files and command output used the legacy encoding (the dashboard did not load);
+  arena benchmark fixtures were not pinned (paths used backslashes); agents' files had their line
+  endings changed; listed paths used backslashes.
+- **Desktop installers in CI.** A workflow builds the Windows installer (NSIS `.exe`) and the macOS
+  `.dmg`, after smoke-testing the bundled backend on each; both unsigned.
+
 ## 0.17.0 (in progress)
 - **Desktop app (macOS).** A Tauri app (`desktop/`) that starts a bundled OrgForge backend
   (PyInstaller) and shows the dashboard: company in `~/OrgForge` created on first launch, automatic
