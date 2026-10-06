@@ -31,7 +31,7 @@ from .validation import CONTRACT, CONTRACT_GUIDE, validate_plan, verify_product
 
 IDEA_STAGES = ["idea", "idea_review", "idea_decision", "plan", "plan_approval"]
 STAGES = [*IDEA_STAGES, "prd", "prd_approval", "architecture", "architecture_approval", "build",
-          "escalation", "contract_review", "release_blocked", "release_approval", "signoff", "done", "deploying", "deploy_approval", "deploy_failed", "live",
+          "escalation", "contract_review", "release_blocked", "machine_check", "release_approval", "signoff", "done", "deploying", "deploy_approval", "deploy_failed", "live",
           "parked", "dropped", "paused"]
 STAGE_LABELS = {
     "idea": "Assessing the idea", "idea_review": "Technical sign-off with CTO", "idea_decision": "Decision with CEO",
@@ -41,7 +41,7 @@ STAGE_LABELS = {
     "release_blocked": "Release checks need attention",
     "prd": "Writing requirements", "prd_approval": "Requirements with CEO",
     "architecture": "Designing", "architecture_approval": "Design with CTO",
-    "build": "Building", "escalation": "Escalated to CTO",
+    "build": "Building", "escalation": "Escalated to CTO", "machine_check": "Preparing this computer",
     "release_approval": "Release with CTO", "signoff": "Sign-off with CEO", "done": "Ready for deployment",
     "deploying": "Deploying", "deploy_approval": "Deployment go-ahead", "deploy_failed": "Deployment failed, with CTO",
     "live": "Live in production",
@@ -84,6 +84,8 @@ class Pipeline:
         self.reporter = None                    # writes a pending status report (set by Company)
         self.production = None                  # deploys signed-off releases (set by Company)
         self.machine = None                     # what this computer has and needs (set by Company)
+        from .autopilot import Autopilot
+        self.autopilot = Autopilot(self)
 
     # ---- helpers ---------------------------------------------------------
     def project(self, pid: int) -> dict:
@@ -291,10 +293,14 @@ class Pipeline:
             if self.production:
                 steps["deploying"] = self.production.run
             self.write_reports(pid)
-            while (stage := self.project(pid)["stage"]) in steps:
-                if not self._budget_ok(pid) or not self._cycle_available(pid, consume=stage != 'build'):
+            while True:
+                while (stage := self.project(pid)["stage"]) in steps:
+                    if not self._budget_ok(pid) or not self._cycle_available(pid, consume=stage != 'build'):
+                        break
+                    steps[stage](self.project(pid))
+                stopped = self.project(pid)["stage"] in steps          # budget or cycle limit, not a gate
+                if stopped or not (self.autopilot and self.autopilot.step(pid)):
                     break
-                steps[stage](self.project(pid))
             self.write_reports(pid)
         except Exception as exc:
             from .engines import EngineUnavailable
@@ -688,7 +694,9 @@ class Pipeline:
             return
         if not self._contract_unchanged(p, ws):
             return
-        verification = verify_product(ws)
+        vault = getattr(self.runtime, "vault", None)
+        verification = verify_product(ws, vault.env(p["id"]) if vault else None,
+                                      (lambda text: vault.redact(p["id"], text)) if vault else None)
         ws.commit("Executable product verification")
         if not verification["passed"]:
             release_findings.extend(verification["errors"])
@@ -1036,6 +1044,42 @@ class Pipeline:
             if failed:
                 return False
 
+    def _autopilot_summary(self, pid: int) -> str:
+        decided = self.db.all("SELECT title, feedback FROM approvals WHERE project_id=? AND decided_by LIKE 'Autopilot for %' "
+                              "ORDER BY id", pid)
+        if not decided:
+            return ""
+        return ("\n\nAutopilot decided these for you:\n"
+                + "\n".join(f"- {a['title']}: {a['feedback'].removeprefix('Approved by autopilot: ')}" for a in decided))
+
+    def _machine_gate(self, pid: int) -> None:
+        """Before building: if this computer lacks what the project needs, wait for a person to install it."""
+        missing = self.machine.missing(pid) if self.machine else []
+        if not missing:
+            return
+        lines = []
+        for tool in missing:
+            self.db.log("machine", f"This computer is missing {tool['name']}, which the project needs "
+                        f"({'; '.join(tool['needed_by'])}).", pid)
+            how = tool["install"]["how"]
+            lines.append(f"- {tool['name']} (needed by {'; '.join(tool['needed_by'])})\n  "
+                         + (f"Install from Machine, or run: {how}" if tool["install"]["auto"] else f"Run: {how}"))
+        p = self.project(pid)
+        self._approval(pid, "machine", "cto", f"Prepare this computer for {p['name']}",
+                       "Building needs tools this computer does not have:\n\n" + "\n".join(lines)
+                       + "\n\nInstall them (Machine page or `vittics-builder doctor --missing`), then approve to start "
+                       "building. Approving without installing builds anyway; checks that need them will fail.",
+                       {"missing": [t["id"] for t in missing]})
+        self._stage(pid, "machine_check")
+
+    def co_previews(self, pid: int) -> dict | None:
+        previews = getattr(self.production, "co", None) and self.production.co.previews if self.production else None
+        return previews.current(pid) if previews else None
+
+    def co_keys(self, pid: int) -> list[str]:
+        vault = getattr(self.runtime, "vault", None)
+        return vault.names(pid) if vault else []
+
     def _boss(self, role: str) -> str:
         name = self.s.human(role)
         return name if name.upper() == role.upper() else f"{name} ({role.upper()})"
@@ -1069,7 +1113,8 @@ class Pipeline:
         return tid
 
     # ---- human decisions -------------------------------------------------
-    def decide(self, approval_id: int, role: str, decision: str, feedback: str = "", choice: str = "") -> dict:
+    def decide(self, approval_id: int, role: str, decision: str, feedback: str = "", choice: str = "",
+               autopilot: bool = False) -> dict:
         """Record a CEO/CTO decision. Returns the approval. Call advance() on its project afterwards."""
         a = self.db.one("SELECT * FROM approvals WHERE id=?", approval_id)
         if not a:
@@ -1086,9 +1131,11 @@ class Pipeline:
             if choice not in allowed:
                 raise PipelineError("Decide the idea with one of: build it for internal use (internal), build it to "
                                     "sell (commercial), park it (park), or drop it (drop).")
-        if decision == "rejected" and not feedback and a["kind"] not in ("hr", "hire", "idea_decision", "budget", "deploy", "strategy"):
+        if decision == "rejected" and not feedback and a["kind"] not in ("hr", "hire", "idea_decision", "budget", "deploy", "strategy", "machine"):
             raise PipelineError("Say what needs to change when you reject, so the team can act on it.")
         who, ok, pid = self.s.human(role), decision == "approved", a["project_id"]
+        if autopilot:                       # decided on the CEO's or CTO's behalf, within the level they chose
+            who = f"Autopilot for {who}"
         payload = json.loads(a["payload"])
         if a['kind']=='board':
             assessment=self.db.one('SELECT * FROM company_assessments WHERE id=?',payload.get('assessment_id'))
@@ -1161,7 +1208,7 @@ class Pipeline:
                 self.db.log("decision", f"Plan approved by {who}; waiting for the other sign-off.", pid, actor=who)
         elif kind in ("prd", "architecture"):
             for author in payload.get("agent_ids") or [payload.get("agent_id")]:
-                if author and self.org.agent(author)["status"] != "fired":
+                if author and not autopilot and self.org.agent(author)["status"] != "fired":   # only people score
                     self.perf.record(author, HUMAN_APPROVED if ok else HUMAN_REJECTED, source="human", reviewer=who,
                                      notes=feedback or f"{a['title']} approved.", project_id=pid)
                     self.perf.evaluate(author)
@@ -1174,11 +1221,8 @@ class Pipeline:
                 self._stage(pid, "architecture" if ok else "prd", "" if ok else feedback)
             else:
                 self._stage(pid, "build" if ok else "architecture", "" if ok else feedback)
-                if ok and self.machine:
-                    for tool in self.machine.missing(pid):
-                        self.db.log("machine", f"This computer is missing {tool['name']}, which the project needs "
-                                    f"({'; '.join(tool['needed_by'])}). Install it from Machine, or run: "
-                                    f"{tool['install']['how']}", pid)
+                if ok:
+                    self._machine_gate(pid)
         elif kind == "escalation":
             task = self.db.one("SELECT * FROM tasks WHERE id=?", payload["task_id"])
             if self.runtime.learning:
@@ -1225,7 +1269,8 @@ class Pipeline:
             if ok:
                 name = self.project(pid)["name"]
                 self._approval(pid, "signoff", "ceo", f"Sign off {name}",
-                               "The CTO approved the release. Review the product in its workspace and sign off.", payload)
+                               f"{who} approved the release. Review the product in its workspace and sign off."
+                               + self._autopilot_summary(pid), payload)
                 self._stage(pid, "signoff")
             else:
                 self._fix_task(pid, "Address the CTO's release feedback", feedback, reporter=who)
@@ -1247,6 +1292,11 @@ class Pipeline:
             else:
                 self._fix_task(pid, "Address the CEO's sign-off feedback", feedback, reporter=who)
                 self._stage(pid, "build")
+        elif kind == "machine":
+            still = [t["name"] for t in self.machine.missing(pid)] if self.machine else []
+            self.db.log("machine", "Building on this computer" + (f", still without {', '.join(still)}." if still
+                        else ": everything the project needs is installed."), pid, actor=who)
+            self._stage(pid, "build")
         elif kind == "strategy":
             if self.runtime.learning:
                 self.runtime.learning.decide(payload, ok, who)
@@ -1308,5 +1358,8 @@ class Pipeline:
             out.append({**p, "stage_label": label, "tasks": tasks,
                         "workspace": str(Path(p["workspace"])),
                         "production": bool(self.production and self.production.configured(p)),
+                        "autopilot": p.get("autopilot") or "off",
+                        "preview": self.co_previews(p["id"]),
+                        "keys": self.co_keys(p["id"]),
                         "deployments": self.production.list(p["id"], 10) if self.production else []})
         return out

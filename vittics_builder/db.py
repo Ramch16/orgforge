@@ -172,6 +172,17 @@ CREATE TABLE IF NOT EXISTS deployments (
   started_at TEXT NOT NULL,
   finished_at TEXT
 );
+CREATE TABLE IF NOT EXISTS previews (
+  project_id INTEGER PRIMARY KEY,
+  version INTEGER NOT NULL,
+  port INTEGER NOT NULL,
+  pid INTEGER,
+  url TEXT NOT NULL,
+  path TEXT NOT NULL,
+  log TEXT NOT NULL,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS node_pairings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -365,7 +376,7 @@ class DB:
                              ("paused_stage", "TEXT NOT NULL DEFAULT ''"), ("version", "INTEGER NOT NULL DEFAULT 0"),
                              ("kind", "TEXT NOT NULL DEFAULT 'product'"), ("source", "TEXT NOT NULL DEFAULT ''"),
                              ("base_branch", "TEXT NOT NULL DEFAULT ''"), ("branch", "TEXT NOT NULL DEFAULT ''"),
-                             ("checks", "TEXT NOT NULL DEFAULT '[]'")):
+                             ("checks", "TEXT NOT NULL DEFAULT '[]'"), ("autopilot", "TEXT NOT NULL DEFAULT 'off'")):
             if column not in have:                # 0.7 ideas, 0.8 budgets and versions
                 self.conn.execute(f"ALTER TABLE projects ADD COLUMN {column} {decl}")
         # Companies created before 0.2 limited role kinds in the table itself. Lift that.

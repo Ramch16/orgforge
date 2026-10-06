@@ -184,6 +184,11 @@ def test_approving_a_design_warns_about_missing_tools(co, bin_dir):
     [arch] = [a for a in co.pipeline.inbox("cto") if a["kind"] == "architecture"]
     co.pipeline.decide(arch["id"], "cto", "approved")
     assert co.db.one("SELECT 1 FROM events WHERE kind='machine' AND message LIKE '%missing Node.js%package.json%'")
+    assert co.pipeline.project(p["id"])["stage"] == "machine_check"         # building waits for this computer
+    [gate] = [a for a in co.pipeline.inbox("cto") if a["kind"] == "machine"]
+    assert "Node.js (needed by package.json)" in gate["summary"]
+    co.pipeline.decide(gate["id"], "cto", "approved")                       # e.g. after installing it
+    assert co.pipeline.project(p["id"])["stage"] == "build"
 
 
 def test_dashboard_reports_and_installs(co, bin_dir, monkeypatch):

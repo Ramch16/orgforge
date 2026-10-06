@@ -64,7 +64,7 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-def exit_with_parent() -> None:
+def exit_with_parent(on_exit=None) -> None:
     """The app holds our stdin open; when it quits (even if killed) stdin closes, and so do we."""
     def watch() -> None:
         try:
@@ -72,6 +72,11 @@ def exit_with_parent() -> None:
                 pass
         except (OSError, ValueError):
             pass
+        if on_exit:
+            try:
+                on_exit()
+            except Exception:
+                pass
         os._exit(0)
     threading.Thread(target=watch, name="vittics-parent-watch", daemon=True).start()
 
@@ -101,7 +106,7 @@ def main(home: str | None = None, port: int | None = None) -> None:
     print(json.dumps({"url": f"http://127.0.0.1:{port}/#token={tokens['ceo']}", "port": port, "home": str(root)}),
           flush=True)
     if os.environ.get("VITTICS_EXIT_WITH_PARENT") == "1":      # set by the desktop app
-        exit_with_parent()
+        exit_with_parent(co.previews.stop_all)              # previews run in their own process groups
     try:
         thread.join()
     except KeyboardInterrupt:

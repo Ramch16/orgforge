@@ -58,7 +58,7 @@ class Production:
         """Whether the project has a production entry at all; a broken one is reported when deploying."""
         projects = (self.s.raw.get("production") or {}).get("projects") or {}
         keys = {project["name"].lower(), str(project["id"]), f"p{project['id']}"}
-        return any(str(name).lower() in keys for name in projects)
+        return any(str(name).lower() in keys for name in projects) or self.co.previews.available(project)
 
     @staticmethod
     def _checked(conf) -> dict:
@@ -90,6 +90,8 @@ class Production:
             conf = self.config(project)
         except ProductionError as exc:
             return self._failed(project, None, str(exc), rollback_note="")
+        if not conf and self.co.previews.available(project):
+            conf = {"environments": [{"name": "preview", "preview": True}]}  # no production entry: run it here
         if not conf:
             pipeline._stage(pid, "done")
             return
@@ -120,7 +122,26 @@ class Production:
                     pid, actor="Production")
         pipeline._stage(pid, "live")
 
+    def _deploy_preview(self, project: dict, version: int, commit: str) -> bool:
+        pid = project["id"]
+        did = self.db.run("INSERT INTO deployments(project_id, environment, version, commit_sha, status, started_at) "
+                          "VALUES (?,?,?,?,?,?)", pid, "preview", version, commit, "running", now())
+        self.db.log("deploy", f"Starting a preview of v{version} on this computer.", pid, actor="Production")
+        ok, out = self.co.previews.start(project, version)
+        if ok:
+            self.db.run("UPDATE deployments SET status='superseded' WHERE project_id=? AND environment='preview' "
+                        "AND status='live'", pid)
+            self._finish(did, "live", [out])
+            return True
+        self._finish(did, "failed", [out])
+        running = self.co.previews.current(pid)
+        self._failed(project, "preview", out, "The previous preview (v{}) keeps running.".format(running["version"])
+                     if running and running["status"] == "running" else "No earlier preview was running.")
+        return False
+
     def _deploy(self, project: dict, conf: dict, env: dict, version: int, commit: str) -> bool:
+        if env.get("preview"):
+            return self._deploy_preview(project, version, commit)
         pid, name = project["id"], env["name"]
         previous = self._previous(pid, name, version)
         fill = {"{version}": str(version), "{previous}": str(previous or ""), "{commit}": commit, "{environment}": name}
@@ -180,6 +201,7 @@ class Production:
         command = self._fill(template, fill)
         allowed = {str(v) for v in conf.get("env") or []}
         environ = {k: v for k, v in os.environ.items() if not SECRET_ENV.search(k) or k in allowed}
+        environ.update(self.co.vault.env(project["id"]))            # the project's own keys
         timeout = int(env.get("timeout_seconds") or conf.get("timeout_seconds") or 900)
         try:
             from .platforms import shell_command
@@ -189,6 +211,7 @@ class Production:
         except subprocess.TimeoutExpired:
             return False, f"timed out after {timeout}s"
         output = (proc.stdout + ("\n" + proc.stderr if proc.stderr else "")).strip()
+        output = self.co.vault.redact(project["id"], output)
         return proc.returncode == 0, redact(f"exit code {proc.returncode}\n{output}")[-4000:]
 
     def _healthy(self, project: dict, conf: dict, env: dict, fill: dict) -> tuple[bool, str]:

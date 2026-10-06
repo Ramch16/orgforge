@@ -13,6 +13,9 @@ CONTRACT_GUIDE = '''Write product.json with this schema:
 {"name":"Product", "setup":"installation instructions", "run":"how to start/use it",
  "checks":[{"id":"core-flow", "requirement":"A concrete PRD acceptance criterion",
  "command":"a finite shell command that exits nonzero on failure"}]}
+For a web app or API, also add "serve": {"setup": "install command (optional)", "command": "start it
+listening on $PORT and $HOST", "health": "/a path that answers 200 once it is ready"}: after sign-off it
+runs on this computer as a preview people can open. Read API keys and secrets from environment variables.
 Include automated checks for installation/build, tests, and the main end-to-end user flows
 as applicable. Checks must exercise the real implementation, not stubs or unconditional success.
 For servers, checks must start an isolated test instance and clean it up. Document required
@@ -70,7 +73,8 @@ def read_contract(ws: Workspace) -> dict:
     return data
 
 
-def verify_product(ws: Workspace) -> dict:
+def verify_product(ws: Workspace, env: dict | None = None, redact=None) -> dict:
+    """Run the acceptance checks. `env`: the project's keys; `redact` hides their values before anything is saved."""
     report = {'checked_at': now(), 'passed': False, 'checks': [], 'errors': []}
     try:
         contract = read_contract(ws)
@@ -80,7 +84,9 @@ def verify_product(ws: Workspace) -> dict:
                 report['errors'].append(f'Missing delivery documentation: {path}')
         for check in contract['checks']:
             try:
-                output = ws.run_command(check['command'])
+                output = ws.run_command(check['command'], extra_env=env)
+                if redact:
+                    output = redact(output)
                 passed = output.splitlines()[0] == 'exit code 0'
             except ToolError as exc:
                 output, passed = str(exc), False

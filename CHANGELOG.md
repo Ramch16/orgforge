@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.20.0 (in progress)
+- **Idea to production.** One sentence starts it: **What do you want to build?** on Home, or
+  `vittics-builder build "..."`. The project is named from the brief and runs until a decision is yours.
+- **Autopilot** per project: `off` (every stage), `key` (you decide the idea, the plan and the final
+  sign-off) or `final` (only the final sign-off). Only the technical sign-off, the idea decision (when
+  the assessment recommends building), the plan, requirements, design and the release review can be
+  automatic; failures, changed acceptance checks, budgets, hiring, deployments and the final sign-off
+  always wait for a person. Decisions are recorded as "Autopilot for <name>" with a reason, listed at
+  sign-off, and never score agents.
+- **Preparing this computer:** building waits when the machine lacks what the project needs, with
+  the install commands.
+- **Keys:** per-project API keys and URLs, stored privately (not in the database), given to the
+  product's checks, preview and deploy commands, redacted from output (including the committed
+  verification report); agents see names only.
+- **Preview:** products with `serve` in `product.json` run on this computer after sign-off when no
+  `production:` entry exists, from a clean worktree of the release, health-checked, with the old
+  version kept running if the new one fails. Previews stop when the server or desktop app stops.
+
 ## 0.19.0 — 2026-10-06
 - **OrgForge is now Vittics Builder.** The command is `vittics-builder`, the Python package
   `vittics_builder`, settings are `VITTICS_*`, a company's data folder is `.vittics/`, the desktop app

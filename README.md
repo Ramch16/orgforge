@@ -408,6 +408,39 @@ vittics-builder report 1 --as cto
 vittics-builder feedback 1 "Crashes when the name is empty" --source "support email" --as ceo
 ```
 
+## Idea to production
+
+Describe what you want in a sentence, on Home (**What do you want to build?**) or in a terminal, and
+choose how hands-on to be. The team assesses the idea, plans it, writes requirements, designs, builds
+and reviews it, runs the release checks, and after your sign-off runs it on this computer.
+
+```bash
+vittics-builder build "A customer support app with login, a database and Stripe payments" --autopilot key
+```
+
+| Autopilot | You decide | Approved automatically |
+|---|---|---|
+| `off`, step by step | every stage | nothing |
+| `key`, key decisions (default) | the idea, the plan, the final sign-off | technical sign-off, requirements, design, the release review |
+| `final`, final sign-off only | the final sign-off | also the idea (when the assessment recommends building) and the plan |
+
+- **Some things always wait for you:** the final sign-off, any failure (blocked release,
+  escalated ticket, failed deployment), changed acceptance checks, budgets, hiring and installs. A
+  release review is only created once audits, acceptance checks and executable verification pass.
+  The sign-off lists everything autopilot decided, and why. Change the level on the project page or
+  with `vittics-builder autopilot <project> <level>`.
+- **This computer is checked before building.** If it lacks what the project needs (Node.js,
+  PostgreSQL, Docker...), building waits at *Preparing this computer* with the install commands.
+- **Keys for the product.** API keys and database URLs go in the project's keys (project page, or
+  `vittics-builder keys <project> set STRIPE_SECRET_KEY`, which asks for the value hidden). They are
+  stored privately on this computer, given to the product's checks, preview and deploy commands, and
+  replaced with `[NAME]` in any output. Agents see the names, never the values.
+- **The preview.** A web app or API says how to start in `product.json`
+  (`"serve": {"command": "npm start", "health": "/healthz"}`, listening on `$PORT`). Without a
+  `production:` entry, sign-off runs it here, from a clean copy of the release, and the project page
+  links to it. A new version replaces the old one only once it answers; if it fails, the old one keeps
+  running and the CTO decides. `vittics-builder preview <project> start|stop`.
+
 ## Machine readiness
 
 `vittics-builder doctor` (and **Machine** in the dashboard) shows whether this computer is ready: what the

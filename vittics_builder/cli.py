@@ -159,6 +159,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--install", nargs="+", metavar="TOOL", help="Install these (e.g. node gemini), asking first")
     p.add_argument("--missing", action="store_true", help="Install everything needed that is missing, asking first")
     p.add_argument("--yes", action="store_true", help="Do not ask before each install")
+    p = sub.add_parser("build", help="Idea to production: describe what to build; it is assessed, planned, built and released")
+    p.add_argument("brief", help='e.g. "A customer support app with login, a database and Stripe payments"')
+    p.add_argument("--name", default="", help="Project name (default: from the brief)")
+    p.add_argument("--autopilot", choices=["off", "key", "final"], default="key",
+                   help="off: you approve every step; key (default): you decide the idea, the plan and the final "
+                        "sign-off; final: only the final sign-off")
+    p.add_argument("--budget", type=float); who(p)
+    p = sub.add_parser("autopilot", help="How hands-on to be on a project: off, key or final")
+    p.add_argument("project", type=int); p.add_argument("level", choices=["off", "key", "final"]); who(p)
+    p = sub.add_parser("keys", help="A project's private keys (API keys, database URLs): list, set or remove")
+    p.add_argument("project", type=int); p.add_argument("action", nargs="?", choices=["list", "set", "remove"], default="list")
+    p.add_argument("name", nargs="?", help="e.g. STRIPE_SECRET_KEY (the value is asked for, hidden)"); who(p)
+    p = sub.add_parser("preview", help="The signed-off product running on this computer: status, start or stop")
+    p.add_argument("project", type=int); p.add_argument("action", nargs="?", choices=["status", "start", "stop"], default="status"); who(p)
     p = sub.add_parser("desktop", help="Start the backend the Vittics Builder desktop app uses (company in ~/VitticsBuilder)")
     p.add_argument("--port", type=int, help="Default: a free port on 127.0.0.1")
     p = sub.add_parser("machines", help="Worker machines: other computers that run your agents' coding CLIs")
@@ -486,6 +500,49 @@ def _dispatch(args) -> int:
             print(f"{'Installed' if done['status'] == 'installed' else 'Failed'}: {CATALOG[tool]['name']} "
                   f"{after['version']}".rstrip() + (f"\n{done['output'][-800:]}" if done["status"] != "installed" else "")
                   + (f"\n  {after['detail']}" if after["detail"] else ""))
+    elif args.cmd == "build":
+        from .autopilot import LEVELS, name_from
+        project = co.pipeline.create_project(args.name or name_from(args.brief), args.brief, by=co.s.human(role),
+                                             idea=True, budget=args.budget)
+        co.pipeline.autopilot.set(project["id"], args.autopilot, co.s.human(role))
+        print(f"P{project['id']} {project['name']}: autopilot {LEVELS[args.autopilot]}. Working...")
+        _advance(co, project["id"])
+    elif args.cmd == "autopilot":
+        co.pipeline.autopilot.set(args.project, args.level, co.s.human(role))
+        _advance(co, args.project)
+    elif args.cmd == "keys":
+        if args.action == "set":
+            if not args.name:
+                raise ValueError("Usage: vittics-builder keys <project> set <NAME>")
+            co.vault.set(args.project, args.name, getpass.getpass(f"Value for {args.name} (hidden): "), co.s.human(role))
+            print(f"Saved {args.name}. Checks, the preview and deploy commands get it; agents only see its name.")
+        elif args.action == "remove":
+            co.vault.delete(args.project, args.name or "", co.s.human(role))
+            print(f"Removed {args.name}.")
+        for name in co.vault.names(args.project):
+            print(f"  {name}")
+        if not co.vault.names(args.project):
+            print("No keys for this project.")
+    elif args.cmd == "preview":
+        project = co.pipeline.project(args.project)
+        if args.action == "start":
+            if not project["version"]:
+                raise ValueError("Nothing signed off yet: the preview runs the latest signed-off version.")
+            ok, out = co.previews.start(project, project["version"])
+            print(out)
+            if not ok:
+                return 1
+            print("Keep this terminal open: the preview stops when this command ends (Ctrl+C).")
+            try:
+                while co.previews.current(args.project)["status"] == "running":
+                    __import__("time").sleep(1)
+            except KeyboardInterrupt:
+                co.previews.stop(args.project, co.s.human(role))
+        elif args.action == "stop":
+            print("Stopped." if co.previews.stop(args.project, co.s.human(role)) else "No preview is running.")
+        else:
+            row = co.previews.current(args.project)
+            print(f"v{row['version']} {row['status']} at {row['url']} (log: {row['log']})" if row else "No preview yet.")
     elif args.cmd == "learning":
         print("Learning is " + ("on." if co.learning.enabled else "off (learning.enabled in org.yaml)."))
         rows = co.learning.reviewers()

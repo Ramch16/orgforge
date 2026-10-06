@@ -25,6 +25,7 @@ NEXT_STEP = {
     "deploy_approval": "The go-ahead to deploy to the next environment.",
     "deploy_failed": "Lucky retries the deployment or sends it back with guidance.",
     "live": "Live; production checks and feedback can start the next version.",
+    "machine_check": "Install what this computer is missing, then approve to start building.",
 }
 READ_ONLY = {"read_file", "list_files", "list_tickets", "view_ticket"}
 

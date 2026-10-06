@@ -47,6 +47,7 @@ class AgentRuntime:
         self.router = None
         self.failover = None
         self.nodes = None                   # worker machines (set by Company)
+        self.vault = None                   # the project's keys: agents see names only (set by Company)
         self.integrations = None
 
     def _system(self, agent: dict, role: dict, on_project: bool = False, chat_with: str | None = None,
@@ -180,6 +181,8 @@ class AgentRuntime:
                     tools.append({'name': name, **spec})
         meta = {**(meta or {}), "role": role["id"], "kind": role["kind"], "agent": agent["name"]}
         memories = self.memory.as_text(self.memory.recall(project_id, instructions)) if self.memory and project_id else ""
+        if self.vault and project_id and (keys := self.vault.for_agents(project_id)):
+            memories = "\n\n".join(x for x in (memories, keys) if x)          # names only, never values
         if self.skills and not chat_with:
             memories = "\n\n".join(x for x in (self.skills.for_kind(role["kind"], role["department"]), memories) if x)
         if str(agent["model"]).startswith("cli:"):

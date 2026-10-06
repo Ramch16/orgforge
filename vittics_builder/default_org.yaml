@@ -59,6 +59,10 @@ failover:
   enabled: false
   models: []              # e.g. ['cli:codex', 'cli:gemini', 'claude-sonnet-5-5', 'ollama:qwen2.5-coder']
   cooldown_minutes: 60
+# After sign-off, products with "serve" in product.json run here as a preview (when no production: entry).
+preview:
+  enabled: true
+  start_timeout_seconds: 120
 # Machine readiness (vittics-builder doctor): installing missing tools always asks first.
 machine:
   installs: true            # false: only report, never install from Vittics Builder

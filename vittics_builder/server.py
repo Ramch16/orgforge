@@ -38,6 +38,13 @@ class NewProject(BaseModel):
     budget: float | None = None
 
 
+class Build(BaseModel):
+    brief: str
+    name: str = ""
+    autopilot: str = "key"
+    budget: float | None = None
+
+
 class Budget(BaseModel):
     amount: float
 
@@ -150,7 +157,9 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
     async def lifespan(app):
         if co.workers.service()['enabled']:co.workers.start()
         try:yield
-        finally:co.workers.stop()
+        finally:
+            co.workers.stop()
+            co.previews.stop_all()
     app = FastAPI(title="Vittics Builder", docs_url=None, redoc_url=None,lifespan=lifespan)
 
     def auth(x_token: str = Header(default="")) -> str:
@@ -319,6 +328,7 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
             "next_steps": NEXT_STEP,
             "departments": co.org.chart(include_fired=True),
             "version": __version__,
+            "autopilot_levels": __import__("vittics_builder.autopilot", fromlist=["LEVELS"]).LEVELS,
             "desktop": desktop,
             "projects": co.pipeline.overview(),
             "approvals": co.pipeline.inbox(),
@@ -449,6 +459,56 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
                                                            idea=body.idea, budget=body.budget))
         run_in_background(project["id"])
         return project
+
+    @app.post("/api/build")
+    def build(body: Build, role: str = Depends(auth)) -> dict:
+        """One sentence in; the idea is assessed, planned, built and released at the chosen level of autopilot."""
+        from .autopilot import LEVELS, name_from
+        brief = body.brief.strip()
+        if len(brief) < 10:
+            raise HTTPException(400, "Describe what to build in a sentence or two.")
+        if body.autopilot not in LEVELS:
+            raise HTTPException(400, f"Autopilot is one of: {', '.join(LEVELS)}.")
+        who = co.s.human(role)
+        project = guard(lambda: co.pipeline.create_project(body.name.strip() or name_from(brief), brief, by=who,
+                                                           idea=True, budget=body.budget))
+        co.pipeline.autopilot.set(project["id"], body.autopilot, who)
+        run_in_background(project["id"])
+        return co.pipeline.project(project["id"])
+
+    @app.post("/api/projects/{pid}/autopilot")
+    def set_autopilot(pid: int, data: dict, role: str = Depends(auth)) -> dict:
+        guard(lambda: co.pipeline.autopilot.set(pid, str(data.get("level", "")), co.s.human(role)))
+        run_in_background(pid)                       # it may decide a gate that is waiting now
+        return co.pipeline.project(pid)
+
+    @app.get("/api/projects/{pid}/keys")
+    def keys(pid: int, role: str = Depends(auth)) -> list[str]:
+        guard(lambda: co.pipeline.project(pid))
+        return co.vault.names(pid)                   # names only: values are never sent back
+
+    @app.post("/api/projects/{pid}/keys")
+    def set_key(pid: int, data: dict, role: str = Depends(auth)) -> list[str]:
+        guard(lambda: co.vault.set(pid, str(data.get("name", "")), str(data.get("value", "")), co.s.human(role)))
+        return co.vault.names(pid)
+
+    @app.post("/api/projects/{pid}/keys/{name}/delete")
+    def delete_key(pid: int, name: str, role: str = Depends(auth)) -> list[str]:
+        guard(lambda: co.vault.delete(pid, name, co.s.human(role)))
+        return co.vault.names(pid)
+
+    @app.post("/api/projects/{pid}/preview")
+    def preview(pid: int, data: dict, role: str = Depends(auth)) -> dict:
+        project = guard(lambda: co.pipeline.project(pid))
+        if data.get("action") == "stop":
+            co.previews.stop(pid, co.s.human(role))
+        else:
+            if not project["version"]:
+                raise HTTPException(400, "Nothing signed off yet: the preview runs the latest signed-off version.")
+            ok, out = co.previews.start(project, project["version"])
+            if not ok:
+                raise HTTPException(400, out[:2000])
+        return co.previews.current(pid) or {}
 
     @app.post("/api/projects/{pid}/run")
     def run_project(pid: int, role: str = Depends(auth)) -> dict:

@@ -248,14 +248,18 @@ class Workspace:
                     return "\n".join(found) + "\n... (more files not shown)"
         return "\n".join(found) or "(empty)"
 
-    def run_command(self, command: str, timeout_seconds: int | None = None) -> str:
+    def run_command(self, command: str, timeout_seconds: int | None = None, extra_env: dict | None = None) -> str:
+        """Run a command in the workspace. `extra_env` (the product's own keys) is for acceptance checks only."""
         for pattern, why in DENIED:
             if re.search(pattern, command):
                 raise ToolError(f"Command refused by company policy ({why}).")
         timeout = min(int(timeout_seconds or self.timeout), self.timeout)
         env = {k: v for k, v in os.environ.items() if not SECRET_ENV.search(k)}
+        env.update(extra_env or {})
         if self.mode == "docker":
             argv = ["docker", "run", "--rm", "-v", f"{self.root}:/work", "-w", "/work"]
+            for name in extra_env or {}:            # -e NAME passes the value from our environment, not the command line
+                argv += ["-e", name]
             if not self.docker_network:
                 argv += ["--network", "none"]
             argv += [self.docker_image, "sh", "-lc", command]

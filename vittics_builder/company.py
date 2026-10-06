@@ -16,6 +16,8 @@ from .memory import Memory
 from .failover import Failover
 from .machine import Machine
 from .nodes import Nodes
+from .preview import Previews
+from .vault import Vault
 from .production import Production
 from .routing import ModelRouter
 from .operations_store import initialize
@@ -94,6 +96,9 @@ class Company:
         self.machine = Machine(self)
         self._reroot_workspaces()
         self.nodes = Nodes(self)
+        self.vault = Vault(self)
+        self.runtime.vault = self.vault
+        self.previews = Previews(self)
         self.runtime.nodes = self.nodes
         self.pipeline.machine = self.machine
         self.pipeline.production = self.production
