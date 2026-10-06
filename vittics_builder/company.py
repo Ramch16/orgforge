@@ -18,6 +18,7 @@ from .machine import Machine
 from .nodes import Nodes
 from .preview import Previews
 from .vault import Vault
+from .ai import AI
 from .production import Production
 from .routing import ModelRouter
 from .operations_store import initialize
@@ -97,6 +98,7 @@ class Company:
         self._reroot_workspaces()
         self.nodes = Nodes(self)
         self.vault = Vault(self)
+        self.ai = AI(self)
         self.runtime.vault = self.vault
         self.previews = Previews(self)
         self.runtime.nodes = self.nodes

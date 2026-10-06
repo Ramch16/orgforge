@@ -159,6 +159,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--install", nargs="+", metavar="TOOL", help="Install these (e.g. node gemini), asking first")
     p.add_argument("--missing", action="store_true", help="Install everything needed that is missing, asking first")
     p.add_argument("--yes", action="store_true", help="Do not ask before each install")
+    p = sub.add_parser("ai", help="How the agents think: status, use claude-code|codex|api|demo, key, test")
+    p.add_argument("action", nargs="?", choices=["status", "use", "key", "test"], default="status")
+    p.add_argument("choice", nargs="?", choices=["claude-code", "codex", "api", "demo"]); who(p)
     p = sub.add_parser("build", help="Idea to production: describe what to build; it is assessed, planned, built and released")
     p.add_argument("brief", help='e.g. "A customer support app with login, a database and Stripe payments"')
     p.add_argument("--name", default="", help="Project name (default: from the brief)")
@@ -500,6 +503,26 @@ def _dispatch(args) -> int:
             print(f"{'Installed' if done['status'] == 'installed' else 'Failed'}: {CATALOG[tool]['name']} "
                   f"{after['version']}".rstrip() + (f"\n{done['output'][-800:]}" if done["status"] != "installed" else "")
                   + (f"\n  {after['detail']}" if after["detail"] else ""))
+    elif args.cmd == "ai":
+        by = co.s.human(role)
+        if args.action == "use":
+            if not args.choice:
+                raise ValueError("Usage: vittics-builder ai use claude-code|codex|api|demo")
+            co.ai.use(args.choice, by)
+        elif args.action == "key":
+            co.ai.set_key(getpass.getpass("Anthropic API key (hidden): "), by)
+            print("Saved privately. Choose it with: vittics-builder ai use api")
+        elif args.action == "test":
+            r = co.ai.test()
+            print(("Works: " if r["ok"] else "Did not work: ") + r["reply"])
+            return 0 if r["ok"] else 1
+        st = co.ai.status(fresh=True)
+        print(f"Agents think with: {st['label']}" + ("" if st["chosen"] else " (not chosen yet)") +
+              (" · ready" if st["ready"] else f" · NOT READY: {st['reason']}"))
+        for key, t in st["tools"].items():
+            print(f"  {st['choices'][key]['label']:<12} " + ("not installed" if not t["installed"] else
+                  f"{t['version']} · {'signed in' if t['signed_in'] else 'signed out' if t['signed_in'] is False else t['state']}"))
+        print(f"  {'API key':<12} " + ("set" if st["has_key"] else "not set"))
     elif args.cmd == "build":
         from .autopilot import LEVELS, name_from
         project = co.pipeline.create_project(args.name or name_from(args.brief), args.brief, by=co.s.human(role),

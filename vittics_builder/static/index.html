@@ -257,6 +257,7 @@
     </nav>
 
     <div class="content" role="main">
+      <div id="ai-banner"></div>
       <section class="view" data-view="home">
         <div class="page-head"><div><h1 id="greet"></h1><p id="greet-sub"></p></div>
           <div class="actions"><button data-new-task>New task</button><button class="primary" data-new-idea>New idea</button></div></div>
@@ -367,6 +368,14 @@
       <section class="view" data-view="machine" hidden>
         <div class="page-head"><div><h1>Machine</h1><p>Is this computer ready for the company and its projects? Nothing is installed without your click.</p></div>
           <div class="actions"><select id="machine-project" style="width:auto"></select><button id="machine-refresh">Check again</button></div></div>
+        <div class="card" id="ai-card"><div class="card-head"><h2>How your agents think</h2><button id="ai-test">Test</button></div>
+          <p class="muted" style="margin-top:0">One choice for the whole team. Choosing moves every agent to it, and new hires use it too.</p>
+          <div id="ai-options"></div>
+          <form id="ai-key-form" class="row" style="gap:.5rem;margin-top:.6rem;align-items:center;flex-wrap:wrap">
+            <input id="ai-key" type="password" placeholder="Anthropic API key (sk-ant-...)" autocomplete="off" style="max-width:24rem">
+            <button type="submit">Save key</button>
+            <span class="muted">Stored privately on this computer; agents and products never see it.</span></form>
+          <p id="ai-test-result" class="muted" style="margin-bottom:0"></p></div>
         <div id="machine"></div>
         <div class="card"><div class="card-head"><h2>Worker machines</h2><button id="machine-pair">Add a worker machine</button></div>
           <p class="muted">Other computers that run your agents' coding CLIs, on their own logins. They connect to this one; nothing connects to them.</p>
@@ -771,6 +780,7 @@ function renderHome(me, mine) {
   }).join("") + (mine.length > 4 ? `<p class="muted">and ${mine.length - 4} more</p>` : "") || `<div class="empty">Nothing needs you right now. The team keeps working until it does.</div>`);
   paint("home-welcome", state.projects.length ? "" : `<div class="card"><div class="card-head"><h2>Welcome to ${esc(state.company)}</h2></div>
     <p style="margin:0 0 .6rem">Your AI team is hired and waiting. Two steps to your first product:</p>
+    ${state.ai && !state.ai.ready ? `<div class="ev"><span class="grow"><b>First: choose how your agents think.</b> <span class="muted">${esc(state.ai.reason)}</span></span><button class="primary" data-go="machine">Set up</button></div>` : ""}
     <div class="ev"><span class="grow"><b>1. Check this computer.</b> <span class="muted">See what your projects and agents need (Git, Python, Node, Docker, Codex, Claude Code...) and install what is missing, with your OK for each.</span></span><button data-go="machine">Machine</button></div>
     <div class="ev"><span class="grow"><b>2. Tell the team what to build.</b> <span class="muted">An idea in a sentence or two. The team assesses it, plans it and asks you before anything is built.</span></span><button class="primary" data-new-idea>New idea</button></div>
     ${state.desktop ? `<p class="muted" style="margin:.6rem 0 0">On your own computer you are both ${esc(state.humans.ceo)} (CEO) and ${esc(state.humans.cto)} (CTO): switch at the bottom left. Names, models and policies are in org.yaml in your company folder.</p>` : ""}</div>`);
@@ -957,6 +967,17 @@ function render() {
   $("logo").textContent = (state.company[0] || "O").toUpperCase();
   $("whoami").innerHTML = `<b>${esc(state.you.name)}</b> · ${me.toUpperCase()}`;
   $("switch-role").hidden = !state.desktop;
+  const ai = state.ai || { ready: true };
+  paint("ai-banner", ai.ready ? "" : `<div class="card" style="border-left:4px solid var(--warn, #b7791f);margin-bottom:1rem">
+    <div class="row" style="justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap">
+    <span><b>Your agents can't work yet.</b> ${esc(ai.reason)}</span><button class="primary" data-go="machine">Set up how agents think</button></div></div>`);
+  if (state.ai) paint("ai-options", Object.entries(ai.choices).map(([key, c]) => {
+    const t = (ai.tools || {})[key], inUse = ai.choice === key;
+    const status = t ? (!t.installed ? "not installed" : t.signed_in === false ? "installed, signed out" : `ready (${esc(t.version)})`)
+      : key === "api" ? (ai.has_key ? "key saved" : "no key yet") : "always available";
+    return `<div class="ev"><span class="grow"><b>${esc(c.label)}</b> <span class="chip ${inUse ? (ai.ready ? "done" : "probation") : "cancelled"}">${inUse ? (ai.ready ? "in use" : "in use, not ready") : esc(status)}</span>
+      <br><span class="muted">${esc(c.help)}</span></span>${inUse ? "" : `<button data-ai-use="${key}">Use this</button>`}</div>`;
+  }).join(""));
   $("switch-role").textContent = `Switch to ${me === "ceo" ? "CTO" : "CEO"}`;
   document.title = `${mine.length ? `(${mine.length}) ` : ""}${state.company}`;
   badge("b-decisions", mine.length);
@@ -1287,6 +1308,22 @@ $("p-start").onclick = () => act(async () => {
 $("h-go").onclick = () => act(async () => { await api("/api/agents", { role: $("h-role").value, name: $("h-name").value }); $("h-name").value = ""; $("hire-dlg").close(); });
 $("show-fired").onchange = render;
 $("signout").onclick = () => signOut();
+$("ai-key-form").onsubmit = e => {
+  e.preventDefault();
+  const value = $("ai-key").value.trim();
+  if (!value) return;
+  act(async () => { await api("/api/ai/key", { value }); $("ai-key").value = ""; $("ai-test-result").textContent = "Key saved. Choose Anthropic API key above to use it."; });
+};
+$("ai-test").onclick = () => act(async () => {
+  $("ai-test-result").textContent = "Asking the agents' AI for a one-word reply...";
+  const r = await api("/api/ai/test", {});
+  $("ai-test-result").textContent = r.ok ? `Works: it replied "${r.reply}".` : `Did not work: ${r.reply}`;
+});
+document.addEventListener("click", e => {
+  const u = e.target.closest("[data-ai-use]");
+  if (u && confirm(`Move every agent to ${state.ai.choices[u.dataset.aiUse].label}?`))
+    act(async () => { await api("/api/ai/use", { choice: u.dataset.aiUse }); });
+});
 let keyProject = null;
 $("key-dlg").addEventListener("close", () => {
   const name = $("key-name").value.trim(), value = $("key-value").value;

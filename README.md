@@ -408,6 +408,22 @@ vittics-builder report 1 --as cto
 vittics-builder feedback 1 "Crashes when the name is empty" --source "support email" --as ceo
 ```
 
+## How your agents think
+
+Agents need an AI to work. Choose one for the whole team on **Machine → How your agents think**
+(a banner says so until you do), or in a terminal:
+
+```bash
+vittics-builder ai                                # what is in use, and whether it is ready
+vittics-builder ai use claude-code                # your Claude subscription (run `claude`, type /login)
+vittics-builder ai use codex                      # your ChatGPT plan (`codex login`)
+vittics-builder ai key && vittics-builder ai use api   # an Anthropic API key, asked for hidden
+vittics-builder ai test                           # one tiny prompt, to prove it answers
+```
+
+Choosing moves every agent to it, and new hires use it too. An API key is stored privately in the
+company folder and used only by this server, never by agents' commands or the product's checks.
+
 ## Idea to production
 
 Describe what you want in a sentence, on Home (**What do you want to build?**) or in a terminal, and

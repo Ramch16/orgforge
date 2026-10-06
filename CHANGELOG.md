@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.20.1 (in progress)
+- **Choose how your agents think, in the app.** A new install could not be set up without a terminal:
+  it defaulted to the Anthropic API with no way to enter a key, and the desktop app could not switch
+  agents to a subscription. Now a banner on every page says when agents cannot work and why, and
+  **How your agents think** (on Machine) offers Claude Code, Codex, an Anthropic API key or the offline
+  demo, with each one's install and sign-in status, a **Test** button, and a private key field.
+  Choosing moves every agent and new hires to it; the choice lives in the company's database (org.yaml
+  is untouched). An API key is stored in `.vittics/credentials.json` (owner-only), loaded into the
+  server only, and never reaches agents' commands or the product's checks.
+  New: `vittics-builder ai [use claude-code|codex|api|demo | key | test]`.
+
 ## 0.20.0 — 2026-10-06
 - **Idea to production.** One sentence starts it: **What do you want to build?** on Home, or
   `vittics-builder build "..."`. The project is named from the brief and runs until a decision is yours.

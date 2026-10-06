@@ -330,6 +330,7 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
             "version": __version__,
             "autopilot_levels": __import__("vittics_builder.autopilot", fromlist=["LEVELS"]).LEVELS,
             "desktop": desktop,
+            "ai": co.ai.status(),
             "projects": co.pipeline.overview(),
             "approvals": co.pipeline.inbox(),
             "tickets": co.tickets.search(),
@@ -407,6 +408,23 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
             raise HTTPException(404, "Only in the desktop app.")
         other = "cto" if role == "ceo" else "ceo"
         return {"role": other, "name": co.s.human(other), "token": tokens[other]}
+
+    @app.get('/api/ai')
+    def ai_status(role: str = Depends(auth)):
+        return co.ai.status(fresh=True)
+
+    @app.post('/api/ai/use')
+    def ai_use(data: dict, role: str = Depends(auth)):
+        return guard(lambda: co.ai.use(str(data.get("choice", "")), co.s.human(role)))
+
+    @app.post('/api/ai/key')
+    def ai_key(data: dict, role: str = Depends(auth)):
+        guard(lambda: co.ai.set_key(str(data.get("value", "")), co.s.human(role)))
+        return co.ai.status(fresh=True)                  # says a key is set; never returns it
+
+    @app.post('/api/ai/test')
+    def ai_test(role: str = Depends(auth)):
+        return co.ai.test()
 
     @app.get('/api/machines')
     def machines(role: str = Depends(auth)):

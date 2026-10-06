@@ -172,6 +172,11 @@ CREATE TABLE IF NOT EXISTS deployments (
   started_at TEXT NOT NULL,
   finished_at TEXT
 );
+CREATE TABLE IF NOT EXISTS company_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS previews (
   project_id INTEGER PRIMARY KEY,
   version INTEGER NOT NULL,
