@@ -1,7 +1,7 @@
-"""Entry point PyInstaller bundles as the app's `orgforge-server` sidecar."""
+"""Entry point PyInstaller bundles as the app's `vittics-builder-server` sidecar."""
 import multiprocessing
 
-from orgforge.desktop import main
+from vittics_builder.desktop import main
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()

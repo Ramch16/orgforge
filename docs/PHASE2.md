@@ -31,7 +31,7 @@ have evidence, smoothed success and quality determine the preferred approach.
 Model routing prefers signature-specific evidence when available, falling back
 to role-kind history; it considers success, quality, latency and cost.
 
-`orgforge --home /path/to/company learn` shows reviewed approaches. The Company
+`vittics-builder --home /path/to/company learn` shows reviewed approaches. The Company
 knowledge dashboard shows model evidence, including estimated cost per success.
 Configure `llm.prices` for other models: unknown prices stay unpriced rather than
 being treated as free. CLI subscription costs and local model estimates are not
@@ -41,10 +41,10 @@ not rewrite prompts or install tools on its own.
 ## Scheduled employees
 
 ```sh
-orgforge --home /path/to/company workers add --name nightly-qa --project 1 \
+vittics-builder --home /path/to/company workers add --name nightly-qa --project 1 \
   --kind check --interval 3600 --config qa-worker.json
-orgforge --home /path/to/company workers list
-orgforge --home /path/to/company workers tick
+vittics-builder --home /path/to/company workers list
+vittics-builder --home /path/to/company workers tick
 ```
 
 `qa-worker.json`:
@@ -74,7 +74,7 @@ configured checks. Status-report jobs use the existing report workflow.
 
 ## Agent arena
 
-Create `candidates.json` using builder agent IDs from `orgforge org`:
+Create `candidates.json` using builder agent IDs from `vittics-builder org`:
 
 ```json
 [
@@ -84,7 +84,7 @@ Create `candidates.json` using builder agent IDs from `orgforge org`:
 ```
 
 ```sh
-orgforge --home /path/to/company arena 1 --goal 'Improve the parser' \
+vittics-builder --home /path/to/company arena 1 --goal 'Improve the parser' \
   --candidates candidates.json --check 'python -m pytest tests/test_parser.py -q'
 ```
 
@@ -105,10 +105,10 @@ is evidence about those checks, not a guarantee of overall quality.
 ## Production observations and security
 
 ```sh
-orgforge --home /path/to/company observe 1 --source production --title 'API error' \
+vittics-builder --home /path/to/company observe 1 --source production --title 'API error' \
   --body 'Request handler raised an exception' --severity error
-orgforge --home /path/to/company assess security 1
-orgforge --home /path/to/company assess red-team 1 \
+vittics-builder --home /path/to/company assess security 1
+vittics-builder --home /path/to/company assess red-team 1 \
   --check 'python -m pytest tests/test_auth_denials.py -q'
 ```
 
@@ -122,7 +122,7 @@ For a separate telemetry producer, configure:
 
 ```yaml
 observability:
-  key_env: ORGFORGE_OBSERVABILITY_TOKEN
+  key_env: VITTICS_OBSERVABILITY_TOKEN
   projects: [1]
 ```
 
@@ -130,7 +130,7 @@ Bind a token of at least 32 characters and POST to `/api/telemetry/events` with
 `X-Observation-Token`. JSON fields: `project_id`, `source`, `title`, `body`,
 `severity`, optional `event_key`. This credential cannot access the dashboard.
 Admin APIs use existing `X-Token` authentication. Integrations must forward their
-logs/metrics/traces explicitly; OrgForge does not provision monitoring exporters
+logs/metrics/traces explicitly; Vittics Builder does not provision monitoring exporters
 or automatically deploy incident fixes.
 
 The bounded local security scan detects embedded Anthropic/OpenAI credential

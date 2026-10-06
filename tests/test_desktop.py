@@ -8,13 +8,13 @@ import pytest
 
 from fastapi.testclient import TestClient
 
-from orgforge import desktop
-from orgforge.server import create_app
+from vittics_builder import desktop
+from vittics_builder.server import create_app
 
 
 def test_tokens_are_created_once_privately_and_kept(tmp_path):
     first = desktop.desktop_tokens(tmp_path)
-    path = tmp_path / ".orgforge" / "desktop.json"
+    path = tmp_path / ".vittics" / "desktop.json"
     assert first["ceo"] != first["cto"]
     if os.name != "nt":                                                # Windows: the user profile's ACL protects it
         assert oct(path.stat().st_mode & 0o777) == "0o600"
@@ -42,8 +42,8 @@ def test_switching_roles_only_in_the_desktop_app(co):
 
 
 def test_the_backend_announces_itself_and_quits_with_the_app(tmp_path):
-    env = {**os.environ, "ORGFORGE_PROVIDER": "mock", "ORGFORGE_EXIT_WITH_PARENT": "1", "ORGFORGE_HOME": str(tmp_path)}
-    proc = subprocess.Popen([sys.executable, "-m", "orgforge.desktop"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+    env = {**os.environ, "VITTICS_PROVIDER": "mock", "VITTICS_EXIT_WITH_PARENT": "1", "VITTICS_HOME": str(tmp_path)}
+    proc = subprocess.Popen([sys.executable, "-m", "vittics_builder.desktop"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, env=env, text=True)
     try:
         ready = json.loads(proc.stdout.readline())
@@ -53,7 +53,7 @@ def test_the_backend_announces_itself_and_quits_with_the_app(tmp_path):
         with urllib.request.urlopen(req, timeout=10) as resp:
             state = json.loads(resp.read())
         assert state["desktop"] is True and state["you"]["role"] == "ceo"
-        assert (tmp_path / ".orgforge" / "company.db").exists()          # created on first launch
+        assert (tmp_path / ".vittics" / "company.db").exists()          # created on first launch
         proc.stdin.close()                                              # the app quit
         assert proc.wait(timeout=10) == 0
     finally:

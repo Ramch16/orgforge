@@ -6,12 +6,12 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from orgforge.company import Company
-from orgforge.federation import canonical
-from orgforge.hosting import application
-from orgforge.llm import MockProvider
-from orgforge.server import create_app
-from orgforge.workers import Workers
+from vittics_builder.company import Company
+from vittics_builder.federation import canonical
+from vittics_builder.hosting import application
+from vittics_builder.llm import MockProvider
+from vittics_builder.server import create_app
+from vittics_builder.workers import Workers
 from test_integrations import local_app, browser_available
 
 
@@ -175,7 +175,7 @@ def test_federation_signed_replay_redaction_and_scope(co,monkeypatch):
 
 
 def test_operations_auth_and_telemetry_separate_credentials(co,monkeypatch):
-    p=project(co);monkeypatch.setenv('ORGFORGE_OBSERVABILITY_TOKEN','telemetry-'+'x'*32)
+    p=project(co);monkeypatch.setenv('VITTICS_OBSERVABILITY_TOKEN','telemetry-'+'x'*32)
     co.s.raw['observability']={'projects':[p['id']]}
     with TestClient(create_app(co,{'ceo':'test-ceo','cto':'test-cto'})) as client:
         assert client.get('/healthz').status_code==200
@@ -189,9 +189,9 @@ def test_operations_auth_and_telemetry_separate_credentials(co,monkeypatch):
 
 
 def test_hosted_application_requires_distinct_tokens_and_persists(tmp_path,monkeypatch):
-    monkeypatch.setenv('ORGFORGE_HOME',str(tmp_path/'hosted'))
+    monkeypatch.setenv('VITTICS_HOME',str(tmp_path/'hosted'))
     with pytest.raises(ValueError):application()
-    monkeypatch.setenv('ORGFORGE_CEO_TOKEN','a'*32);monkeypatch.setenv('ORGFORGE_CTO_TOKEN','b'*32)
+    monkeypatch.setenv('VITTICS_CEO_TOKEN','a'*32);monkeypatch.setenv('VITTICS_CTO_TOKEN','b'*32)
     with TestClient(application()) as client:
         assert client.get('/healthz').status_code==200
     with TestClient(application()) as client:
@@ -332,7 +332,7 @@ def test_federation_expiry_and_http_transport_limits(co,monkeypatch):
 
 
 def test_board_missing_structured_verdict_never_creates_approval(co,monkeypatch):
-    from orgforge.agent import RunResult
+    from vittics_builder.agent import RunResult
     p=project(co)
     monkeypatch.setattr(co.runtime,'run',lambda *a,**kw:RunResult(completed=True,text='Everything looks good.'))
     with pytest.raises(ValueError,match='complete verdict'):co.assessments.board(p['id'])

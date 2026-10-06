@@ -1,8 +1,8 @@
 
 import pytest
 
-from orgforge import engines, machine, platforms
-from orgforge.engines import BUILTIN_ENGINES, EngineError
+from vittics_builder import engines, machine, platforms
+from vittics_builder.engines import BUILTIN_ENGINES, EngineError
 
 NPM_SHIM = r'''@ECHO off
 GOTO start
@@ -67,7 +67,7 @@ def test_commands_run_in_git_bash_never_wsl(windows, tmp_path, monkeypatch):
     (git_root / "bin").mkdir()
     (git_root / "cmd" / "git.exe").write_text("")
     (git_root / "bin" / "bash.exe").write_text("")
-    monkeypatch.delenv("ORGFORGE_BASH", raising=False)
+    monkeypatch.delenv("VITTICS_BASH", raising=False)
     monkeypatch.setattr(platforms.shutil, "which", lambda b: str(git_root / "cmd" / "git.exe") if b == "git" else None)
     bash = str((git_root / "bin" / "bash.exe").resolve())
     assert platforms.shell_command("python -m pytest -q") == ([bash, "-lc", "python -m pytest -q"], False)

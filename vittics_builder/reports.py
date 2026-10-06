@@ -84,7 +84,7 @@ class Reports:
                 body = res.text.strip() if res.completed else ""
             except Exception as exc:              # fall back to the facts rather than lose the report
                 self.db.log("warn", f"Status report fell back to plain facts: {exc}", pid)
-        author = pm["name"] if pm and body else "OrgForge"
+        author = pm["name"] if pm and body else "Vittics Builder"
         self.db.run("UPDATE reports SET status='sent', author=?, body=? WHERE id=?", author,
                     body or facts, report["id"])
         self.db.log("report", f"Status report ({report['trigger'].lower()}) by {author}.", pid, actor=author)

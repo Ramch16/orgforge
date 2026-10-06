@@ -4,9 +4,9 @@ import textwrap
 
 import pytest
 
-from orgforge.company import Company
-from orgforge.engines import BUILTIN_ENGINES, parse_block, protocol
-from orgforge.llm import MockProvider
+from vittics_builder.company import Company
+from vittics_builder.engines import BUILTIN_ENGINES, parse_block, protocol
+from vittics_builder.llm import MockProvider
 
 FAKE = textwrap.dedent('''
     import json, os, sys
@@ -50,16 +50,16 @@ def test_protocol_lists_only_allowed_actions():
 
 
 def test_parse_block_takes_the_last_block():
-    text, data, problem = parse_block('Done.\n```orgforge\n{"review": {"score": 1}}\n```\nmore\n```orgforge\n{"review": {"score": 90}}\n```')
+    text, data, problem = parse_block('Done.\n```vittics-builder\n{"review": {"score": 1}}\n```\nmore\n```vittics-builder\n{"review": {"score": 90}}\n```')
     assert data == {"review": {"score": 90}} and problem is None and text.startswith("Done.")
-    assert parse_block("```orgforge\n{bad json}\n```")[2].startswith("the orgforge block is not valid JSON")
+    assert parse_block("```vittics-builder\n{bad json}\n```")[2].startswith("the vittics-builder block is not valid JSON")
 
 
 def test_review_through_a_cli_on_the_subscription(cli):
     co, say, calls = cli
     reviewer = on_cli(co, "Pavan")
     p = co.pipeline.create_project("Greeter", "A tiny library.")
-    say('Looks good.\n```orgforge\n{"review": {"score": 91, "verdict": "approve", "notes": "Clear and tested."}}\n```')
+    say('Looks good.\n```vittics-builder\n{"review": {"score": 91, "verdict": "approve", "notes": "Clear and tested."}}\n```')
     res = co.runtime.run(reviewer, "Check the work.", co.pipeline.workspace(p), project_id=p["id"])
     assert res.completed and res.review == {"score": 91.0, "verdict": "approve", "notes": "Clear and tested."}
     assert res.text == "Looks good." and res.turns == 3
@@ -79,7 +79,7 @@ def test_builders_may_edit_and_run_and_file_tickets_and_memories(cli):
     co, say, calls = cli
     builder = on_cli(co, "Hari")
     p = co.pipeline.create_project("Greeter", "A tiny library.")
-    say('Built it.\n```orgforge\n' + json.dumps({
+    say('Built it.\n```vittics-builder\n' + json.dumps({
         "create_tickets": [{"title": "Add input validation", "description": "Reject empty names.", "type": "bug",
                             "priority": "high", "role": "backend_engineer"}],
         "remember": [{"text": "All greetings use British spelling.", "scope": "company"}],
@@ -114,7 +114,7 @@ def test_engine_problems_are_reported_not_raised(cli, tmp_path):
     res = co.runtime.run(co.org.agent("Pavan"), "Check.", None)
     assert not res.completed and "not installed" in res.text
     on_cli(co, "Pavan", "cli:fake")
-    say("Done.\n```orgforge\n{not json}\n```")
+    say("Done.\n```vittics-builder\n{not json}\n```")
     res = co.runtime.run(co.org.agent("Pavan"), "Check.", None)
     assert "could not use part of the reply" in res.text and res.review is None
 

@@ -1,13 +1,13 @@
 import pytest
 
-from orgforge.company import Company
-from orgforge.llm import MockProvider
+from vittics_builder.company import Company
+from vittics_builder.llm import MockProvider
 
 
 @pytest.fixture(autouse=True)
 def offline(monkeypatch):
     """CLI commands build their own Company; keep them on the scripted mock, never the real API."""
-    monkeypatch.setenv("ORGFORGE_PROVIDER", "mock")
+    monkeypatch.setenv("VITTICS_PROVIDER", "mock")
 
 
 @pytest.fixture

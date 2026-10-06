@@ -297,7 +297,7 @@ class AgentRuntime:
             except (ToolError, KeyError, TypeError, ValueError) as exc:
                 notes.append(f"{name}: {exc}")
                 result.tool_log.append(f"{name} (failed)")
-        result.text = text + (("\n\n(OrgForge could not use part of the reply: " + "; ".join(notes) + ")") if notes else "")
+        result.text = text + (("\n\n(Vittics Builder could not use part of the reply: " + "; ".join(notes) + ")") if notes else "")
         return result
 
     def _execute(self, agent, name, args, ws, result, project_id, meta, depth) -> str:

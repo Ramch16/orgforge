@@ -4,11 +4,11 @@ import sqlite3
 import pytest
 from fastapi.testclient import TestClient
 
-from orgforge.cli import main
-from orgforge.db import DB
-from orgforge.memory import Memory
-from orgforge.server import create_app
-from orgforge.tools import Workspace
+from vittics_builder.cli import main
+from vittics_builder.db import DB
+from vittics_builder.memory import Memory
+from vittics_builder.server import create_app
+from vittics_builder.tools import Workspace
 from test_parallel import add_tickets, plan_approved
 
 

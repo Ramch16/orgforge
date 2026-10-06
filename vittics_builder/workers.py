@@ -126,7 +126,7 @@ class Workers:
                 try:self.tick()
                 except Exception as exc:self.db.log('worker_error',f'Scheduler error: {type(exc).__name__}')
                 self._stop.wait(poll)
-        self._thread=threading.Thread(target=loop,name='orgforge-workers',daemon=True);self._thread.start()
+        self._thread=threading.Thread(target=loop,name='vittics-workers',daemon=True);self._thread.start()
 
     def stop(self):
         self._stop.set()

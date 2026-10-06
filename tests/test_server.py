@@ -2,7 +2,7 @@ import time
 
 from fastapi.testclient import TestClient
 
-from orgforge.server import create_app
+from vittics_builder.server import create_app
 
 
 def wait_for(co, stage, pid=1):

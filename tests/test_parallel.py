@@ -4,8 +4,8 @@ import time
 
 import pytest
 
-from orgforge.company import Company
-from orgforge.llm import MockProvider
+from vittics_builder.company import Company
+from vittics_builder.llm import MockProvider
 from test_pipeline import decide_next
 
 

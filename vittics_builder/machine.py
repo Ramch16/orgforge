@@ -21,7 +21,7 @@ from .db import now
 
 # id: name, binary, version command, minimum version, install recipes, sign-in check and how to sign in.
 # Homebrew names checked with `brew info` (Homebrew 7.0, Oct 2026); npm names with `npm view`.
-# winget ids are the publishers' documented ids, not yet run by OrgForge.
+# winget ids are the publishers' documented ids, not yet run by Vittics Builder.
 CATALOG: dict[str, dict] = {
     "git": {"name": "Git", "bin": "git", "version": ["git", "--version"], "min": "2.30",
             "brew": "git", "winget": "Git.Git", "apt": "git"},
@@ -149,7 +149,7 @@ def check_tool(tool: str) -> dict:
 class Machine:
     def __init__(self, company) -> None:
         self.co, self.db, self.s = company, company.db, company.s
-        self.installs_allowed = True              # off when OrgForge is hosted as a server (hosting.py)
+        self.installs_allowed = True              # off when Vittics Builder is hosted as a server (hosting.py)
         self._running: set[str] = set()
         self._lock = threading.Lock()
 
@@ -166,7 +166,7 @@ class Machine:
             if tool in CATALOG and why not in need.setdefault(tool, []):
                 need[tool].append(why)
         if pid is None:
-            add("git", "OrgForge itself (every project is a Git repository)")
+            add("git", "Vittics Builder itself (every project is a Git repository)")
             add("python", "the team's Python checks and scripts")
             if self.s.sandbox_mode == "docker":
                 add("docker", "sandbox.mode is docker")
@@ -271,7 +271,7 @@ class Machine:
         if tool not in CATALOG:
             raise ValueError(f"Unknown tool '{tool}'. Known: {', '.join(sorted(CATALOG))}.")
         if not self.allowed():
-            raise PermissionError("Installing is switched off here (machine.installs, or OrgForge is hosted).")
+            raise PermissionError("Installing is switched off here (machine.installs, or Vittics Builder is hosted).")
         recipe = self.recipe(tool)
         if not recipe["auto"]:
             raise PermissionError(f"{CATALOG[tool]['name']} is not installed automatically. Run this yourself: "
@@ -316,7 +316,7 @@ class Machine:
                 hint = ("`python` is not on this machine, only `python3`: use python3 in product.json, "
                         "or add a python command (e.g. via a virtual environment).")
             elif tool:
-                hint = f"`{word}` is missing on this machine: install {CATALOG[tool]['name']} (orgforge doctor)."
+                hint = f"`{word}` is missing on this machine: install {CATALOG[tool]['name']} (vittics-builder doctor)."
             else:
                 continue
             if hint not in hints:

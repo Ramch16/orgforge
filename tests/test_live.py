@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from orgforge.server import app_icon_png, create_app
-from orgforge.telemetry import presence, telemetry
+from vittics_builder.server import app_icon_png, create_app
+from vittics_builder.telemetry import presence, telemetry
 from test_tickets import built
 
 

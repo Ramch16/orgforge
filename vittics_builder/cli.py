@@ -1,4 +1,4 @@
-"""orgforge command line."""
+"""vittics-builder command line."""
 from __future__ import annotations
 
 import argparse
@@ -18,7 +18,7 @@ from .tools import TOOL_SPECS
 
 
 def _role(args) -> str:
-    return getattr(args, "as_role", None) or os.environ.get("ORGFORGE_ROLE", "ceo")
+    return getattr(args, "as_role", None) or os.environ.get("VITTICS_ROLE", "ceo")
 
 
 def _print_inbox(co: Company, role: str | None) -> None:
@@ -30,15 +30,15 @@ def _print_inbox(co: Company, role: str | None) -> None:
         print(f"\n#{a['id']}  [{a['required_role'].upper()}]  {a['title']}")
         for line in a["summary"].splitlines()[:25]:
             print(f"    {line}")
-    print("\nDecide with: orgforge approve <id> --as <ceo|cto>   or   orgforge reject <id> --as <ceo|cto> --note \"...\"")
+    print("\nDecide with: vittics-builder approve <id> --as <ceo|cto>   or   vittics-builder reject <id> --as <ceo|cto> --note \"...\"")
     if any(a["kind"] == "idea_decision" for a in items):
-        print("Decide ideas with: orgforge idea decide <id> internal|commercial|park|drop --note \"...\"")
+        print("Decide ideas with: vittics-builder idea decide <id> internal|commercial|park|drop --note \"...\"")
 
 
 def _print_status(co: Company) -> None:
     projects = co.pipeline.overview()
     if not projects:
-        print('No projects yet. Start one with: orgforge new "Name" --brief "What to build"')
+        print('No projects yet. Start one with: vittics-builder new "Name" --brief "What to build"')
     for p in projects:
         print(f"\nProject {p['id']}: {p['name']}  —  {p['stage_label']}")
         print(f"  workspace: {p['workspace']}")
@@ -71,13 +71,21 @@ def _advance(co: Company, pid: int) -> None:
     _print_inbox(co, None)
 
 
+def legacy_main() -> int:
+    """`orgforge`, the old name of the command (kept for one release)."""
+    print("Note: OrgForge is now Vittics Builder. Use `vittics-builder`; `orgforge` will be removed.", file=sys.stderr)
+    return main()
+
+
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="orgforge", description="Run an AI-staffed software company as its CEO and CTO.")
-    ap.add_argument("--home", help="Company folder (default: current folder or $ORGFORGE_HOME)")
+    from .legacy import adopt_env
+    adopt_env()
+    ap = argparse.ArgumentParser(prog="vittics-builder", description="Run an AI-staffed software company as its CEO and CTO.")
+    ap.add_argument("--home", help="Company folder (default: current folder or $VITTICS_HOME)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def who(p):
-        p.add_argument("--as", dest="as_role", choices=["ceo", "cto"], help="Act as CEO or CTO (default: $ORGFORGE_ROLE or ceo)")
+        p.add_argument("--as", dest="as_role", choices=["ceo", "cto"], help="Act as CEO or CTO (default: $VITTICS_ROLE or ceo)")
 
     sub.add_parser("init", help="Create the company in this folder")
     p = sub.add_parser("new", help="Start a project from a brief")
@@ -151,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--install", nargs="+", metavar="TOOL", help="Install these (e.g. node gemini), asking first")
     p.add_argument("--missing", action="store_true", help="Install everything needed that is missing, asking first")
     p.add_argument("--yes", action="store_true", help="Do not ask before each install")
-    p = sub.add_parser("desktop", help="Start the backend the OrgForge desktop app uses (company in ~/OrgForge)")
+    p = sub.add_parser("desktop", help="Start the backend the Vittics Builder desktop app uses (company in ~/VitticsBuilder)")
     p.add_argument("--port", type=int, help="Default: a free port on 127.0.0.1")
     p = sub.add_parser("machines", help="Worker machines: other computers that run your agents' coding CLIs")
     p.add_argument("action", nargs="?", choices=["list", "pair", "assign", "unassign", "revoke"], default="list")
@@ -233,9 +241,9 @@ def _dispatch(args) -> int:
         from . import worker_client as wc
         if args.action == "join":
             if not args.url or not args.code:
-                raise ValueError("Usage: orgforge worker join <url> <pairing code>")
+                raise ValueError("Usage: vittics-builder worker join <url> <pairing code>")
             config = wc.join(args.url, args.code, insecure=args.insecure)
-            print(f"Joined as worker machine '{config['name']}'. Start working with: orgforge worker run")
+            print(f"Joined as worker machine '{config['name']}'. Start working with: vittics-builder worker run")
         elif args.action == "status":
             config = wc.load()
             print(f"Worker machine '{config['name']}' for {config['url']} (config: {wc.CONFIG})")
@@ -251,7 +259,7 @@ def _dispatch(args) -> int:
         co = Company(args.home, create=True)
         print(f"{co.s.company} is set up in {co.s.root}")
         print("Edit org.yaml to set the company name, your names and the model, then:")
-        print('  orgforge org show\n  orgforge new "Product name" --brief "What to build"')
+        print('  vittics-builder org show\n  vittics-builder new "Product name" --brief "What to build"')
         return 0
 
     co = Company(args.home)
@@ -497,13 +505,13 @@ def _dispatch(args) -> int:
         by = co.s.human(role)
         if args.action == "pair":
             if not args.name:
-                raise ValueError("Usage: orgforge machines pair <name>")
+                raise ValueError("Usage: vittics-builder machines pair <name>")
             pairing = co.nodes.pair(args.name, by)
-            print(f"On the other computer, within 10 minutes:\n\n  orgforge worker join <this dashboard's address> "
+            print(f"On the other computer, within 10 minutes:\n\n  vittics-builder worker join <this dashboard's address> "
                   f"{pairing['code']}\n\nThe code works once.")
         elif args.action in ("assign", "unassign"):
             if not args.name or (args.action == "assign" and not args.machine):
-                raise ValueError("Usage: orgforge machines assign <agent> <machine>  |  unassign <agent>")
+                raise ValueError("Usage: vittics-builder machines assign <agent> <machine>  |  unassign <agent>")
             co.nodes.assign(args.name, args.machine if args.action == "assign" else None, by)
             print("Done.")
         elif args.action == "revoke":
@@ -517,7 +525,7 @@ def _dispatch(args) -> int:
                       f" · engines: {', '.join(f'{e} ({s})' for e, s in i.get('engines', {}).items()) or 'none'}"
                       f" · agents: {', '.join(n['agents']) or 'none'} · jobs done: {n['jobs']['done'] or 0}")
             if not nodes:
-                print("No worker machines. Pair one: orgforge machines pair <name>")
+                print("No worker machines. Pair one: vittics-builder machines pair <name>")
     elif args.cmd == "deployments":
         rows = co.production.list(args.project)
         if not rows:
@@ -554,7 +562,7 @@ def _dispatch(args) -> int:
             row = co.feedback.list(args.project)[0]
             print(row["result"])
             if row["tickets"]:
-                print(f"\nThe team picks up new tickets on the next run: orgforge run {args.project}")
+                print(f"\nThe team picks up new tickets on the next run: vittics-builder run {args.project}")
         else:
             for f in co.feedback.list(args.project):
                 print(f"\n#{f['id']} {f['created_at'][:16].replace('T', ' ')} {f['source']}\n  {f['body']}\n  -> {f['result']}")
@@ -565,7 +573,7 @@ def _dispatch(args) -> int:
             reply = thread["messages"][-1]
             print(f"\n{thread['agent']['name']}: {reply['body']}")
             if args.project and "T-" in reply["body"]:
-                print(f"\nThe team picks up new tickets on the next run: orgforge run {args.project}")
+                print(f"\nThe team picks up new tickets on the next run: vittics-builder run {args.project}")
         else:
             thread = co.chat.thread(args.agent, role)
             a = thread["agent"]
@@ -574,7 +582,7 @@ def _dispatch(args) -> int:
                 who = co.s.human(role) if m["sender"] == "human" else a["name"]
                 print(f"\n{m['created_at'][:16].replace('T', ' ')}  {who}:\n  " + m["body"].replace("\n", "\n  "))
             if not thread["messages"]:
-                print(f'\nNo messages yet. Start with: orgforge chat {a["name"]} "Hello" --as {role}')
+                print(f'\nNo messages yet. Start with: vittics-builder chat {a["name"]} "Hello" --as {role}')
     return 0
 
 
@@ -690,7 +698,7 @@ def _org(co: Company, args, role: str) -> None:
     elif cmd == "add-role":
         co.org.add_role(args.id, args.dept, args.kind, [t.strip() for t in args.tools.split(",") if t.strip()],
                         args.prompt, title=args.title)
-        print(f"Role {args.id} added. Staff it with: orgforge org hire --role {args.id}")
+        print(f"Role {args.id} added. Staff it with: vittics-builder org hire --role {args.id}")
 
 
 if __name__ == "__main__":

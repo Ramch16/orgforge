@@ -14,7 +14,7 @@ class Security:
         ws=self.co.pipeline.workspace(self.co.pipeline.project(project_id));findings=[];scanned=0
         for path in sorted(ws.root.rglob('*')):
             relative=path.relative_to(ws.root)
-            if any(p in SKIP_DIRS or p=='.orgforge' for p in relative.parts) or path.name.startswith('.env'):
+            if any(p in SKIP_DIRS or p=='.vittics' for p in relative.parts) or path.name.startswith('.env'):
                 continue
             if path.is_symlink() or not path.is_file() or path.stat().st_size>500000:continue
             if scanned>=1000:raise ValueError('Security scan exceeds the 1000-file bound; configure a narrower project.')

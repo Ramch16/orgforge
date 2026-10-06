@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from .agent import AgentRuntime
 from .chat import Chat
@@ -55,7 +56,7 @@ class Company:
             ensure_org_file(root)
         self.s = load_settings(root)
         if not create and not self.s.db_path.exists():
-            raise SystemExit(f"No company found in {root}. Run `orgforge init` there first.")
+            raise SystemExit(f"No company found in {root}. Run `vittics-builder init` there first.")
         self.db = DB(self.s.db_path)
         initialize(self.db)
         self.org = Org(self.db, self.s)
@@ -91,6 +92,7 @@ class Company:
         self.workers = Workers(self)
         self.production = Production(self)
         self.machine = Machine(self)
+        self._reroot_workspaces()
         self.nodes = Nodes(self)
         self.runtime.nodes = self.nodes
         self.pipeline.machine = self.machine
@@ -113,3 +115,13 @@ class Company:
         else:
             rows = self.db.all("SELECT * FROM events ORDER BY id DESC LIMIT ?", limit)
         return rows[::-1]
+
+    def _reroot_workspaces(self) -> None:
+        """Projects whose saved workspace path is gone, but whose folder is in this company's workspaces/
+        (the company was moved, or renamed from OrgForge), point at the folder that is here."""
+        for p in self.db.all("SELECT id, workspace FROM projects WHERE workspace!=''"):
+            saved = Path(p["workspace"])
+            here = self.s.workspaces / saved.name
+            if not saved.exists() and here.is_dir() and here != saved:
+                self.db.run("UPDATE projects SET workspace=? WHERE id=?", str(here), p["id"])
+                self.db.log("project", f"Workspace found at {here} (was {saved}).", p["id"])

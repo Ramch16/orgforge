@@ -1,6 +1,6 @@
 import pytest
 
-from orgforge.tools import ToolError, Workspace
+from vittics_builder.tools import ToolError, Workspace
 
 
 def test_files_stay_inside_workspace(tmp_path):

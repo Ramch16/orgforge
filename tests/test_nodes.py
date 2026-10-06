@@ -12,10 +12,10 @@ import pytest
 import uvicorn
 from fastapi.testclient import TestClient
 
-from orgforge import nodes as n
-from orgforge import worker_client as wc
-from orgforge.engines import BUILTIN_ENGINES, EngineUnavailable
-from orgforge.server import create_app
+from vittics_builder import nodes as n
+from vittics_builder import worker_client as wc
+from vittics_builder.engines import BUILTIN_ENGINES, EngineUnavailable
+from vittics_builder.server import create_app
 
 FAKE = textwrap.dedent('''
     import json, os, sys
@@ -139,7 +139,7 @@ def test_a_worker_ignores_replies_its_company_did_not_sign(co, worker, monkeypat
 
 
 def test_controller_addresses_must_be_private_or_https():
-    ok = ["https://orgforge.example.com", "http://127.0.0.1:4700", "http://192.168.1.20:4700", "http://10.0.0.5",
+    ok = ["https://vittics_builder.example.com", "http://127.0.0.1:4700", "http://192.168.1.20:4700", "http://10.0.0.5",
           "http://my-mac.local:4700", "http://mac.tail1234.ts.net", "http://100.101.102.103:4700"]
     bad = ["http://8.8.8.8:4700", "http://example.com", "ftp://10.0.0.1", "http://user:pw@10.0.0.1"]
     assert all(n.safe_controller_url(u) for u in ok) and not any(n.safe_controller_url(u) for u in bad)
@@ -176,7 +176,7 @@ def test_a_ticket_runs_on_the_worker_and_its_changes_come_back(co, worker):
     assert (ws.root / "hello.py").read_text() == "print('hello from the worker')\n"
     job = co.db.one("SELECT * FROM node_jobs")
     assert job["status"] == "done" and "node_modules" not in json.loads(job["result"])["patch"]
-    assert not list((co.s.root / ".orgforge" / "node-archives").glob("*"))         # archive cleaned up
+    assert not list((co.s.root / ".vittics" / "node-archives").glob("*"))         # archive cleaned up
     run = co.runs.recent(hari["id"])[0]
     assert co.db.one("SELECT 1 FROM run_events WHERE run_id=? AND body LIKE '%on worker machine ''laptop''%'", run["id"])
     [listed] = co.nodes.list()

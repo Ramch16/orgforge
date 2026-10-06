@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Something OrgForge did wrong
+about: Something Vittics Builder did wrong
 labels: bug
 ---
 
@@ -13,7 +13,7 @@ labels: bug
 2.
 
 **Setup**
-- OrgForge version (`orgforge --help` header or pyproject): 
+- Vittics Builder version (`vittics-builder --help` header or pyproject): 
 - Python version:
 - llm.provider (anthropic / mock) and any CLI engine:
 - sandbox.mode (local / docker):

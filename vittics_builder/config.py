@@ -58,7 +58,7 @@ class Settings:
 
     @property
     def db_path(self) -> Path:
-        return self.root / ".orgforge" / "company.db"
+        return self.root / ".vittics" / "company.db"
 
     @property
     def workspaces(self) -> Path:
@@ -69,7 +69,7 @@ class Settings:
 
 
 def resolve_root(root: str | os.PathLike | None = None) -> Path:
-    return Path(root or os.environ.get("ORGFORGE_HOME") or Path.cwd()).resolve()
+    return Path(root or os.environ.get("VITTICS_HOME") or Path.cwd()).resolve()
 
 
 def ensure_org_file(root: Path) -> Path:
@@ -82,7 +82,9 @@ def ensure_org_file(root: Path) -> Path:
 
 
 def load_settings(root: str | os.PathLike | None = None) -> Settings:
+    from .legacy import migrate_company
     root = resolve_root(root)
+    migrate_company(root)
     org_file = root / "org.yaml"
     raw = yaml.safe_load((org_file if org_file.exists() else DEFAULT_ORG).read_text(encoding="utf-8")) or {}
     llm, sandbox = raw.get("llm", {}), raw.get("sandbox", {})
@@ -92,7 +94,7 @@ def load_settings(root: str | os.PathLike | None = None) -> Settings:
     s.company = raw.get("company", s.company)
     s.ceo_name = (humans.get("ceo") or {}).get("name", s.ceo_name)
     s.cto_name = (humans.get("cto") or {}).get("name", s.cto_name)
-    s.provider = os.environ.get("ORGFORGE_PROVIDER") or llm.get("provider", s.provider)
+    s.provider = os.environ.get("VITTICS_PROVIDER") or llm.get("provider", s.provider)
     s.default_model = llm.get("default_model", s.default_model)
     s.model_ladder = list(llm.get("model_ladder") or [s.default_model])
     s.max_turns = int(llm.get("max_turns", s.max_turns))

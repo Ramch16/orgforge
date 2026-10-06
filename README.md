@@ -1,4 +1,6 @@
-# OrgForge
+# Vittics Builder
+
+*Formerly OrgForge. Existing companies, settings and worker machines carry over; see the CHANGELOG.*
 
 A software company staffed by AI agents and run by two people: a CEO and a CTO.
 
@@ -19,7 +21,7 @@ brief ─► requirements + UX design ─► CEO ─► architecture + plan ─�
 
 ## Adaptive company operations
 
-OrgForge now supports dynamic teams, persistent company memory, reviewed model/strategy
+Vittics Builder now supports dynamic teams, persistent company memory, reviewed model/strategy
 routing, native MCP/browser tools, scheduled employees, benchmark competitions and
 production incident triage. Customer personas plan journeys that Chromium verifies;
 an independent board reports eight product dimensions for CEO review. Pinned role/skill
@@ -31,7 +33,7 @@ The Operations dashboard shows workers, incidents, learned approaches and assess
 
 ## Verified product delivery (0.3)
 
-OrgForge now requires executable acceptance evidence before release. It remains
+Vittics Builder now requires executable acceptance evidence before release. It remains
 an AI-assisted development system: it cannot guarantee every idea is feasible,
 that generated tests are sufficient, or that a product is production ready.
 
@@ -61,7 +63,7 @@ A minimal contract looks like:
 }
 ```
 
-The CTO approves `product.json` together with the design, and OrgForge pins that
+The CTO approves `product.json` together with the design, and Vittics Builder pins that
 exact file. Agents cannot quietly weaken it later: if `product.json` differs from
 the approved version when the checks are about to run, the release stops and the
 CTO sees a diff. Approving accepts the new checks; sending back restores the
@@ -83,7 +85,7 @@ A completed product is labeled **Ready for deployment**, not as already deployed
 Export its signed-off source, documentation and evidence with:
 
 ```bash
-orgforge export 1 --output ../product-release.zip
+vittics-builder export 1 --output ../product-release.zip
 ```
 
 Export refuses unfinished or modified releases, existing output files, and
@@ -94,7 +96,7 @@ Other reliability changes: missing review verdicts and exhausted agent runs
 fail closed; invalid or cyclic plans are rejected before task creation;
 interrupted in-progress tasks can resume within a single running company process;
 Git errors now stop work instead of silently succeeding. Do not run multiple
-OrgForge processes against the same company workspace concurrently.
+Vittics Builder processes against the same company workspace concurrently.
 
 Existing companies gain the new gates when they next run a build. Older pending
 release approvals lack verification metadata: reject them with instructions to
@@ -121,9 +123,9 @@ work preserves human approvals. Role-scoped MCP tools and native browser journey
 let API agents interact with external tools and validate real applications.
 
 The dashboard's **Company knowledge** page provides memory search, project teams,
-and model results. Start with `orgforge work 1 --cycles 5 --seconds 300`,
-`orgforge swarm 1`, `orgforge memory 'architecture decisions' --history`, and
-`orgforge routing`. Routing, automatic staffing, MCP, and browser access are opt-in.
+and model results. Start with `vittics-builder work 1 --cycles 5 --seconds 300`,
+`vittics-builder swarm 1`, `vittics-builder memory 'architecture decisions' --history`, and
+`vittics-builder routing`. Routing, automatic staffing, MCP, and browser access are opt-in.
 See [Phase 1 setup, configuration, and limitations](docs/PHASE1.md).
 
 ## The company
@@ -149,40 +151,40 @@ agents: HR is the built-in performance system below, and the other two do not
 produce software.
 
 If you created a company with an earlier version, add the new departments with
-`orgforge org sync`. It only adds what is missing.
+`vittics-builder org sync`. It only adds what is missing.
 
 ## Start a company
 
 ```bash
 mkdir mycompany && cd mycompany
-orgforge init                      # writes org.yaml and the database
+vittics-builder init                      # writes org.yaml and the database
 # edit org.yaml: company name, your two names, models, HR policy
-orgforge org show
-orgforge new "Invoice API" --brief "REST API to create, list and pay invoices. Python, SQLite, tests."
+vittics-builder org show
+vittics-builder new "Invoice API" --brief "REST API to create, list and pay invoices. Python, SQLite, tests."
 ```
 
 Work runs until a human decision is needed, then stops and tells you who must decide.
 
 ```bash
-orgforge inbox --as ceo
-orgforge approve 1 --as ceo
-orgforge reject 2 --as cto --note "Use Postgres, and split the auth task in two."
-orgforge status
-orgforge log
+vittics-builder inbox --as ceo
+vittics-builder approve 1 --as ceo
+vittics-builder reject 2 --as cto --note "Use Postgres, and split the auth task in two."
+vittics-builder status
+vittics-builder log
 ```
 
 The product is built in `workspaces/<id>-<name>/`, a normal git repository with
 one commit per completed task and a `release` tag at sign-off. This marks a local verified release, not a deployment.
 
-To try everything without an API key, set `ORGFORGE_PROVIDER=mock`. Scripted
-agents run the full flow offline. `ORGFORGE_MOCK_BAD_AGENTS=Hari,Sandy` makes
+To try everything without an API key, set `VITTICS_PROVIDER=mock`. Scripted
+agents run the full flow offline. `VITTICS_MOCK_BAD_AGENTS=Hari,Sandy` makes
 those agents fail reviews so you can watch escalation and replacement.
 
 ## Two people, one dashboard
 
 ```bash
-export ORGFORGE_CEO_TOKEN=... ORGFORGE_CTO_TOKEN=...
-orgforge serve --host 0.0.0.0 --port 4700
+export VITTICS_CEO_TOKEN=... VITTICS_CTO_TOKEN=...
+vittics-builder serve --host 0.0.0.0 --port 4700
 ```
 
 Each of you signs in with your own token. The dashboard shows the decisions
@@ -201,7 +203,7 @@ it beyond your machine.
 ## From idea to plan of action
 
 Not every idea should be built. Submit it as an idea (the default on the
-dashboard, or `orgforge idea new`) and the company decides first:
+dashboard, or `vittics-builder idea new`) and the company decides first:
 
 1. **Assessment.** The product manager (Ram) leads it. He asks Engineering
    (Sony) whether it is achievable and how big it is, Marketing (Anshu) who
@@ -224,14 +226,14 @@ dashboard, or `orgforge idea new`) and the company decides first:
    usual, with the department tickets alongside.
 
 ```bash
-orgforge idea new "Leave Tracker" --brief "Staff request leave and managers approve it" --as ceo
-orgforge approve 7 --as cto                      # technical sign-off
-orgforge idea decide 8 commercial --note "Worth selling to small firms"
-orgforge approve 9 --as ceo && orgforge approve 10 --as cto   # the plan, both sides
-orgforge idea revisit 3                          # bring a parked idea back
+vittics-builder idea new "Leave Tracker" --brief "Staff request leave and managers approve it" --as ceo
+vittics-builder approve 7 --as cto                      # technical sign-off
+vittics-builder idea decide 8 commercial --note "Worth selling to small firms"
+vittics-builder approve 9 --as ceo && vittics-builder approve 10 --as cto   # the plan, both sides
+vittics-builder idea revisit 3                          # bring a parked idea back
 ```
 
-Choose "Start building" (or `orgforge new`) to skip the assessment when the
+Choose "Start building" (or `vittics-builder new`) to skip the assessment when the
 decision is already made.
 
 ## What powers the agents: API or your subscription
@@ -239,9 +241,9 @@ decision is already made.
 Each agent works through one of two engines, set by its model:
 
 - **The Anthropic API** (`claude-haiku-4-5`, `claude-sonnet-5-5`, `claude-opus-5-5`): pay per token,
-  needs `ANTHROPIC_API_KEY`, and runs agents' commands in OrgForge's Docker sandbox.
+  needs `ANTHROPIC_API_KEY`, and runs agents' commands in Vittics Builder's Docker sandbox.
 - **A coding CLI on its own login** (`cli:claude-code`, or `cli:claude-code/haiku` to pick its model):
-  runs on your Claude subscription instead of the API. OrgForge removes `ANTHROPIC_API_KEY` from
+  runs on your Claude subscription instead of the API. Vittics Builder removes `ANTHROPIC_API_KEY` from
   the CLI's environment so it bills your subscription, and records usage at $0. Claude Code does
   its own reading, editing and commands in the project workspace; read-only roles get read-only
   tools, and reviewers may run tests but not edit. It runs on your machine under Claude Code's
@@ -249,16 +251,16 @@ Each agent works through one of two engines, set by its model:
 
 ```bash
 claude                                           # once: sign in to Claude Code, then type /login
-orgforge engines --test claude-code              # check it works
-orgforge org set-model --all cli:claude-code     # move the whole team (or name one agent)
+vittics-builder engines --test claude-code              # check it works
+vittics-builder org set-model --all cli:claude-code     # move the whole team (or name one agent)
 ```
 
 Seven CLI engines are built in. Tested: `claude-code` and `codex` (Codex CLI 0.160, on a ChatGPT
 plan: a full task built, reviewed and checked through it). Set up from each CLI's documentation but
-not yet run against OrgForge: `gemini`, `copilot`, `cursor`, `opencode` and `qwen`. Codex runs
+not yet run against Vittics Builder: `gemini`, `copilot`, `cursor`, `opencode` and `qwen`. Codex runs
 read-only roles in its `read-only` sandbox and builders in `workspace-write`; the others' permissions
 are coarser than Claude Code's: read-only roles get the CLI's read-only or ask-first mode, builders
-its edit mode. `orgforge engines` shows which are installed. Add or override any engine under
+its edit mode. `vittics-builder engines` shows which are installed. Add or override any engine under
 `engines:` in `org.yaml`.
 
 The ChatGPT desktop app includes the Codex CLI. To put it on your PATH:
@@ -276,8 +278,8 @@ suit reviews and reports better than building. Add others under
 `endpoints:` in `org.yaml` (`base_url`, `key_env`, `free`). Local models must support tool calling.
 
 ```bash
-orgforge engines --test ollama:qwen2.5-coder
-orgforge org set-model Hari ollama:qwen2.5-coder
+vittics-builder engines --test ollama:qwen2.5-coder
+vittics-builder org set-model Hari ollama:qwen2.5-coder
 ```
 
 **When an engine hits its usage limit.** By default the project pauses until you resume it. Turn
@@ -299,8 +301,8 @@ only pauses when every option is resting. A backup on the API bills per token, w
 project's budget. Independent reviews never fall back to the builder's own model.
 
 ```bash
-orgforge engines                                  # failover order and resting engines
-orgforge engines --wake cli:claude-code           # try it again now (no value: wake all)
+vittics-builder engines                                  # failover order and resting engines
+vittics-builder engines --wake cli:claude-code           # try it again now (no value: wake all)
 ```
 
 **Review depth** also sets cost: `pipeline.review_mode` is `standard` by default (a code reviewer
@@ -312,14 +314,14 @@ and QA check each ticket), `thorough` (every reviewer role, including security, 
 Not everything is a new product. A **task** is one change, straight to build: an engineer does
 it, it is reviewed (by `review_mode`), your checks run, and the CTO reviews the changes. It can
 work on an **existing repository** (a folder, a GitHub `owner/name`, or any git URL) or start
-from a **GitHub issue** (needs the `gh` CLI). OrgForge clones the repository, works on an
-`orgforge/task-N` branch and leaves your files and history alone; agents never push. Take the
+from a **GitHub issue** (needs the `gh` CLI). Vittics Builder clones the repository, works on an
+`vittics/task-N` branch and leaves your files and history alone; agents never push. Take the
 result as a patch (`Download patch`, then `git am`) or pull the branch from the task's workspace.
 
 ```bash
-orgforge task "Fix the crash on empty names" --repo ~/code/app --check "pytest -q" --as cto
-orgforge task --issue Ramch16/orgforge#12 --check "python -m pytest -q"
-orgforge diff P3                                  # everything task 3 changed
+vittics-builder task "Fix the crash on empty names" --repo ~/code/app --check "pytest -q" --as cto
+vittics-builder task --issue Ramch16/vittics-builder#12 --check "python -m pytest -q"
+vittics-builder diff P3                                  # everything task 3 changed
 ```
 
 ## Watching and steering agents
@@ -332,9 +334,9 @@ step (agents on a CLI engine, which runs in one go, read it at the start of thei
 open colour-coded diffs.
 
 ```bash
-orgforge watch Hari                               # Hari's latest run, step by step
-orgforge steer Hari "Use python3, not python, on this Mac" --as cto
-orgforge diff T-12
+vittics-builder watch Hari                               # Hari's latest run, step by step
+vittics-builder steer Hari "Use python3, not python, on this Mac" --as cto
+vittics-builder diff T-12
 ```
 
 ## Skills
@@ -348,8 +350,8 @@ quality, security and platform roles. Switch built-in skills on or off under `sk
 `org.yaml`; add your own as Markdown files in the company's `skills/` folder.
 
 ```bash
-orgforge skills                                   # what's on, for whom
-orgforge skills add ~/notes/house-style.md         # or a URL, e.g. a CLAUDE.md on GitHub
+vittics-builder skills                                   # what's on, for whom
+vittics-builder skills add ~/notes/house-style.md         # or a URL, e.g. a CLAUDE.md on GitHub
 ```
 
 ## The office, memory and the app
@@ -361,7 +363,7 @@ orgforge skills add ~/notes/house-style.md         # or a URL, e.g. a CLAUDE.md 
   cookies", "Niki wants British spelling"). The most relevant ones, from the project and
   company-wide, are given to every later agent. Each project page lists them.
 - **Install it as an app.** In Chrome or Edge, use the install icon in the address bar (Safari:
-  File → Add to Dock). Or run `orgforge app` to start the dashboard in its own window.
+  File → Add to Dock). Or run `vittics-builder app` to start the dashboard in its own window.
 
 ## Running the company day to day
 
@@ -377,7 +379,7 @@ you write in the note), or send back to stop. A stopped project resumes when the
 CEO sets a new budget. A step already running finishes, so spend can go slightly
 over. Your Anthropic bill is the source of truth.
 
-**Status reports.** Click **Status report** on a project, or run `orgforge report`,
+**Status reports.** Click **Status report** on a project, or run `vittics-builder report`,
 and the product manager writes a short report: done, in progress, blocked or
 needs you, cost, next steps. Reports are also written automatically when the
 build starts, when a release is ready for review or blocked, at sign-off, and
@@ -393,64 +395,64 @@ reports), every file, the history and the cost. Once signed off, **Download
 release** gives you the verified source as a zip.
 
 **After release.** Paste customer feedback under **Customer feedback** (or
-`orgforge feedback`). The support specialist (Venky) triages it against the
+`vittics-builder feedback`). The support specialist (Venky) triages it against the
 product and its tickets: bugs become To do tickets and reopen the product for its
 next version; feature requests go to the backlog for you to prioritise;
 questions get a suggested reply. Each sign-off is a numbered version, tagged
 `v1`, `v2` and so on in the product's git history.
 
 ```bash
-orgforge costs
-orgforge budget 1 60                             # CEO: raise project 1's budget to $60
-orgforge report 1 --as cto
-orgforge feedback 1 "Crashes when the name is empty" --source "support email" --as ceo
+vittics-builder costs
+vittics-builder budget 1 60                             # CEO: raise project 1's budget to $60
+vittics-builder report 1 --as cto
+vittics-builder feedback 1 "Crashes when the name is empty" --source "support email" --as ceo
 ```
 
 ## Machine readiness
 
-`orgforge doctor` (and **Machine** in the dashboard) shows whether this computer is ready: what the
+`vittics-builder doctor` (and **Machine** in the dashboard) shows whether this computer is ready: what the
 company and each project need, what is installed, which version, and whether each AI CLI and the
 GitHub CLI are signed in.
 
-- **Needs come from what is actually used:** Git and Python for OrgForge itself, the CLIs your
+- **Needs come from what is actually used:** Git and Python for Vittics Builder itself, the CLIs your
   agents work through (and failover backups), Docker when the sandbox uses it, and for each project
   its files (`package.json` means Node.js, `go.mod` Go, `Cargo.toml` Rust, ...) and the commands in
   its `product.json` and production config. Pick a project to see exactly why.
-- **Nothing is installed without asking.** Only tools OrgForge knows can be installed: with
+- **Nothing is installed without asking.** Only tools Vittics Builder knows can be installed: with
   Homebrew on macOS, winget on Windows, and npm for the AI CLIs, one at a time after you confirm.
   Anything needing admin rights or a licence (Docker Desktop, Homebrew itself, Apple's command line
   tools, apt on Linux) is shown as the command for you to run. Signing in is always yours.
-  A hosted OrgForge never installs; `machine.installs: false` switches it off anywhere.
+  A hosted Vittics Builder never installs; `machine.installs: false` switches it off anywhere.
 - **Failures point at the machine.** When release checks fail with "command not found", the CTO is
   told which tool is missing (including the `python` vs `python3` trap), and approving a design
   warns if the project needs something this computer lacks.
 
 ```bash
-orgforge doctor                                   # company-wide
-orgforge doctor --project 2                       # one project, with reasons
-orgforge doctor --install node gemini             # asks before each one (--yes to skip asking)
-orgforge doctor --missing                         # everything missing that can be installed
+vittics-builder doctor                                   # company-wide
+vittics-builder doctor --project 2                       # one project, with reasons
+vittics-builder doctor --install node gemini             # asks before each one (--yes to skip asking)
+vittics-builder doctor --missing                         # everything missing that can be installed
 ```
 
 ## The desktop app
 
-OrgForge also comes as a desktop app (Tauri). It starts its own bundled backend, keeps the company
-in `~/OrgForge`, signs you in, and lets you switch between CEO and CTO, since on your own computer
+Vittics Builder also comes as a desktop app (Tauri). It starts its own bundled backend, keeps the company
+in `~/VitticsBuilder` (an existing `~/OrgForge` is kept), signs you in, and lets you switch between CEO and CTO, since on your own computer
 you are both. The first screen walks you through checking the machine and submitting a first idea.
 The backend listens only on 127.0.0.1 and stops when the app quits.
 
-Build it (macOS today; needs Rust, Node.js and OrgForge's `.venv` with the `desktop` extra):
+Build it (macOS today; needs Rust, Node.js and Vittics Builder's `.venv` with the `desktop` extra):
 
 ```bash
-pip install -e '.[desktop]'                       # PyInstaller, in OrgForge's .venv
+pip install -e '.[desktop]'                       # PyInstaller, in Vittics Builder's .venv
 cd desktop && npm install
 npm run build                                     # bundles the backend, then the app
-# -> desktop/src-tauri/target/release/bundle/macos/OrgForge.app and bundle/dmg/OrgForge_<version>.dmg
+# -> desktop/src-tauri/target/release/bundle/macos/Vittics Builder.app and bundle/dmg/Vittics Builder_<version>.dmg
 ```
 
 The app is not signed yet: macOS asks for confirmation on first open (Control-click the app, then
 Open). Signing and notarising need an Apple Developer ID; a Windows build needs a Windows machine.
-`orgforge desktop` runs the same backend from a terminal.
+`vittics-builder desktop` runs the same backend from a terminal.
 
 The `desktop` workflow on GitHub builds both installers (Windows `.exe`, macOS `.dmg`) on pushes to
 version branches, or on demand from the Actions tab; download them from the run's artifacts.
@@ -463,16 +465,16 @@ Windows machine. Agents assigned to it do their CLI work there, on that computer
 
 ```bash
 # here (the company): make the dashboard reachable on your network, then pair
-orgforge serve --host 0.0.0.0
-orgforge machines pair windows-laptop             # prints a one-time code (10 minutes)
+vittics-builder serve --host 0.0.0.0
+vittics-builder machines pair windows-laptop             # prints a one-time code (10 minutes)
 
-# on the other computer (same OrgForge version, its CLIs installed and signed in)
-orgforge worker join http://my-mac.local:4700 ABCD-EFGH-JKMN-PQRS
-orgforge worker run
+# on the other computer (same Vittics Builder version, its CLIs installed and signed in)
+vittics-builder worker join http://my-mac.local:4700 ABCD-EFGH-JKMN-PQRS
+vittics-builder worker run
 
 # here again
-orgforge machines assign Hari windows-laptop      # unassign Hari: back to this computer
-orgforge machines                                 # online, engines, agents, jobs done
+vittics-builder machines assign Hari windows-laptop      # unassign Hari: back to this computer
+vittics-builder machines                                 # online, engines, agents, jobs done
 ```
 
 - **The worker connects; nothing connects to it.** It needs no open port.
@@ -533,13 +535,13 @@ production:
   is stored. Nothing deploys if the workspace changed after sign-off.
 
 ```bash
-orgforge deployments 1                            # what is where, and its status
+vittics-builder deployments 1                            # what is where, and its status
 ```
 
 ## Talking to the team
 
 The CEO and CTO can talk to any agent directly. On the dashboard, click
-**Message** next to anyone in People. In the terminal, use `orgforge chat`.
+**Message** next to anyone in People. In the terminal, use `vittics-builder chat`.
 Each of you has a private conversation with each agent, and the agent
 remembers it.
 
@@ -552,9 +554,9 @@ and the release checks like any other, and starts the team if the project is
 building. Ticket ids in replies link to the ticket.
 
 ```bash
-orgforge chat Sony "Why did you split the API into two services?" --project 1 --as cto
-orgforge chat Hari "Please add input validation to the signup form" --project 1 --as cto
-orgforge chat Sony --as cto                      # read the conversation
+vittics-builder chat Sony "Why did you split the API into two services?" --project 1 --as cto
+vittics-builder chat Hari "Please add input validation to the signup form" --project 1 --as cto
+vittics-builder chat Sony --as cto                      # read the conversation
 ```
 
 ## Parallel work and hiring for workload
@@ -567,7 +569,7 @@ with work merged meanwhile, it goes back to its agent to redo on the latest
 code, on its own so it cannot conflict again. A conflict does not count against
 the agent. Set `max_parallel: 1` to work one ticket at a time.
 
-No agent can hire. OrgForge watches the queue instead: when a role has
+No agent can hire. Vittics Builder watches the queue instead: when a role has
 `staffing.hire_when_waiting` waiting tickets per agent (default 3), it asks the
 CEO or CTO, whoever the department reports to, to hire one more, explaining
 the queue and the extra model cost. Approve and an agent is hired with the next
@@ -584,7 +586,7 @@ staffing:
 ```
 
 New hires are named by their teammates. When an agent joins without a name
-(a workload hire, a replacement, or `orgforge org hire` with no `--name`), the
+(a workload hire, a replacement, or `vittics-builder org hire` with no `--name`), the
 longest-serving agent in that department picks one, in the spirit of the names
 already there. It must be a single first name nobody at the company uses. If
 the agent cannot find one, or the model is unavailable, a built-in name is used.
@@ -625,18 +627,18 @@ releasing, or already ready for deployment, sends it back to build, withdraws
 pending release approvals, and runs the release checks again.
 
 ```bash
-orgforge ticket new 1 "Greeting crashes on empty name" --type bug --priority urgent --todo
-orgforge ticket list --project 1
-orgforge ticket comment T-5 "Add a regression test" --as cto
-orgforge ticket update T-5 --role ux_designer        # transfer to Design
-orgforge ticket show T-5                             # full history and handoffs
+vittics-builder ticket new 1 "Greeting crashes on empty name" --type bug --priority urgent --todo
+vittics-builder ticket list --project 1
+vittics-builder ticket comment T-5 "Add a regression test" --as cto
+vittics-builder ticket update T-5 --role ux_designer        # transfer to Design
+vittics-builder ticket show T-5                             # full history and handoffs
 ```
 
 ## Performance, firing and rehiring
 
 Every evaluation is a score from 0 to 100: peer review and QA on each task
 attempt, your approval (92) or rejection (35) of requirements and designs, and
-manual ratings (`orgforge rate Sandy 40 --note "Ignored the design"`). An
+manual ratings (`vittics-builder rate Sandy 40 --note "Ignored the design"`). An
 agent's standing is a rolling average weighted towards recent work.
 
 | Situation (after `min_tasks` evaluations)                          | Result                         |
@@ -653,10 +655,10 @@ With `hr.auto_fire: false` (default) proposals go to the CEO or CTO; with
 `true` they happen automatically. You can always act yourself:
 
 ```bash
-orgforge org fire Sandy --reason "Keeps skipping tests" --as cto   # replaced by a successor
-orgforge org fire Sandy --no-replace                               # seat left empty
-orgforge org rehire Sandy --as cto                                 # current seat holder steps down
-orgforge org show --all                                            # include former agents
+vittics-builder org fire Sandy --reason "Keeps skipping tests" --as cto   # replaced by a successor
+vittics-builder org fire Sandy --no-replace                               # seat left empty
+vittics-builder org rehire Sandy --as cto                                 # current seat holder steps down
+vittics-builder org show --all                                            # include former agents
 ```
 
 ## The learning loop
@@ -679,7 +681,7 @@ On by default (`learning:` in `org.yaml`); `learning.enabled: false` turns it of
   `routing.rules`; without a rule every agent keeps its own model.
 
 ```bash
-orgforge learning                                 # reviewer accuracy and learned approaches
+vittics-builder learning                                 # reviewer accuracy and learned approaches
 ```
 
 Company knowledge in the dashboard shows the same, next to model results.
@@ -689,12 +691,12 @@ Company knowledge in the dashboard shows the same, next to model results.
 Nothing about the org is fixed. Add or close departments, define roles, hire as many agents as you want.
 
 ```bash
-orgforge org add-dept data --name "Data" --reports-to cto
-orgforge org add-role data_engineer --dept data --kind builder \
+vittics-builder org add-dept data --name "Data" --reports-to cto
+vittics-builder org add-role data_engineer --dept data --kind builder \
   --tools read_file,write_file,replace_in_file,list_files,run_command \
   --prompt "You build data pipelines and their tests."
-orgforge org hire --role data_engineer --as cto
-orgforge org hire --role backend_engineer --model claude-opus-5-5
+vittics-builder org hire --role data_engineer --as cto
+vittics-builder org hire --role backend_engineer --model claude-opus-5-5
 ```
 
 A role's `kind` tells the pipeline what it is for:
@@ -745,15 +747,15 @@ Each role gets only the tools listed for it.
   Reviewers, QA and auditors may check several tickets at once.
 - Long tasks are bounded by `llm.max_turns` and the model's context window.
 - Anthropic, the offline mock, OpenAI-compatible endpoints, and coding CLI engines
-  are supported. Another provider implements `complete()` in `orgforge/llm.py`.
+  are supported. Another provider implements `complete()` in `vittics_builder/llm.py`.
 - API usage costs money, and the full company spends more of it: every task
   attempt is checked by three agents and every release by three auditors. To
-  run leaner, let go of roles you do not need (`orgforge org fire Mani
+  run leaner, let go of roles you do not need (`vittics-builder org fire Mani
   --no-replace`). Token counts are tracked per agent in the database.
 - Reviewers and QA are scored only from what can be checked: the CTO's call on
   escalated tickets, release checks and accepted releases (see *The learning
   loop*). Auditors are not scored automatically; rate them yourself with
-  `orgforge rate` when their checks miss things or block good work.
+  `vittics-builder rate` when their checks miss things or block good work.
 - Audits are done by a language model reading and running the code. They catch
   common problems but are not a substitute for a professional penetration test
   or legal review before a commercial launch.
@@ -762,28 +764,28 @@ Each role gets only the tools listed for it.
 
 | Path                      | What                                               |
 | ------------------------- | -------------------------------------------------- |
-| `orgforge/default_org.yaml` | Default departments, roles, seats and policies   |
-| `orgforge/org.py`         | Departments, roles, hire, fire, replace, rehire    |
-| `orgforge/naming.py`      | Teammates name new hires                           |
-| `orgforge/chat.py`        | CEO and CTO chat with agents                       |
-| `orgforge/engines.py`     | Coding CLI engines (Claude Code and others)        |
-| `orgforge/runs.py`        | Live run log and steering                          |
-| `orgforge/skills.py`      | Skills (built in: `skills/karpathy-guidelines.md`) |
-| `orgforge/sources.py`     | Existing repositories and GitHub issues            |
-| `orgforge/memory.py`      | Shared long-term memory                            |
-| `orgforge/telemetry.py`   | Office presence and live telemetry                 |
-| `orgforge/costs.py`       | Cost ledger, prices and budgets                    |
-| `orgforge/reports.py`     | Status reports                                     |
-| `orgforge/review.py`      | Product review page                                |
-| `orgforge/feedback.py`    | Customer feedback triage                           |
-| `orgforge/performance.py` | Scores and HR policy                               |
-| `orgforge/pipeline.py`    | Stages, task loop, human decisions                 |
-| `orgforge/tickets.py`     | Ticket tracker and the agents' ticket tools        |
-| `orgforge/agent.py`       | One agent run: prompt and tool loop                |
-| `orgforge/tools.py`       | Workspace file and command tools                   |
-| `orgforge/llm.py`         | Anthropic provider and offline mock                |
-| `orgforge/server.py`, `static/index.html` | Dashboard API and page             |
-| `orgforge/cli.py`         | Command line                                       |
+| `vittics_builder/default_org.yaml` | Default departments, roles, seats and policies   |
+| `vittics_builder/org.py`         | Departments, roles, hire, fire, replace, rehire    |
+| `vittics_builder/naming.py`      | Teammates name new hires                           |
+| `vittics_builder/chat.py`        | CEO and CTO chat with agents                       |
+| `vittics_builder/engines.py`     | Coding CLI engines (Claude Code and others)        |
+| `vittics_builder/runs.py`        | Live run log and steering                          |
+| `vittics_builder/skills.py`      | Skills (built in: `skills/karpathy-guidelines.md`) |
+| `vittics_builder/sources.py`     | Existing repositories and GitHub issues            |
+| `vittics_builder/memory.py`      | Shared long-term memory                            |
+| `vittics_builder/telemetry.py`   | Office presence and live telemetry                 |
+| `vittics_builder/costs.py`       | Cost ledger, prices and budgets                    |
+| `vittics_builder/reports.py`     | Status reports                                     |
+| `vittics_builder/review.py`      | Product review page                                |
+| `vittics_builder/feedback.py`    | Customer feedback triage                           |
+| `vittics_builder/performance.py` | Scores and HR policy                               |
+| `vittics_builder/pipeline.py`    | Stages, task loop, human decisions                 |
+| `vittics_builder/tickets.py`     | Ticket tracker and the agents' ticket tools        |
+| `vittics_builder/agent.py`       | One agent run: prompt and tool loop                |
+| `vittics_builder/tools.py`       | Workspace file and command tools                   |
+| `vittics_builder/llm.py`         | Anthropic provider and offline mock                |
+| `vittics_builder/server.py`, `static/index.html` | Dashboard API and page             |
+| `vittics_builder/cli.py`         | Command line                                       |
 | `tests/`                  | `pytest` runs the whole company offline            |
 
 ## Licence

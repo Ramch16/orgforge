@@ -1,10 +1,10 @@
 # Security
 
-OrgForge runs AI agents that read, write and execute code. Please report security problems
+Vittics Builder runs AI agents that read, write and execute code. Please report security problems
 privately to the maintainer (open a GitHub security advisory on the repository) rather than in a
 public issue.
 
-What OrgForge protects:
+What Vittics Builder protects:
 - Agents' commands run without your API keys or tokens in their environment.
 - File tools cannot leave the project workspace; a deny list blocks privilege escalation,
   deleting outside the workspace, piping downloads into a shell and `git push`.

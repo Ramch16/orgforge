@@ -35,7 +35,7 @@ Start the product separately. Provide `customers.json`:
 ```
 
 ```sh
-orgforge --home /path/to/company assess customers 1 --journeys customers.json
+vittics-builder --home /path/to/company assess customers 1 --journeys customers.json
 ```
 
 Supported personas: `enterprise_admin`, `developer`, `beginner`,
@@ -57,8 +57,8 @@ persistent scenario files. Browser origin restrictions apply to every request.
 ## Board of Directors
 
 ```sh
-orgforge --home /path/to/company assess board 1
-orgforge --home /path/to/company inbox --as ceo
+vittics-builder --home /path/to/company assess board 1
+vittics-builder --home /path/to/company inbox --as ceo
 ```
 
 Three separate advisor seats (CTO, security, customer) evaluate functionality, UX,
@@ -89,8 +89,8 @@ and Markdown skill bundles. Example `package.json`:
 ```
 
 ```sh
-orgforge --home /path/to/company marketplace register --bundle package.json
-orgforge --home /path/to/company marketplace install \
+vittics-builder --home /path/to/company marketplace register --bundle package.json
+vittics-builder --home /path/to/company marketplace install \
   --name company/test-guidance@1.0.0 --sha256 REVIEWED_SHA256
 ```
 
@@ -114,7 +114,7 @@ federation:
   peers:
     company-b:
       url: https://company-b.example.com
-      key_env: ORGFORGE_PEER_B_KEY
+      key_env: VITTICS_PEER_B_KEY
       projects: [1]
       capabilities: [observation, task_proposal, task_result]
       roles: [backend_engineer]
@@ -127,7 +127,7 @@ Keys stay out of configuration and messages. Peers may accept different scopes i
 each direction.
 
 ```sh
-orgforge --home /path/to/company federation send --peer company-b \
+vittics-builder --home /path/to/company federation send --peer company-b \
   --kind task_proposal --payload proposal.json
 ```
 

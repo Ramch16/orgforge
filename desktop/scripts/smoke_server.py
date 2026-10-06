@@ -1,6 +1,6 @@
 """Smoke-test the bundled backend: it starts, announces itself, serves the dashboard and quits with its parent.
 
-    python desktop/scripts/smoke_server.py [path to orgforge-server binary]
+    python desktop/scripts/smoke_server.py [path to vittics-builder-server binary]
 """
 import json
 import os
@@ -15,9 +15,9 @@ BINARIES = Path(__file__).resolve().parent.parent / "src-tauri" / "binaries"
 
 
 def main() -> None:
-    binary = Path(sys.argv[1]) if len(sys.argv) > 1 else next(BINARIES.glob("orgforge-server-*"))
-    home = tempfile.mkdtemp(prefix="orgforge-smoke-")
-    env = {**os.environ, "ORGFORGE_HOME": home, "ORGFORGE_EXIT_WITH_PARENT": "1"}
+    binary = Path(sys.argv[1]) if len(sys.argv) > 1 else next(BINARIES.glob("vittics-builder-server-*"))
+    home = tempfile.mkdtemp(prefix="vittics-smoke-")
+    env = {**os.environ, "VITTICS_HOME": home, "VITTICS_EXIT_WITH_PARENT": "1"}
     started = time.time()
     proc = subprocess.Popen([str(binary)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             env=env, text=True, encoding="utf-8")

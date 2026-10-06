@@ -1,11 +1,11 @@
 {
-  "name": "orgforge-desktop",
+  "name": "vittics-builder-desktop",
   "private": true,
   "version": "0.18.0",
-  "description": "OrgForge as a desktop app: a Tauri shell around the OrgForge dashboard and its bundled backend.",
+  "description": "Vittics Builder as a desktop app: a Tauri shell around the Vittics Builder dashboard and its bundled backend.",
   "scripts": {
     "server": "python3 scripts/build_server.py",
-    "icons": "tauri icon ../orgforge/static/icon.svg",
+    "icons": "tauri icon ../vittics_builder/static/icon.svg",
     "dev": "npm run server && tauri dev",
     "build": "npm run server && tauri build"
   },

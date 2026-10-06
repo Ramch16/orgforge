@@ -112,7 +112,7 @@ class Pipeline:
             "VALUES (?,?,?,?,?,?,?)", pid, kind, role, title, summary[:6000], json.dumps(payload), now())
 
     def _stage_ticket(self, pid: int, key: str, title: str, agent: dict, description: str,
-                      reporter: str = "OrgForge", handoff: str = "") -> int:
+                      reporter: str = "Vittics Builder", handoff: str = "") -> int:
         """Open (or reopen) the ticket for one department's stage work and assign it."""
         t, ts = self.db.one("SELECT * FROM tasks WHERE project_id=? AND key=?", pid, key), now()
         if t:
@@ -187,7 +187,7 @@ class Pipeline:
                           json.dumps([c for c in (checks or []) if c.strip()]), ts, ts)
         slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:40] or "task"
         path = self.s.workspaces / f"{pid:03d}-{slug}"
-        branch = f"orgforge/task-{pid}"
+        branch = f"vittics/task-{pid}"
         try:
             if repo:
                 base = clone(repo, path, branch)
@@ -266,9 +266,9 @@ class Pipeline:
             self.db.run("UPDATE tasks SET status='todo' WHERE project_id=? AND status IN ('in_progress','in_review') "
                         "AND origin!='stage'", pid)
             self.db.log("paused", f"Work paused: {exc}. Nothing was counted against the team. "
-                        f"Resume once it is back (Resume work, or `orgforge run {pid}`).", pid)
+                        f"Resume once it is back (Resume work, or `vittics-builder run {pid}`).", pid)
             raise PipelineError(f"Work paused: {exc}. Nothing was counted against the team; resume once it is back "
-                                f"with Resume work or `orgforge run {pid}`.") from exc
+                                f"with Resume work or `vittics-builder run {pid}`.") from exc
         finally:
             self._cycle_limits.pop(pid, None)
             lock.release()
@@ -523,7 +523,7 @@ class Pipeline:
             note(self.db, design_ticket, designer["name"], "Design written to docs/DESIGN.md.\n" + (design.text or "")[:1500])
             authors.append(designer["id"])
         self._stage_status(p["id"], "stage-requirements", "in_review", pm["name"], f"Submitted to {self._boss('ceo')} for approval.", kind="handoff")
-        self._stage_status(p["id"], "stage-design-%", "in_review", "OrgForge", f"Submitted to {self._boss('ceo')} with the requirements.", kind="handoff", only=("in_progress",))
+        self._stage_status(p["id"], "stage-design-%", "in_review", "Vittics Builder", f"Submitted to {self._boss('ceo')} with the requirements.", kind="handoff", only=("in_progress",))
         summary = self._read(ws, "docs/PRD.md")
         if design := self._read(ws, "docs/DESIGN.md"):
             summary += f"\n\n----- docs/DESIGN.md -----\n{design}"
@@ -763,7 +763,7 @@ class Pipeline:
     def _release_failure(self, p: dict, findings: list[str]) -> None:
         pid = p["id"]
         if self.runtime.learning:
-            self.runtime.learning.settle_project(pid, False, "OrgForge", "the release checks then failed")
+            self.runtime.learning.settle_project(pid, False, "Vittics Builder", "the release checks then failed")
         rounds = self.db.one("SELECT COUNT(*) AS n FROM tasks WHERE project_id=? AND key LIKE 'verify-%'", pid)["n"]
         feedback = "\n".join(findings)
         if self.machine and (hints := self.machine.explain(feedback)):
@@ -857,11 +857,11 @@ class Pipeline:
         conflicts = ws.merge(branch, f"Merge {ticket_key(task['id'])} [{task['key']}] {task['title']}")
         if not conflicts:
             if current["status"] == "done":
-                note(self.db, task["id"], "OrgForge", "Merged into the main code.")
+                note(self.db, task["id"], "Vittics Builder", "Merged into the main code.")
             return ok
         files = ", ".join(conflicts[:10])
         if current["status"] != "done":
-            note(self.db, task["id"], "OrgForge", f"This attempt could not be merged (conflicts in {files}); "
+            note(self.db, task["id"], "Vittics Builder", f"This attempt could not be merged (conflicts in {files}); "
                  "it was set aside.", kind="handoff")
             return ok
         # Not the agent's fault, so it does not count as a failed attempt. Redone alone, it cannot conflict again.
@@ -869,7 +869,7 @@ class Pipeline:
                     "Redo it on top of the latest code; keep the other changes working.")
         self.db.run("UPDATE tasks SET status='todo', feedback=?, updated_at=? WHERE id=?", feedback, now(), task["id"])
         self._solo.add(task["id"])
-        note(self.db, task["id"], "OrgForge", f"Sent back to {agent['name'] if agent else 'the team'} to redo alone "
+        note(self.db, task["id"], "Vittics Builder", f"Sent back to {agent['name'] if agent else 'the team'} to redo alone "
              f"on the latest code: {feedback}", kind="handoff")
         self.db.log("work", f"[{task['key']}] conflicted with merged work; it will be redone on its own.", p["id"])
         return True
@@ -1013,7 +1013,7 @@ class Pipeline:
                 self.runtime.router.evaluate(res.route_id, approved, sum(scores) / len(scores) if scores else None, lessons='\n'.join(findings))
             if not approved and self.runtime.memory:
                 self.runtime.memory.remember(
-                    f"Task {task['key']} failed review: " + '\n'.join(findings), 'OrgForge', pid,
+                    f"Task {task['key']} failed review: " + '\n'.join(findings), 'Vittics Builder', pid,
                     category='failure', source=f"ticket:{task['id']};attempt:{task['attempts'] + 1}")
             if not approved and self.runtime.learning:
                 self.runtime.learning.after_failure(res.route_id, pid)
@@ -1030,7 +1030,7 @@ class Pipeline:
             self.db.run("UPDATE tasks SET status=?, attempts=?, feedback=?, result=?, updated_at=? WHERE id=?",
                         "failed" if failed else "todo", attempts, "\n".join(findings), res.text, now(), task["id"])
             self.db.log("work", f"[{task['key']}] sent back ({attempts}).", pid, actor=agent["name"])
-            note(self.db, task["id"], "OrgForge", (f"Escalated to {self._boss('cto')} after {attempts} attempts:\n"
+            note(self.db, task["id"], "Vittics Builder", (f"Escalated to {self._boss('cto')} after {attempts} attempts:\n"
                  if failed else f"Sent back to {agent['name']}, {where(self.db, task['role'])} (attempt {attempts}):\n")
                  + "\n".join(findings), kind="handoff")
             if failed:
@@ -1056,7 +1056,7 @@ class Pipeline:
                               "AND key NOT LIKE 'audit-%' GROUP BY role ORDER BY n DESC, MIN(id)", pid)
         return next((r["role"] for r in by_work if r["role"] in staffed), staffed[0])
 
-    def _fix_task(self, pid: int, title: str, feedback: str, key: str | None = None, reporter: str = "OrgForge") -> int:
+    def _fix_task(self, pid: int, title: str, feedback: str, key: str | None = None, reporter: str = "Vittics Builder") -> int:
         role = self._fix_role(pid)
         if not key:
             n = self.db.one("SELECT COUNT(*) AS n FROM tasks WHERE project_id=? AND key LIKE 'fix-%'", pid)["n"] + 1
@@ -1148,9 +1148,9 @@ class Pipeline:
                         "priority, origin, reporter, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         pid, "pending", t["title"], t["description"], t["role"],
                         json.dumps(["@build"] if t["after_build"] else []), "todo", "task", "medium", "dept",
-                        payload.get("planner", "OrgForge"), ts, ts)
+                        payload.get("planner", "Vittics Builder"), ts, ts)
                     self.db.run("UPDATE tasks SET key=? WHERE id=?", f"dept-{tid}", tid)
-                    note(self.db, tid, payload.get("planner", "OrgForge"), f"From the plan of action, for "
+                    note(self.db, tid, payload.get("planner", "Vittics Builder"), f"From the plan of action, for "
                          f"{where(self.db, t['role'])}." + (" Starts once the build is finished." if t["after_build"] else ""))
                     created.append(ticket_key(tid))
                 self._stage_status(pid, "stage-plan", "done", who,

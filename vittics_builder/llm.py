@@ -77,14 +77,14 @@ MOCK_NAMES = ["Kiran", "Meghana", "Rohit", "Divya", "Arjun", "Keerthi", "Tarun",
 class MockProvider:
     """Deterministic scripted agents. No network, no API key.
 
-    Agents named in `bad_agents` (or the ORGFORGE_MOCK_BAD_AGENTS env var,
+    Agents named in `bad_agents` (or the VITTICS_MOCK_BAD_AGENTS env var,
     comma-separated) get poor reviews, which lets you watch probation,
     firing and rehiring work.
     """
 
     def __init__(self, bad_agents: set[str] | None = None, fail_audits_once: set[str] | None = None) -> None:
         self.fail_audits_once, self._failed = set(fail_audits_once or ()), set()
-        env = os.environ.get("ORGFORGE_MOCK_BAD_AGENTS", "")
+        env = os.environ.get("VITTICS_MOCK_BAD_AGENTS", "")
         self.bad_agents = set(bad_agents or ()) | {n.strip() for n in env.split(",") if n.strip()}
         self._n, self._filed, self._lock = 0, False, threading.Lock()
 

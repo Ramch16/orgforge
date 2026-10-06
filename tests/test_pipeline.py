@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from orgforge.pipeline import PipelineError
+from vittics_builder.pipeline import PipelineError
 
 
 def decide_next(co, role, decision="approved", feedback=""):
@@ -79,7 +79,7 @@ def test_failing_work_is_reworked_escalated_and_the_agent_replaced(make_company)
 
 
 def test_audit_findings_become_fix_tasks_before_release(make_company):
-    from orgforge.llm import MockProvider
+    from vittics_builder.llm import MockProvider
     co = make_company()
     co.runtime.provider = MockProvider(fail_audits_once={"security_auditor"})
     p = co.pipeline.create_project("Greeter", "A tiny library.")
@@ -97,7 +97,7 @@ def test_audit_findings_become_fix_tasks_before_release(make_company):
 def test_unresolved_audit_findings_reach_the_cto(make_company):
     co = make_company()
     co.s.max_rework = 0                                   # no fix rounds allowed
-    from orgforge.llm import MockProvider
+    from vittics_builder.llm import MockProvider
     co.runtime.provider = MockProvider(fail_audits_once={"compliance_officer"})
     p = co.pipeline.create_project("Greeter", "A tiny library.")
     co.pipeline.advance(p["id"])

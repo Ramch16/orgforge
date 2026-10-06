@@ -2,9 +2,9 @@ import json
 
 import pytest
 
-from orgforge.cli import main
-from orgforge.costs import price
-from orgforge.skills import SkillError
+from vittics_builder.cli import main
+from vittics_builder.costs import price
+from vittics_builder.skills import SkillError
 
 
 def systems_seen(co):

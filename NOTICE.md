@@ -1,6 +1,6 @@
 # Provenance
 
-OrgForge was written from scratch in Python. It contains no source code,
+Vittics Builder was written from scratch in Python. It contains no source code,
 prompts, assets, names or configuration from any other agent-office or
 multi-agent project, and shares no file structure with one. The general idea
 of AI agents organised into company roles is not owned by anyone; this
@@ -26,6 +26,6 @@ review those licences per project.
 
 ## Bundled content
 
-`orgforge/skills/karpathy-guidelines.md` is the guidelines file from
+`vittics_builder/skills/karpathy-guidelines.md` is the guidelines file from
 [andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills), MIT-licensed
 according to its README, included unchanged apart from a header naming its source.

@@ -1,6 +1,6 @@
 # Phase 1: company brain and execution foundations
 
-OrgForge now extends its existing organization with adaptive project teams,
+Vittics Builder now extends its existing organization with adaptive project teams,
 searchable company knowledge, evidence-based model selection, bounded autonomous
 work, MCP integrations, and native browser journeys. The CEO/CTO approval gates,
 review/rework policy, acceptance contract, and project budgets remain in force.
@@ -17,13 +17,13 @@ playwright install chromium
 python -m pytest -q
 
 mkdir -p ../mycompany
-ORGFORGE_PROVIDER=mock orgforge --home ../mycompany init
-ORGFORGE_PROVIDER=mock orgforge --home ../mycompany serve
+VITTICS_PROVIDER=mock vittics-builder --home ../mycompany init
+VITTICS_PROVIDER=mock vittics-builder --home ../mycompany serve
 ```
 
 Browser journeys prefer Playwright's bundled Chromium. When it is absent, they
 use an installed `chromium` or `chromium-browser`. Set
-`tools.browser.executable_path` or `ORGFORGE_BROWSER_EXECUTABLE` to choose another
+`tools.browser.executable_path` or `VITTICS_BROWSER_EXECUTABLE` to choose another
 Chromium executable. An explicit path takes precedence. System Chromium versions
 can differ from Playwright's pinned version; the bundled browser is the most
 portable choice. Browser installation also needs its host OS libraries.
@@ -33,11 +33,11 @@ and bottlenecks, and compares model results. Projects with runnable work have a
 **Work 5 cycles** action. The CLI provides the same foundations:
 
 ```bash
-orgforge swarm 1
-orgforge memory 'Why PostgreSQL instead of MongoDB?' --project 1 --category architecture
-orgforge memory 'authentication failures' --history
-orgforge routing
-orgforge work 1 --cycles 5 --seconds 300
+vittics-builder swarm 1
+vittics-builder memory 'Why PostgreSQL instead of MongoDB?' --project 1 --category architecture
+vittics-builder memory 'authentication failures' --history
+vittics-builder routing
+vittics-builder work 1 --cycles 5 --seconds 300
 ```
 
 `work` counts one planning stage or one build batch as a cycle. A batch includes
@@ -181,7 +181,7 @@ A browser journey retains cookies/page state across steps in one fresh context:
     {"action": "fill", "selector": "#username", "value": "demo-user"},
     {"action": "click", "selector": "button[type=submit]"},
     {"action": "assert_text", "selector": "body", "value": "Welcome"},
-    {"action": "screenshot", "path": ".orgforge/browser/onboarding.png"}
+    {"action": "screenshot", "path": ".vittics/browser/onboarding.png"}
   ]
 }
 ```

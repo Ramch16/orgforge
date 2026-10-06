@@ -1,7 +1,7 @@
-"""The worker side: run on another computer to lend its coding CLIs to an OrgForge company.
+"""The worker side: run on another computer to lend its coding CLIs to an Vittics Builder company.
 
-    orgforge worker join http://my-mac.local:4700 ABCD-EFGH-JKMN-PQRS
-    orgforge worker run
+    vittics-builder worker join http://my-mac.local:4700 ABCD-EFGH-JKMN-PQRS
+    vittics-builder worker run
 
 Only jobs signed by the controller this worker paired with are accepted. A job names an engine;
 the worker runs its own definition of it (built in, or under `engines` in the worker's config),
@@ -31,7 +31,7 @@ from .nodes import (join_confirmation, join_proof, normal_code, request_headers,
                     safe_controller_url, secret_key, unpack)
 from .tools import SKIP_DIRS
 
-CONFIG = Path(os.environ.get("ORGFORGE_WORKER_CONFIG", Path.home() / ".orgforge" / "worker.json"))
+CONFIG = Path(os.environ.get("VITTICS_WORKER_CONFIG", Path.home() / ".vittics" / "worker.json"))
 
 
 class WorkerError(RuntimeError):
@@ -58,8 +58,11 @@ def save(config: dict) -> None:
 
 
 def load() -> dict:
+    if "VITTICS_WORKER_CONFIG" not in os.environ:          # paired back when it was called OrgForge
+        from .legacy import migrate_file
+        migrate_file(CONFIG, Path.home() / ".orgforge" / "worker.json")
     if not CONFIG.exists():
-        raise WorkerError("This computer has not joined a company yet: run `orgforge worker join <url> <code>`.")
+        raise WorkerError("This computer has not joined a company yet: run `vittics-builder worker join <url> <code>`.")
     return json.loads(CONFIG.read_text(encoding="utf-8"))
 
 
@@ -123,7 +126,7 @@ class Worker:
                 "unavailable": None, "patch": ""}
         if not engine:
             return {**base, "unavailable": f"engine '{job.get('engine')}' is not set up on this worker machine"}
-        folder = Path(tempfile.mkdtemp(prefix="orgforge-job-"))
+        folder = Path(tempfile.mkdtemp(prefix="vittics-job-"))
         try:
             has_files = bool(job.get("archive_sha256"))
             if has_files:
@@ -149,7 +152,7 @@ class Worker:
 
     @staticmethod
     def _git(folder: Path, *args: str, data: bool = False):
-        proc = subprocess.run(["git", "-c", "user.name=OrgForge worker", "-c", "user.email=worker@orgforge.local",
+        proc = subprocess.run(["git", "-c", "user.name=Vittics Builder worker", "-c", "user.email=worker@vittics.local",
                                "-c", "core.autocrlf=false", *args], cwd=folder, capture_output=True)
         if proc.returncode:
             raise WorkerError(f"git {args[0]} failed: {proc.stderr.decode(errors='replace')[:200]}")

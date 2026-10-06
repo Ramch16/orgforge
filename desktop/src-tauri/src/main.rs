@@ -1,4 +1,4 @@
-// OrgForge desktop: starts the bundled OrgForge backend and shows its dashboard.
+// Vittics Builder desktop: starts the bundled Vittics Builder backend and shows its dashboard.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::sync::Mutex;
@@ -33,8 +33,8 @@ fn main() {
         .setup(|app| {
             let (mut events, child) = app
                 .shell()
-                .sidecar("orgforge-server")?
-                .env("ORGFORGE_EXIT_WITH_PARENT", "1")
+                .sidecar("vittics-builder-server")?
+                .env("VITTICS_EXIT_WITH_PARENT", "1")
                 .spawn()?;
             app.manage(Backend(Mutex::new(Some(child))));
             let handle = app.handle().clone();
@@ -62,10 +62,10 @@ fn main() {
                         CommandEvent::Terminated(_) if !ready => {
                             let tail: String = errors.lines().rev().take(6).collect::<Vec<_>>().into_iter().rev()
                                 .collect::<Vec<_>>().join("\n");
-                            show_status(&handle, &format!("OrgForge could not start.\n\n{tail}"));
+                            show_status(&handle, &format!("Vittics Builder could not start.\n\n{tail}"));
                         }
                         CommandEvent::Error(message) if !ready => {
-                            show_status(&handle, &format!("OrgForge could not start: {message}"));
+                            show_status(&handle, &format!("Vittics Builder could not start: {message}"));
                         }
                         _ => {}
                     }
@@ -74,7 +74,7 @@ fn main() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("error while building OrgForge")
+        .expect("error while building Vittics Builder")
         .run(|app, event| {
             if let RunEvent::Exit = event {
                 if let Some(child) = app.state::<Backend>().0.lock().unwrap().take() {

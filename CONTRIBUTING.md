@@ -1,6 +1,6 @@
-# Contributing to OrgForge
+# Contributing to Vittics Builder
 
-Thanks for helping. OrgForge is young, and real-world reports are the most valuable contribution.
+Thanks for helping. Vittics Builder is young, and real-world reports are the most valuable contribution.
 
 ## Report a problem
 Open an issue with the bug template. Include the activity log or ticket history around the
@@ -8,7 +8,7 @@ problem (remove any secrets) and your settings (`llm.provider`, any CLI engine, 
 
 ## Develop
 ```bash
-git clone https://github.com/Ramch16/orgforge.git && cd orgforge
+git clone https://github.com/Ramch16/vittics-builder.git && cd vittics-builder
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 python -m pytest -q
@@ -16,7 +16,7 @@ python -m pytest -q
 The tests run the whole company offline with scripted mock agents: no API key, no cost.
 To try the dashboard the same way:
 ```bash
-mkdir -p /tmp/of && cd /tmp/of && ORGFORGE_PROVIDER=mock orgforge init && ORGFORGE_PROVIDER=mock orgforge serve
+mkdir -p /tmp/of && cd /tmp/of && VITTICS_PROVIDER=mock vittics-builder init && VITTICS_PROVIDER=mock vittics-builder serve
 ```
 
 ## Guidelines
@@ -29,4 +29,4 @@ mkdir -p /tmp/of && cd /tmp/of && ORGFORGE_PROVIDER=mock orgforge init && ORGFOR
 
 ## Releases
 Versions follow `0.MINOR.PATCH` until 1.0. Each release bumps `pyproject.toml` and
-`orgforge/__init__.py`, adds a `CHANGELOG.md` entry, and is tagged `vX.Y.Z`.
+`vittics_builder/__init__.py`, adds a `CHANGELOG.md` entry, and is tagged `vX.Y.Z`.

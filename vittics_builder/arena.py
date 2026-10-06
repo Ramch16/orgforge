@@ -7,7 +7,7 @@ from pathlib import Path
 from .db import now
 from .tools import SKIP_DIRS, Workspace
 
-EXCLUDED=SKIP_DIRS|{'.orgforge','.env*','*.pem','*.key','credentials*','org.yaml','skills'}
+EXCLUDED=SKIP_DIRS|{'.vittics','.env*','*.pem','*.key','credentials*','org.yaml','skills'}
 
 
 def hashes(root):
@@ -47,7 +47,7 @@ class Arena:
         if len(set(names))!=len(names):raise ValueError('Arena candidate names must be unique.')
         run=self.db.run('INSERT INTO arena_runs(project_id,status,goal,benchmark,created_at) VALUES(?,?,?,?,?)',
                         project_id,'running',goal,json.dumps(checks),now())
-        base=self.co.s.root/'.orgforge'/'arena'/str(run);base.mkdir(parents=True)
+        base=self.co.s.root/'.vittics'/'arena'/str(run);base.mkdir(parents=True)
         snapshot=base/'baseline'
         results=[]
         try:

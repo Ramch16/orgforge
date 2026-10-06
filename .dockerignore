@@ -5,6 +5,6 @@ __pycache__
 *.pyc
 .pytest_cache
 *.egg-info
-.orgforge
+.vittics
 workspaces
 org.yaml

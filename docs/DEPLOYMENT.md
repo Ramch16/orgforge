@@ -1,7 +1,7 @@
-# Host OrgForge with Docker and HTTPS
+# Host Vittics Builder with Docker and HTTPS
 
 Use one Linux server with Docker Engine and Compose v2.24.4+ (the public override
-uses `!reset`). Docker with Caddy is a portable choice for OrgForge's current
+uses `!reset`). Docker with Caddy is a portable choice for Vittics Builder's current
 single-company SQLite storage and long-lived background employees. A persistent
 VM avoids ephemeral filesystems and interrupted worker processes. Start with a
 server with at least 2 CPUs, 4GB RAM and adequate project storage; size it for your
@@ -12,21 +12,21 @@ actual browser and model workload.
 Generate separate tokens without printing them or putting them in Git:
 
 ```sh
-export ORGFORGE_CEO_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-export ORGFORGE_CTO_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-export ORGFORGE_PROVIDER=mock
+export VITTICS_CEO_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+export VITTICS_CTO_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+export VITTICS_PROVIDER=mock
 docker compose up --build -d
 ```
 
 Open `http://127.0.0.1:4700` and sign in using the relevant token from your secret
 manager. Tokens must be distinct and at least 32 characters. Mock mode tests the
 workflow without provider spending. To use Anthropic, bind `ANTHROPIC_API_KEY`
-and set `ORGFORGE_PROVIDER=anthropic`. Add other model/peer/telemetry environment
+and set `VITTICS_PROVIDER=anthropic`. Add other model/peer/telemetry environment
 bindings explicitly in a local Compose override; add matching endpoint/routing
 configuration in the company's `org.yaml`. Restart after configuration changes.
 
 The image includes Git, native Chromium, browser support and stdio MCP support.
-It runs as UID 10001, stores the company under `/var/lib/orgforge`, initializes
+It runs as UID 10001, stores the company under `/var/lib/vittics-builder`, initializes
 only when no database exists and supplies `/healthz`. The `company` named volume
 stores the database, `org.yaml`, Markdown skills and product workspaces. Agent
 checks execute locally inside this company container by default. The image does
@@ -36,7 +36,7 @@ hosting alone provides per-agent isolation or independent browser environments.
 
 ## Public server
 
-Point a DNS hostname at your server. Bind `ORGFORGE_DOMAIN` and the same secret
+Point a DNS hostname at your server. Bind `VITTICS_DOMAIN` and the same secret
 credentials through your server's secret management. Then:
 
 ```sh
@@ -57,8 +57,8 @@ accounts, purchase servers, update DNS or publish an image.
 A consistent database backup can be made while the service runs:
 
 ```sh
-docker compose exec orgforge python -m orgforge.hosting \
-  --backup /var/lib/orgforge/backups/company-2026-10-06.db
+docker compose exec vittics-builder python -m vittics_builder.hosting \
+  --backup /var/lib/vittics-builder/backups/company-2026-10-06.db
 ```
 
 Output paths must be new. Copy backups off the server. A database-only backup
@@ -70,9 +70,9 @@ volume until you have checked restored state and projects.
 Before an upgrade, back up the volume; rebuild and recreate the application:
 
 ```sh
-docker compose build orgforge
-docker compose up -d orgforge
-docker compose logs --tail=100 orgforge
+docker compose build vittics-builder
+docker compose up -d vittics-builder
+docker compose logs --tail=100 vittics-builder
 ```
 
 Database migrations are additive, but rollback still requires a compatible image
@@ -88,7 +88,7 @@ trusted proxy uses a private CA, pass a trusted PEM bundle as a BuildKit secret:
 
 ```sh
 docker build --build-arg HTTP_PROXY --build-arg HTTPS_PROXY --build-arg NO_PROXY \
-  --secret id=build_ca,src=/path/to/trusted-ca-bundle.pem -t orgforge:local .
+  --secret id=build_ca,src=/path/to/trusted-ca-bundle.pem -t vittics-builder:local .
 ```
 
 The optional secret is used only for pip's build-time TLS verification. It is not

@@ -4,8 +4,8 @@ from datetime import datetime
 
 import pytest
 
-from orgforge.engines import BUILTIN_ENGINES, EngineUnavailable
-from orgforge.failover import limit_key, reset_after
+from vittics_builder.engines import BUILTIN_ENGINES, EngineUnavailable
+from vittics_builder.failover import limit_key, reset_after
 from test_engines import cli, on_cli  # noqa: F401  (fixture and helper)
 
 LIMITED = ("import json, os, sys\nsys.stdin.read()\nopen(os.environ['LIMITED_LOG'], 'a').write('called\\n')\n"

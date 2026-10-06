@@ -1,8 +1,8 @@
 import pytest
 
-from orgforge.db import now
-from orgforge.engines import actions_to_calls
-from orgforge.learning import parse_strategy
+from vittics_builder.db import now
+from vittics_builder.engines import actions_to_calls
+from vittics_builder.learning import parse_strategy
 
 
 def decide_next(co, role, decision="approved", feedback=""):
@@ -115,7 +115,7 @@ def test_accepted_release_confirms_approvals_once_per_reviewer(co):
 
 
 def test_failed_release_checks_are_a_mild_shared_miss(make_company):
-    from orgforge.llm import MockProvider
+    from vittics_builder.llm import MockProvider
     co = make_company()
     co.s.max_rework = 0                                   # the failure goes straight to release checks
     co.runtime.provider = MockProvider(fail_audits_once={"compliance_officer"})

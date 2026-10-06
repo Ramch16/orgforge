@@ -4,12 +4,12 @@ import zipfile
 import pytest
 from fastapi.testclient import TestClient
 
-from orgforge.cli import main
-from orgforge.costs import price, spent, summary
-from orgforge.feedback import FeedbackError
-from orgforge.review import read_file, review
-from orgforge.server import create_app
-from orgforge.tools import ToolError
+from vittics_builder.cli import main
+from vittics_builder.costs import price, spent, summary
+from vittics_builder.feedback import FeedbackError
+from vittics_builder.review import read_file, review
+from vittics_builder.server import create_app
+from vittics_builder.tools import ToolError
 from test_tickets import built
 
 
@@ -96,7 +96,7 @@ def test_report_falls_back_to_facts_without_a_product_manager(co):
     co.reports.request(p["id"], "Niki")
     co.pipeline.write_reports(p["id"])
     r = co.reports.latest(p["id"])[0]
-    assert r["author"] == "OrgForge" and r["body"].startswith("Project: Greeter")
+    assert r["author"] == "Vittics Builder" and r["body"].startswith("Project: Greeter")
 
 
 # ---- product review -----------------------------------------------------------

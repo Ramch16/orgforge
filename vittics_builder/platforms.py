@@ -27,8 +27,8 @@ class UnsafeCommand(RuntimeError):
 
 def git_bash() -> str | None:
     """Git for Windows' bash.exe, if installed (never WSL's)."""
-    if os.environ.get("ORGFORGE_BASH"):
-        return os.environ["ORGFORGE_BASH"]
+    if os.environ.get("VITTICS_BASH"):
+        return os.environ["VITTICS_BASH"]
     git = shutil.which("git")
     if not git:
         return None

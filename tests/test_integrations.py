@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from orgforge.browser import permitted
-from orgforge.integrations import Integrations
-from orgforge.tools import ToolError, Workspace
+from vittics_builder.browser import permitted
+from vittics_builder.integrations import Integrations
+from vittics_builder.tools import ToolError, Workspace
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ def test_real_browser_login_click_assert_and_screenshot(co, tmp_path, local_app)
         {'action': 'fill', 'selector': '#name', 'value': 'Customer'},
         {'action': 'click', 'selector': '#login'},
         {'action': 'assert_text', 'selector': '#greeting', 'value': 'Welcome Customer'},
-        {'action': 'screenshot', 'path': '.orgforge/browser/journey.png'}]}, ws))
+        {'action': 'screenshot', 'path': '.vittics/browser/journey.png'}]}, ws))
     assert result['steps_passed'] == 4 and result['title'] == 'Customer journey'
     assert 'Welcome Customer' in result['text']
     assert (tmp_path / result['screenshots'][0]).read_bytes().startswith(b'\x89PNG')
@@ -126,7 +126,7 @@ mcp.run(transport="stdio")
 
 
 def test_agent_runtime_offers_only_permitted_integrations(co):
-    from orgforge.llm import LLMResponse
+    from vittics_builder.llm import LLMResponse
     class Recorder:
         def __init__(self):
             self.names = []
@@ -151,7 +151,7 @@ def test_dashboard_company_knowledge_in_real_browser(co, tmp_path):
     import time
     import uvicorn
     from playwright.sync_api import sync_playwright, expect
-    from orgforge.server import create_app
+    from vittics_builder.server import create_app
     from test_parallel import plan_approved
     p = plan_approved(co)
     co.pipeline._claim_batch(p['id'])
@@ -196,7 +196,7 @@ def test_dashboard_company_knowledge_in_real_browser(co, tmp_path):
 
 @pytest.mark.skipif(not browser_available(), reason='Optional Playwright/Chromium not installed')
 def test_api_agent_executes_browser_tool_and_reads_functional_result(co, local_app):
-    from orgforge.llm import LLMResponse, ToolCall
+    from vittics_builder.llm import LLMResponse, ToolCall
     class BrowserAgent:
         def __init__(self):
             self.calls = 0

@@ -10,7 +10,7 @@ A skill is a Markdown file with a short header:
     ---
     The guideline text...
 
-Built-in skills ship with OrgForge and are switched on in org.yaml (`skills:`). Files in the
+Built-in skills ship with Vittics Builder and are switched on in org.yaml (`skills:`). Files in the
 company's `skills/` folder are always used, unless their header says `enabled: false`.
 """
 from __future__ import annotations

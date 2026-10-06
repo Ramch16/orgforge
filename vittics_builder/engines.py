@@ -2,10 +2,10 @@
 
 An agent whose model is "cli:<engine>" or "cli:<engine>/<model>" works through that CLI in the
 project workspace, on the CLI's own login (for Claude Code, your Claude subscription). The CLI
-reads, edits and runs commands with its own tools. OrgForge actions (plans, reviews, tickets,
-assessments) come back in a fenced ```orgforge JSON block at the end of the reply.
+reads, edits and runs commands with its own tools. Vittics Builder actions (plans, reviews, tickets,
+assessments) come back in a fenced ```vittics-builder JSON block at the end of the reply.
 
-CLI engines run on this machine under the CLI's own permission rules, not in OrgForge's Docker
+CLI engines run on this machine under the CLI's own permission rules, not in Vittics Builder's Docker
 sandbox. Read-only roles get read-only tools.
 """
 from __future__ import annotations
@@ -18,7 +18,7 @@ import tempfile
 
 # Verified against Claude Code 2.1 (`claude --help`): -p reads the prompt from stdin.
 BUILTIN_ENGINES: dict[str, dict] = {
-    # Documented, not yet run against OrgForge: each one's non-interactive flags are from its official docs (Oct 2026).
+    # Documented, not yet run against Vittics Builder: each one's non-interactive flags are from its official docs (Oct 2026).
     # Their permissions are coarser than Claude Code's: "read" roles get the CLI's read-only or ask-first mode,
     # builders get its edit mode. The role and rules go at the top of the prompt (no system-prompt flag).
     # Verified against Codex CLI 0.160.1 (bundled with the ChatGPT app): --full-auto is gone; exec runs with
@@ -52,13 +52,13 @@ BUILTIN_ENGINES: dict[str, dict] = {
         "prompt": "stdin",
         "output": "claude-json",
         "subscription": True,       # drop ANTHROPIC_API_KEY so the CLI bills its own login, not the API key
-        "verified": True,           # run against OrgForge's tests and a real Claude Code 2.1 install
+        "verified": True,           # run against Vittics Builder's tests and a real Claude Code 2.1 install
     },
 }
 
 ACTIONS = {
     'submit_journey': ('journey','{"steps": [{"action": "click|fill|assert_text|screenshot|goto", "selector": "...", "value": "..."}], "rationale": "customer goal"}'),
-    # orgforge tool -> (key in the JSON block, how to describe its value)
+    # vittics-builder tool -> (key in the JSON block, how to describe its value)
     'submit_evaluation': ('evaluation','{"scores": {"functionality": 0, "ux": 0, "security": 0, "cost": 0, "architecture": 0, "scalability": 0, "customer_value": 0, "maintainability": 0}, "findings": [{"title": "...", "body": "evidence", "severity": "error"}]}'),
     "submit_plan": ("plan", '[{"key": "short-id", "title": "...", "description": "what to build and how to tell it '
                             'is done", "role": "role id", "depends_on": ["other-key"]}]'),
@@ -77,7 +77,7 @@ ACTIONS = {
     "transfer_ticket": ("transfer", '{"ticket": "T-12 (omit for your current ticket)", "role": "role id", "reason": "..."}'),
     "remember": ("remember", '[{"text": "a lasting fact or decision", "scope": "project" | "company"}]'),
 }
-BLOCK = re.compile(r"```orgforge\s*(\{.*?\})\s*```", re.S)
+BLOCK = re.compile(r"```(?:vittics-builder|orgforge)\s*(\{.*?\})\s*```", re.S)   # orgforge: the old name
 
 
 class EngineError(RuntimeError):
@@ -93,18 +93,18 @@ UNAVAILABLE = re.compile(r"session limit|usage limit|rate limit|limit reached|hi
 
 
 def protocol(names: list[str]) -> str:
-    """How the CLI agent reports OrgForge actions, limited to the ones this run allows."""
+    """How the CLI agent reports Vittics Builder actions, limited to the ones this run allows."""
     rows = [f'  "{ACTIONS[n][0]}": {ACTIONS[n][1]}' for n in names if n in ACTIONS]
     if not rows:
         return "Finish with a short plain summary of what you did."
     return ("When you are finished, reply with a short plain summary, then end with exactly one fenced block "
-            "tagged orgforge holding a JSON object with only the keys you use:\n```orgforge\n{\n"
+            "tagged vittics-builder holding a JSON object with only the keys you use:\n```vittics-builder\n{\n"
             + ",\n".join(rows) + "\n}\n```\nUse the block for these company actions; do your file and command work "
             "with your own tools in the working directory.")
 
 
 def parse_block(text: str) -> tuple[str, dict, str | None]:
-    """Split a reply into (summary text, actions, error). Uses the last orgforge block."""
+    """Split a reply into (summary text, actions, error). Uses the last vittics-builder block."""
     found = BLOCK.findall(text or "")
     if not found:
         return (text or "").strip(), {}, None
@@ -113,11 +113,11 @@ def parse_block(text: str) -> tuple[str, dict, str | None]:
         data = json.loads(found[-1])
         return clean, data if isinstance(data, dict) else {}, None if isinstance(data, dict) else "not an object"
     except ValueError as exc:
-        return clean, {}, f"the orgforge block is not valid JSON ({exc})"
+        return clean, {}, f"the vittics-builder block is not valid JSON ({exc})"
 
 
 def actions_to_calls(data: dict) -> list[tuple[str, dict]]:
-    """Turn a parsed block into (tool name, arguments) calls OrgForge already knows how to run."""
+    """Turn a parsed block into (tool name, arguments) calls Vittics Builder already knows how to run."""
     calls: list[tuple[str, dict]] = []
     if "plan" in data:
         calls.append(("submit_plan", {"tasks": data["plan"]}))
@@ -162,7 +162,7 @@ def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: s
     env = dict(os.environ)
     if engine.get("subscription"):
         env.pop("ANTHROPIC_API_KEY", None)
-    workdir = cwd or tempfile.mkdtemp(prefix="orgforge-chat-")
+    workdir = cwd or tempfile.mkdtemp(prefix="vittics-chat-")
     from .platforms import UnsafeCommand, safe_argv
     try:
         argv = safe_argv(argv)

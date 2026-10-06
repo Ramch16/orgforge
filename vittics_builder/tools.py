@@ -38,7 +38,7 @@ DENIED = [
 ]
 
 
-GITIGNORE = [".orgforge/browser/", "__pycache__/", "*.py[cod]", ".pytest_cache/", ".mypy_cache/", ".ruff_cache/", ".coverage", "htmlcov/",
+GITIGNORE = [".vittics/browser/", "__pycache__/", "*.py[cod]", ".pytest_cache/", ".mypy_cache/", ".ruff_cache/", ".coverage", "htmlcov/",
              ".venv/", "venv/", "node_modules/", "dist/", "*.egg-info/", ".next/", ".cache/", "*.log", ".DS_Store"]
 
 
@@ -290,7 +290,7 @@ class Workspace:
     def git(self, *args: str) -> str:
         with _GIT_LOCK:
             proc = subprocess.run(
-                ["git", "-c", "user.name=OrgForge", "-c", "user.email=orgforge@localhost", *args],
+                ["git", "-c", "user.name=Vittics Builder", "-c", "user.email=vittics@localhost", *args],
                 cwd=self.root, capture_output=True, text=True, encoding="utf-8", errors="replace",
             )
         if proc.returncode:
@@ -321,7 +321,7 @@ class Workspace:
         missing = [p for p in GITIGNORE if p not in have]
         if not missing:
             return False
-        target.write_text("\n".join(have + (["# Added by OrgForge"] if have else []) + missing) + "\n", encoding="utf-8")
+        target.write_text("\n".join(have + (["# Added by Vittics Builder"] if have else []) + missing) + "\n", encoding="utf-8")
         with _GIT_LOCK:
             tracked = self.git("ls-files", "-ci", "--exclude-standard").splitlines()
             if tracked:

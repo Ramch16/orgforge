@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "orgforge"
+name = "vittics-builder"
 version = "0.18.0"
 description = "An AI-staffed software company you run as CEO, with a human CTO: agents plan, build, review and ship software, and get replaced when they underperform."
 readme = "README.md"
@@ -23,13 +23,14 @@ browser = ["playwright>=1.48,<2"]
 desktop = ["pyinstaller>=6.10"]
 
 [project.scripts]
-orgforge = "orgforge.cli:main"
+vittics-builder = "vittics_builder.cli:main"
+orgforge = "vittics_builder.cli:legacy_main"      # the old name, kept for one release
 
 [tool.setuptools.packages.find]
-include = ["orgforge*"]
+include = ["vittics_builder*"]
 
 [tool.setuptools.package-data]
-orgforge = ["default_org.yaml", "static/*", "skills/*.md"]
+vittics_builder = ["default_org.yaml", "static/*", "skills/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

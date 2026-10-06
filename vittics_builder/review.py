@@ -121,4 +121,4 @@ def patch_file(co, pid: int) -> tuple[str, str]:
     if p["kind"] != "task" or not p["base_branch"]:
         raise ToolError("Patches are for tasks on an existing repository; download the release for a product.")
     text = co.pipeline.workspace(p).git("format-patch", "--stdout", f"{p['base_branch']}..HEAD")
-    return f"orgforge-task-{pid}.patch", text + ("\n" if text else "")
+    return f"vittics-task-{pid}.patch", text + ("\n" if text else "")

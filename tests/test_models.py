@@ -6,11 +6,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from orgforge.company import Company
-from orgforge.costs import price
-from orgforge.engines import BUILTIN_ENGINES
-from orgforge.llm import MockProvider, OpenAICompatProvider
-from orgforge.org import OrgError
+from vittics_builder.company import Company
+from vittics_builder.costs import price
+from vittics_builder.engines import BUILTIN_ENGINES
+from vittics_builder.llm import MockProvider, OpenAICompatProvider
+from vittics_builder.org import OrgError
 
 
 @pytest.fixture

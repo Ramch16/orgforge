@@ -1,10 +1,10 @@
-"""Desktop mode: the backend the OrgForge app starts.
+"""Desktop mode: the backend the Vittics Builder app starts.
 
-The company lives in ~/OrgForge (or ORGFORGE_HOME) and is created on first launch. The server
+The company lives in ~/VitticsBuilder (or VITTICS_HOME; an existing ~/OrgForge is kept) and is created on first launch. The server
 listens on 127.0.0.1 only, on a free port, with CEO/CTO tokens kept in a private file in the company
 so they survive restarts. Once it is up, one JSON line on stdout tells the app shell where to go:
 
-    {"url": "http://127.0.0.1:53121/#token=...", "port": 53121, "home": "/Users/me/OrgForge"}
+    {"url": "http://127.0.0.1:53121/#token=...", "port": 53121, "home": "/Users/me/VitticsBuilder"}
 
 Apps opened from Finder or the Start menu do not get the PATH a terminal has, so Homebrew tools and
 AI CLIs would look missing; on macOS and Linux the login shell's PATH is loaded first.
@@ -44,7 +44,7 @@ def login_path() -> str:
 
 
 def desktop_tokens(root: Path) -> dict[str, str]:
-    path = root / ".orgforge" / "desktop.json"
+    path = root / ".vittics" / "desktop.json"
     if path.exists():
         data = json.loads(path.read_text(encoding="utf-8"))
         if data.get("ceo") and data.get("cto") and data["ceo"] != data["cto"]:
@@ -73,7 +73,7 @@ def exit_with_parent() -> None:
         except (OSError, ValueError):
             pass
         os._exit(0)
-    threading.Thread(target=watch, name="orgforge-parent-watch", daemon=True).start()
+    threading.Thread(target=watch, name="vittics-parent-watch", daemon=True).start()
 
 
 def main(home: str | None = None, port: int | None = None) -> None:
@@ -83,21 +83,24 @@ def main(home: str | None = None, port: int | None = None) -> None:
     from .server import create_app
 
     os.environ["PATH"] = login_path()
-    root = Path(home or os.environ.get("ORGFORGE_HOME") or Path.home() / "OrgForge").expanduser()
-    co = Company(root, create=not (root / ".orgforge" / "company.db").exists())
+    from .legacy import adopt_env, desktop_home, migrate_company
+    adopt_env()
+    root = Path(home or os.environ.get("VITTICS_HOME") or desktop_home()).expanduser()
+    migrate_company(root)
+    co = Company(root, create=not (root / ".vittics" / "company.db").exists())
     tokens = desktop_tokens(root)
     port = port or free_port()
     server = uvicorn.Server(uvicorn.Config(create_app(co, tokens, desktop=True), host="127.0.0.1", port=port,
                                            log_level="warning"))
-    thread = threading.Thread(target=server.run, name="orgforge-server")
+    thread = threading.Thread(target=server.run, name="vittics-builder-server")
     thread.start()
     while not server.started and thread.is_alive():
         time.sleep(0.05)
     if not server.started:
-        raise SystemExit("The OrgForge server did not start.")
+        raise SystemExit("The Vittics Builder server did not start.")
     print(json.dumps({"url": f"http://127.0.0.1:{port}/#token={tokens['ceo']}", "port": port, "home": str(root)}),
           flush=True)
-    if os.environ.get("ORGFORGE_EXIT_WITH_PARENT") == "1":      # set by the desktop app
+    if os.environ.get("VITTICS_EXIT_WITH_PARENT") == "1":      # set by the desktop app
         exit_with_parent()
     try:
         thread.join()

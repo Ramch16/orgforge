@@ -1,6 +1,6 @@
-# Your company. `orgforge init` copies this file to ./org.yaml and seeds the
+# Your company. `vittics-builder init` copies this file to ./org.yaml and seeds the
 # database from it. After that, the database is the source of truth for
-# departments, roles and agents (change them with `orgforge org ...` or the
+# departments, roles and agents (change them with `vittics-builder org ...` or the
 # dashboard); the settings sections below are re-read on every start.
 
 company: Your Software Company
@@ -26,7 +26,7 @@ llm:
   #   my-model: { input: 2.00, output: 10.00 }
 
 # Coding CLIs agents can work through on their own logins (flat-fee subscriptions) instead of the API.
-# Give an agent the model "cli:<engine>" or "cli:<engine>/<model>", e.g. `orgforge org set-model --all cli:claude-code`.
+# Give an agent the model "cli:<engine>" or "cli:<engine>/<model>", e.g. `vittics-builder org set-model --all cli:claude-code`.
 # claude-code is built in. Add others below; check each against your CLI's --help, since flags change.
 # {system} is the agent's role and rules, {prompt} its assignment, {model} the part after the slash.
 # Model routers you run locally work as endpoints too: "omniroute:auto" (OmniRoute, port 20128) and
@@ -59,9 +59,9 @@ failover:
   enabled: false
   models: []              # e.g. ['cli:codex', 'cli:gemini', 'claude-sonnet-5-5', 'ollama:qwen2.5-coder']
   cooldown_minutes: 60
-# Machine readiness (orgforge doctor): installing missing tools always asks first.
+# Machine readiness (vittics-builder doctor): installing missing tools always asks first.
 machine:
-  installs: true            # false: only report, never install from OrgForge
+  installs: true            # false: only report, never install from Vittics Builder
 # Deploy signed-off releases. Without an entry for a project, it stops at "Ready for deployment".
 # Commands run in the product workspace at the release, with {version}, {previous}, {commit} and
 # {environment} filled in. Only you set these: agents cannot change what runs in production.
@@ -91,7 +91,7 @@ workers:
   enabled: false
   poll_seconds: 5
 observability:
-  key_env: ORGFORGE_OBSERVABILITY_TOKEN
+  key_env: VITTICS_OBSERVABILITY_TOKEN
   projects: []
 security:
   osv_enabled: false
@@ -122,7 +122,7 @@ pipeline:
 
 # Guidelines every agent of the listed kinds works by, on every engine. Built in: karpathy-guidelines
 # (think before coding, simplicity first, surgical changes, goal-driven execution). Add your own as
-# Markdown files in the company's skills/ folder, or `orgforge skills add <file-or-url>`.
+# Markdown files in the company's skills/ folder, or `vittics-builder skills add <file-or-url>`.
 skills: [karpathy-guidelines]
 
 budgets:

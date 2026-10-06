@@ -1,6 +1,6 @@
-from orgforge.company import Company
-from orgforge.llm import LLMResponse, MockProvider
-from orgforge.org import NAME_POOL
+from vittics_builder.company import Company
+from vittics_builder.llm import LLMResponse, MockProvider
+from vittics_builder.org import NAME_POOL
 
 
 class Replies(MockProvider):

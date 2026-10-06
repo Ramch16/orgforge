@@ -1,6 +1,6 @@
 import pytest
 
-from orgforge.org import OrgError
+from vittics_builder.org import OrgError
 
 
 def test_seeded_from_org_file(co):
@@ -65,7 +65,7 @@ def test_sync_adds_what_is_missing_and_leaves_the_rest(co):
 
 def test_old_databases_accept_new_role_kinds(tmp_path):
     import sqlite3
-    from orgforge.db import DB
+    from vittics_builder.db import DB
     path = tmp_path / "old.db"
     old = sqlite3.connect(path)
     old.executescript("""

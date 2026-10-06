@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   type TEXT NOT NULL DEFAULT 'task',
   priority TEXT NOT NULL DEFAULT 'medium',
   origin TEXT NOT NULL DEFAULT 'plan',
-  reporter TEXT NOT NULL DEFAULT 'OrgForge',
+  reporter TEXT NOT NULL DEFAULT 'Vittics Builder',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -355,7 +355,7 @@ class DB:
             self.conn.execute("INSERT INTO memory_search(memory_search) VALUES ('rebuild')")
         # 0.4 turned tasks into tickets.
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(tasks)")}
-        for column, default in (("type", "task"), ("priority", "medium"), ("origin", "plan"), ("reporter", "OrgForge")):
+        for column, default in (("type", "task"), ("priority", "medium"), ("origin", "plan"), ("reporter", "Vittics Builder")):
             if column not in have:
                 self.conn.execute(f"ALTER TABLE tasks ADD COLUMN {column} TEXT NOT NULL DEFAULT '{default}'")
         # 0.7 added the idea stage: what a product is for, and who proposed it.

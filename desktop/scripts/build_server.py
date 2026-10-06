@@ -1,8 +1,8 @@
-"""Bundle the OrgForge backend into one executable for the desktop app (PyInstaller).
+"""Bundle the Vittics Builder backend into one executable for the desktop app (PyInstaller).
 
-Writes src-tauri/binaries/orgforge-server-<target triple>[.exe], the name Tauri looks for.
-Run from the desktop folder with the Python that has OrgForge and PyInstaller installed
-(npm run server uses `python3`; set ORGFORGE_PYTHON to use another, e.g. the repo's .venv).
+Writes src-tauri/binaries/vittics-builder-server-<target triple>[.exe], the name Tauri looks for.
+Run from the desktop folder with the Python that has Vittics Builder and PyInstaller installed
+(npm run server uses `python3`; set VITTICS_PYTHON to use another, e.g. the repo's .venv).
 """
 import os
 import platform
@@ -13,7 +13,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
 REPO = HERE.parent
-PACKAGE = REPO / "orgforge"
+PACKAGE = REPO / "vittics_builder"
 
 
 def target_triple() -> str:
@@ -22,18 +22,18 @@ def target_triple() -> str:
 
 
 def main() -> None:
-    python = os.environ.get("ORGFORGE_PYTHON") or sys.executable
-    if os.environ.get("ORGFORGE_PYTHON") is None and (REPO / ".venv").exists():
+    python = os.environ.get("VITTICS_PYTHON") or sys.executable
+    if os.environ.get("VITTICS_PYTHON") is None and (REPO / ".venv").exists():
         venv = REPO / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         python = str(venv) if venv.exists() else python
-    name = f"orgforge-server-{target_triple()}"
+    name = f"vittics-builder-server-{target_triple()}"
     sep = ";" if os.name == "nt" else ":"
-    data = [(PACKAGE / "static", "orgforge/static"), (PACKAGE / "default_org.yaml", "orgforge"),
-            (PACKAGE / "skills", "orgforge/skills")]
+    data = [(PACKAGE / "static", "vittics_builder/static"), (PACKAGE / "default_org.yaml", "vittics_builder"),
+            (PACKAGE / "skills", "vittics_builder/skills")]
     work = HERE / "build" / "pyinstaller"
     cmd = [python, "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile", "--name", name,
            "--distpath", str(HERE / "src-tauri" / "binaries"), "--workpath", str(work), "--specpath", str(work),
-           "--collect-submodules", "orgforge", "--collect-submodules", "uvicorn",
+           "--collect-submodules", "vittics_builder", "--collect-submodules", "uvicorn",
            "--exclude-module", "playwright", "--exclude-module", "tkinter"]
     for src, dest in data:
         if src.exists():

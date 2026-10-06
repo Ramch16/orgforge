@@ -4,10 +4,10 @@ import sqlite3
 import pytest
 from fastapi.testclient import TestClient
 
-from orgforge.cli import main
-from orgforge.db import DB
-from orgforge.server import create_app
-from orgforge.tickets import TicketError
+from vittics_builder.cli import main
+from vittics_builder.db import DB
+from vittics_builder.server import create_app
+from vittics_builder.tickets import TicketError
 from test_pipeline import decide_next
 from test_server import wait_for
 
@@ -148,16 +148,16 @@ def test_old_task_tables_gain_ticket_columns(tmp_path):
     conn.execute("INSERT INTO tasks (id, key, title, status) VALUES (1, 'core', 'Core', 'done')")
     conn.commit(); conn.close()
     row = DB(path).one("SELECT * FROM tasks")
-    assert (row["type"], row["priority"], row["origin"], row["reporter"]) == ("task", "medium", "plan", "OrgForge")
+    assert (row["type"], row["priority"], row["origin"], row["reporter"]) == ("task", "medium", "plan", "Vittics Builder")
 
 
 # ---- agents use the tracker ------------------------------------------------
 
 from types import SimpleNamespace
 
-from orgforge.company import Company
-from orgforge.llm import MockProvider
-from orgforge.tickets import AGENT_TOTAL_LIMIT, MAX_TRANSFERS
+from vittics_builder.company import Company
+from vittics_builder.llm import MockProvider
+from vittics_builder.tickets import AGENT_TOTAL_LIMIT, MAX_TRANSFERS
 
 
 class Scripted(MockProvider):

@@ -1,9 +1,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from orgforge.cli import main
-from orgforge.pipeline import PipelineError
-from orgforge.server import create_app
+from vittics_builder.cli import main
+from vittics_builder.pipeline import PipelineError
+from vittics_builder.server import create_app
 from test_server import wait_for
 
 

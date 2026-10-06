@@ -1,6 +1,6 @@
 """Worker machines (nodes): other computers that run agents' coding CLIs for this company.
 
-The controller (this OrgForge) never connects to a worker. A worker joins with a one-time pairing
+The controller (this Vittics Builder) never connects to a worker. A worker joins with a one-time pairing
 code, then asks for jobs. Every request and every response is signed with the worker's own secret,
 with a timestamp and a single-use nonce, so neither side acts on a forged or replayed message.
 
@@ -274,7 +274,7 @@ class Nodes:
             raise NodeOffline(f"worker machine '{node['name']}' is offline")
         archive_path = None
         if ws is not None:
-            folder = self.s.root / ".orgforge" / "node-archives"
+            folder = self.s.root / ".vittics" / "node-archives"
             folder.mkdir(parents=True, exist_ok=True)
             archive_path = folder / f"{secrets.token_hex(8)}.tar.gz"
             archive_path.write_bytes(pack(ws.root))
@@ -308,7 +308,7 @@ class Nodes:
             applied = subprocess.run(["git", "apply", "--binary", "--whitespace=nowarn", "-"], input=patch,
                                      cwd=ws.root, capture_output=True)
             if applied.returncode:
-                result["text"] = (result.get("text") or "") + ("\n\n(OrgForge could not apply the changes from "
+                result["text"] = (result.get("text") or "") + ("\n\n(Vittics Builder could not apply the changes from "
                                   f"worker machine '{node['name']}': {applied.stderr.decode(errors='replace')[:300]})")
                 result["is_error"] = True
         return {"text": str(result.get("text") or ""), "is_error": bool(result.get("is_error")), "cost": None,

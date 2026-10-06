@@ -3,13 +3,13 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from orgforge.chat import ChatError
-from orgforge.cli import main
-from orgforge.company import Company
-from orgforge.db import now
-from orgforge.llm import MockProvider
-from orgforge.server import create_app
-from orgforge.tickets import TicketError
+from vittics_builder.chat import ChatError
+from vittics_builder.cli import main
+from vittics_builder.company import Company
+from vittics_builder.db import now
+from vittics_builder.llm import MockProvider
+from vittics_builder.server import create_app
+from vittics_builder.tickets import TicketError
 from test_tickets import built
 
 

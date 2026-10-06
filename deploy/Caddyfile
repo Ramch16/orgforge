@@ -1,3 +1,3 @@
-{$ORGFORGE_DOMAIN} {
-	reverse_proxy orgforge:4700
+{$VITTICS_DOMAIN} {
+	reverse_proxy vittics-builder:4700
 }

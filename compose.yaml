@@ -1,16 +1,16 @@
 services:
-  orgforge:
+  vittics-builder:
     build: .
     restart: unless-stopped
     init: true
     ports:
       - "127.0.0.1:4700:4700"
     environment:
-      ORGFORGE_CEO_TOKEN: ${ORGFORGE_CEO_TOKEN:?Set a secure CEO token}
-      ORGFORGE_CTO_TOKEN: ${ORGFORGE_CTO_TOKEN:?Set a distinct secure CTO token}
-      ORGFORGE_PROVIDER: ${ORGFORGE_PROVIDER:-mock}
+      VITTICS_CEO_TOKEN: ${VITTICS_CEO_TOKEN:?Set a secure CEO token}
+      VITTICS_CTO_TOKEN: ${VITTICS_CTO_TOKEN:?Set a distinct secure CTO token}
+      VITTICS_PROVIDER: ${VITTICS_PROVIDER:-mock}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
-      - company:/var/lib/orgforge
+      - company:/var/lib/vittics-builder
 volumes:
   company:

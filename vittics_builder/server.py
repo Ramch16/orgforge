@@ -151,7 +151,7 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
         if co.workers.service()['enabled']:co.workers.start()
         try:yield
         finally:co.workers.stop()
-    app = FastAPI(title="OrgForge", docs_url=None, redoc_url=None,lifespan=lifespan)
+    app = FastAPI(title="Vittics Builder", docs_url=None, redoc_url=None,lifespan=lifespan)
 
     def auth(x_token: str = Header(default="")) -> str:
         for role, token in tokens.items():
@@ -193,7 +193,7 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
     def manifest():
         from fastapi.responses import JSONResponse
         return JSONResponse({
-            "name": f"{co.s.company} · OrgForge", "short_name": co.s.company[:12] or "OrgForge",
+            "name": f"{co.s.company} · Vittics Builder", "short_name": co.s.company[:12] or "Vittics Builder",
             "description": "Run your AI-staffed software company.", "start_url": "/#/home", "scope": "/",
             "display": "standalone", "background_color": "#edf0f3", "theme_color": "#2348c9",
             "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"},
@@ -253,7 +253,7 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
     @app.post('/api/telemetry/events')
     def ingest_event(data: ObservationRequest,x_observation_token: str = Header(default='')):
         config=co.s.raw.get('observability') or {}
-        expected=os.environ.get(config.get('key_env','ORGFORGE_OBSERVABILITY_TOKEN'),'')
+        expected=os.environ.get(config.get('key_env','VITTICS_OBSERVABILITY_TOKEN'),'')
         if len(expected)<32 or not x_observation_token or not secrets.compare_digest(expected,x_observation_token):
             raise HTTPException(403,'Observation credential is missing or invalid.')
         if data.project_id not in (config.get('projects') or []):raise HTTPException(403,'Observation project is outside the producer scope.')
@@ -528,7 +528,7 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
     @app.get("/api/projects/{pid}/download")
     def download(pid: int, role: str = Depends(auth)):
         from .delivery import export_product
-        folder = Path(tempfile.mkdtemp(prefix="orgforge-export-"))
+        folder = Path(tempfile.mkdtemp(prefix="vittics-export-"))
         project = guard(lambda: co.pipeline.project(pid))
         name = f"{project['name'].lower().replace(' ', '-')}-v{project['version']}.zip"
         zipped = guard(lambda: export_product(co.pipeline, pid, folder / name))
@@ -654,7 +654,7 @@ def serve(co: Company, host: str, port: int, open_app: bool = False) -> None:
 
     tokens = {}
     for role in ("ceo", "cto"):
-        env = f"ORGFORGE_{role.upper()}_TOKEN"
+        env = f"VITTICS_{role.upper()}_TOKEN"
         tokens[role] = os.environ.get(env) or secrets.token_urlsafe(18)
         if not os.environ.get(env):
             print(f"{role.upper()} token (set {env} to keep it fixed): {tokens[role]}")

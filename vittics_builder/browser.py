@@ -47,7 +47,7 @@ def journey(ws, config, args):
         if step['action'] == 'goto' and not permitted(step.get('value', ''), config):
             raise ToolError('Browser navigation is outside the configured allowed origins.')
         if step['action'] == 'screenshot':
-            target = ws.resolve(step.get('path') or '.orgforge/browser/screenshot.png')
+            target = ws.resolve(step.get('path') or '.vittics/browser/screenshot.png')
             if target.suffix.lower() != '.png':
                 raise ToolError('Browser screenshots must be PNG files inside the workspace.')
     try:
@@ -58,7 +58,7 @@ def journey(ws, config, args):
     deadline = time.monotonic() + timeout
     try:
         with sync_playwright() as playwright:
-            executable = config.get('executable_path') or os.environ.get('ORGFORGE_BROWSER_EXECUTABLE')
+            executable = config.get('executable_path') or os.environ.get('VITTICS_BROWSER_EXECUTABLE')
             if not executable and not Path(playwright.chromium.executable_path).exists():
                 executable = shutil.which('chromium') or shutil.which('chromium-browser')
             browser = playwright.chromium.launch(headless=True, executable_path=executable, timeout=timeout * 1000,
@@ -91,7 +91,7 @@ def journey(ws, config, args):
                         from playwright.sync_api import expect
                         expect(page.locator(step.get('selector', 'body'))).to_contain_text(step['value'], timeout=remaining)
                     else:
-                        target = ws.resolve(step.get('path') or '.orgforge/browser/screenshot.png')
+                        target = ws.resolve(step.get('path') or '.vittics/browser/screenshot.png')
                         target.parent.mkdir(parents=True, exist_ok=True)
                         page.screenshot(path=str(target), full_page=True, timeout=remaining)
                         screenshots.append(target.relative_to(ws.root).as_posix())

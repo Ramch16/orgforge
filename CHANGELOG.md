@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.19.0 (in progress)
+- **OrgForge is now Vittics Builder.** The command is `vittics-builder`, the Python package
+  `vittics_builder`, settings are `VITTICS_*`, a company's data folder is `.vittics/`, the desktop app
+  is *Vittics Builder* (`~/VitticsBuilder`), and the repository is Ramch16/vittics-builder.
+- Carried over for one release: `orgforge` still runs (with a note); `ORGFORGE_*` variables still
+  work; a company's `.orgforge/` folder is renamed to `.vittics/` when first opened; a paired worker's
+  `~/.orgforge/worker.json` moves to `~/.vittics/`; the desktop app keeps an existing `~/OrgForge`;
+  CLI agents may still answer with an `orgforge` block. Hosted servers now keep data in
+  `/var/lib/vittics-builder` (same `company` volume).
+- A company that was moved (or whose hosted data path changed) finds its projects' workspaces in its
+  own `workspaces/` folder and updates the saved paths.
+
 ## 0.18.0 — 2026-10-06
 - **Windows.** The tests now run on Windows (and macOS) in CI, and pass. Commands (product checks,
   deploy and health commands, agents' commands) run in Git Bash from Git for Windows, never WSL's

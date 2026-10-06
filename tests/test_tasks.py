@@ -3,10 +3,10 @@ import subprocess
 import pytest
 from fastapi.testclient import TestClient
 
-from orgforge.pipeline import PipelineError
-from orgforge.review import changes, patch_file, ticket_diff
-from orgforge.server import create_app
-from orgforge.sources import ISSUE, SourceError, repo_url
+from vittics_builder.pipeline import PipelineError
+from vittics_builder.review import changes, patch_file, ticket_diff
+from vittics_builder.server import create_app
+from vittics_builder.sources import ISSUE, SourceError, repo_url
 
 
 @pytest.fixture
@@ -27,11 +27,11 @@ def repo(tmp_path):
 def test_task_on_an_existing_repo(co, repo):
     p = co.pipeline.create_task("Fix empty names", "greet('') should say Hi there.", "Lucky", repo=str(repo),
                                 checks=["python -c 'import app'"])
-    assert (p["kind"], p["stage"], p["branch"], p["base_branch"]) == ("task", "build", "orgforge/task-1", "main")
+    assert (p["kind"], p["stage"], p["branch"], p["base_branch"]) == ("task", "build", "vittics/task-1", "main")
     assert co.pipeline.advance(p["id"])["stage"] == "release_approval"
     [review] = co.pipeline.inbox("cto")
     assert review["kind"] == "task_review" and "PASS  python -c 'import app'" in review["summary"]
-    assert "orgforge/task-1 (from main)" in review["summary"]
+    assert "vittics/task-1 (from main)" in review["summary"]
     co.pipeline.decide(review["id"], "cto", "approved")
     assert co.pipeline.project(p["id"])["stage"] == "done"
     ws = p["workspace"]
@@ -39,7 +39,7 @@ def test_task_on_an_existing_repo(co, repo):
     assert "dist/bundle.js" in files and ".gitignore" not in files            # their repo's files are untouched
     assert subprocess.run(["git", "log", "--oneline", "main"], cwd=ws, capture_output=True, text=True).stdout.count("\n") == 1
     name, text = patch_file(co, p["id"])
-    assert name == "orgforge-task-1.patch" and text.startswith("From ") and "Subject: [PATCH" in text
+    assert name == "vittics-task-1.patch" and text.startswith("From ") and "Subject: [PATCH" in text
     assert "+def task():" in changes(co, p["id"])["diff"]
     assert "+def task():" in ticket_diff(co, 1)["diff"]
 
@@ -65,7 +65,7 @@ def test_task_without_a_repo_and_bad_inputs(co):
 
 
 def test_source_parsing(tmp_path):
-    assert repo_url("Ramch16/orgforge") == "https://github.com/Ramch16/orgforge.git"
+    assert repo_url("Ramch16/vittics-builder") == "https://github.com/Ramch16/vittics-builder.git"
     assert repo_url("https://gitlab.com/a/b.git") == "https://gitlab.com/a/b.git"
     (tmp_path / "plain").mkdir()
     with pytest.raises(SourceError, match="not a git repository"):

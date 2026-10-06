@@ -4,7 +4,7 @@ name: desktop
 on:
   push:
     branches: ["v[0-9]*"]
-    paths: ["desktop/**", "orgforge/**", "pyproject.toml", ".github/workflows/desktop.yml"]
+    paths: ["desktop/**", "vittics_builder/**", "pyproject.toml", ".github/workflows/desktop.yml"]
   workflow_dispatch:
 
 jobs:
@@ -16,11 +16,11 @@ jobs:
         include:
           - os: windows-latest
             bundles: nsis
-            artifact: OrgForge-windows-installer
+            artifact: Vittics Builder-windows-installer
             files: desktop/src-tauri/target/release/bundle/nsis/*.exe
           - os: macos-latest
             bundles: app,dmg
-            artifact: OrgForge-macos-dmg
+            artifact: Vittics Builder-macos-dmg
             files: desktop/src-tauri/target/release/bundle/dmg/*.dmg
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +32,7 @@ jobs:
           node-version: "22"
       - name: Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
-      - name: Install OrgForge and PyInstaller
+      - name: Install Vittics Builder and PyInstaller
         run: pip install -e ".[desktop]"
       - name: Bundle the backend
         run: python desktop/scripts/build_server.py

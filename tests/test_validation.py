@@ -3,10 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from orgforge.agent import RunResult
-from orgforge.pipeline import PipelineError
-from orgforge.tools import Workspace
-from orgforge.validation import validate_plan, verify_product
+from vittics_builder.agent import RunResult
+from vittics_builder.pipeline import PipelineError
+from vittics_builder.tools import Workspace
+from vittics_builder.validation import validate_plan, verify_product
 from test_pipeline import decide_next
 
 
@@ -125,7 +125,7 @@ def test_missing_audit_verdict_blocks_release(co, monkeypatch):
 
 
 def test_export_only_signed_off_product(co, tmp_path):
-    from orgforge.delivery import export_product
+    from vittics_builder.delivery import export_product
     import zipfile
     p = start_build(co)
     with pytest.raises(PipelineError):
