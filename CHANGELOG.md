@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.14.0 (in progress)
+## 0.14.0 — 2026-10-06
 - **The learning loop runs itself.** Learning and routing are on by default (no change without
   evidence or rules). Every review verdict is settled by what happened next (the CTO's call on an
   escalation, failing release checks, an accepted release) and scores reviewers and QA: per ticket
