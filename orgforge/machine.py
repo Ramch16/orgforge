@@ -161,8 +161,8 @@ class Machine:
             if tool in CATALOG and why not in need.setdefault(tool, []):
                 need[tool].append(why)
         if pid is None:
-            for tool in CORE:
-                add(tool, "OrgForge itself")
+            add("git", "OrgForge itself (every project is a Git repository)")
+            add("python", "the team's Python checks and scripts")
             if self.s.sandbox_mode == "docker":
                 add("docker", "sandbox.mode is docker")
             models = {a["model"] for a in self.db.all("SELECT model FROM agents WHERE status!='fired'")}

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.17.0 (in progress)
+- **Desktop app (macOS).** A Tauri app (`desktop/`) that starts a bundled OrgForge backend
+  (PyInstaller) and shows the dashboard: company in `~/OrgForge` created on first launch, automatic
+  sign-in, a CEO/CTO switch, and a first-run welcome (check this computer, then submit an idea).
+  The backend listens on 127.0.0.1 only, loads the login shell's PATH so Homebrew tools and AI CLIs
+  are found when opened from Finder, and exits when the app quits, even if the app is killed. The
+  dashboard gets no Tauri APIs. Builds `OrgForge.app` and a `.dmg`; not signed yet.
+  New: `orgforge desktop`, the `desktop` extra.
+
 ## 0.16.0 (in progress)
 - **Worker machines.** Other computers can run agents' coding CLIs for the company: pair with a
   one-time code (`orgforge machines pair`, `orgforge worker join`), assign CLI agents to them, and

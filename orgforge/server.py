@@ -145,7 +145,7 @@ class InstallRequest(BaseModel):
     sha256: str
 
 
-def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
+def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app):
         if co.workers.service()['enabled']:co.workers.start()
@@ -319,6 +319,7 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
             "next_steps": NEXT_STEP,
             "departments": co.org.chart(include_fired=True),
             "version": __version__,
+            "desktop": desktop,
             "projects": co.pipeline.overview(),
             "approvals": co.pipeline.inbox(),
             "tickets": co.tickets.search(),
@@ -389,6 +390,14 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
         return node_reply(node, nonce, {"ok": True})
 
     # ---- worker machines, for the CEO and CTO ----
+    @app.post('/api/desktop/switch')
+    def desktop_switch(role: str = Depends(auth)):
+        """In the desktop app one person is both CEO and CTO on their own computer."""
+        if not desktop:
+            raise HTTPException(404, "Only in the desktop app.")
+        other = "cto" if role == "ceo" else "ceo"
+        return {"role": other, "name": co.s.human(other), "token": tokens[other]}
+
     @app.get('/api/machines')
     def machines(role: str = Depends(auth)):
         return co.nodes.list()

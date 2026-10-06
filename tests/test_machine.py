@@ -36,7 +36,7 @@ def test_commands_are_read_word_by_word():
 
 def test_company_needs_core_tools_and_the_engines_its_agents_use(co):
     need = co.machine.requirements()
-    assert set(need) == {"git", "python"} and need["git"] == ["OrgForge itself"]
+    assert set(need) == {"git", "python"} and need["git"] == ["OrgForge itself (every project is a Git repository)"]
     co.db.run("UPDATE agents SET model='cli:codex/gpt-6' WHERE name='Hari'")
     co.s.raw["failover"] = {"models": ["cli:gemini"]}
     co.s.sandbox_mode = "docker"

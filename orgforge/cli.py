@@ -151,6 +151,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--install", nargs="+", metavar="TOOL", help="Install these (e.g. node gemini), asking first")
     p.add_argument("--missing", action="store_true", help="Install everything needed that is missing, asking first")
     p.add_argument("--yes", action="store_true", help="Do not ask before each install")
+    p = sub.add_parser("desktop", help="Start the backend the OrgForge desktop app uses (company in ~/OrgForge)")
+    p.add_argument("--port", type=int, help="Default: a free port on 127.0.0.1")
     p = sub.add_parser("machines", help="Worker machines: other computers that run your agents' coding CLIs")
     p.add_argument("action", nargs="?", choices=["list", "pair", "assign", "unassign", "revoke"], default="list")
     p.add_argument("name", nargs="?", help="pair/revoke: machine name; assign/unassign: agent name")
@@ -223,6 +225,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _dispatch(args) -> int:
+    if args.cmd == "desktop":                  # creates the company itself on first launch
+        from .desktop import main as desktop_main
+        desktop_main(args.home, args.port)
+        return 0
     if args.cmd == "worker":                   # runs on the worker computer, which has no company of its own
         from . import worker_client as wc
         if args.action == "join":

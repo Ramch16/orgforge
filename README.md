@@ -432,6 +432,26 @@ orgforge doctor --install node gemini             # asks before each one (--yes 
 orgforge doctor --missing                         # everything missing that can be installed
 ```
 
+## The desktop app
+
+OrgForge also comes as a desktop app (Tauri). It starts its own bundled backend, keeps the company
+in `~/OrgForge`, signs you in, and lets you switch between CEO and CTO, since on your own computer
+you are both. The first screen walks you through checking the machine and submitting a first idea.
+The backend listens only on 127.0.0.1 and stops when the app quits.
+
+Build it (macOS today; needs Rust, Node.js and OrgForge's `.venv` with the `desktop` extra):
+
+```bash
+pip install -e '.[desktop]'                       # PyInstaller, in OrgForge's .venv
+cd desktop && npm install
+npm run build                                     # bundles the backend, then the app
+# -> desktop/src-tauri/target/release/bundle/macos/OrgForge.app and bundle/dmg/OrgForge_<version>.dmg
+```
+
+The app is not signed yet: macOS asks for confirmation on first open (Control-click the app, then
+Open). Signing and notarising need an Apple Developer ID; a Windows build needs a Windows machine.
+`orgforge desktop` runs the same backend from a terminal.
+
 ## Worker machines
 
 Lend another computer's coding CLIs to the company: a spare laptop, a desktop with more memory, a

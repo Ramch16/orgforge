@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OrgForge</title>
+<style>
+  :root { --bg: #f4f5f8; --text: #1b1f2a; --muted: #5d6475; --accent: #2f4fd8; --bad: #b42318; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #14161c; --text: #e8eaf0; --muted: #9aa1b2; --accent: #7d95ff; --bad: #ff8a80; } }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text);
+               font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  main { height: 100%; display: grid; place-items: center; text-align: center; padding: 0 16px; }
+  .logo { width: 56px; height: 56px; border-radius: 14px; background: var(--accent); color: #fff; display: grid;
+          place-items: center; font-weight: 700; font-size: 26px; margin: 0 auto 16px; }
+  .bar { width: 160px; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--muted) 25%, transparent);
+         margin: 18px auto 0; overflow: hidden; }
+  .bar i { display: block; width: 40%; height: 100%; background: var(--accent); animation: slide 1.2s ease-in-out infinite; }
+  @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+  #status { color: var(--muted); margin: 6px 0 0; }
+  #status.error { color: var(--bad); white-space: pre-wrap; max-width: 560px; }
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <div class="logo">O</div>
+    <div style="font-weight:600;font-size:18px">OrgForge</div>
+    <p id="status">Starting your company…</p>
+    <div class="bar" id="bar"><i></i></div>
+  </div>
+</main>
+</body>
+</html>
