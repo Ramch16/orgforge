@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.13.0 — 2026-10-06
 - Reviewed strategy trajectories, task-specific routing evidence and cost per successful run.
 - Persistent scheduled employees with leases, heartbeats, retries and dashboard lifecycle controls.
 - Immutable benchmark competitions with separate candidate artifacts and no automatic promotion.
