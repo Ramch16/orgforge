@@ -274,6 +274,29 @@ orgforge engines --test ollama:qwen2.5-coder
 orgforge org set-model Hari ollama:qwen2.5-coder
 ```
 
+**When an engine hits its usage limit.** By default the project pauses until you resume it. Turn
+on **failover** and the work moves to the next ready model in your list instead:
+
+```yaml
+failover:
+  enabled: true
+  models: ['cli:codex', 'claude-sonnet-5-5', 'ollama:qwen2.5-coder']   # tried in this order
+  cooldown_minutes: 60
+```
+
+The limited engine rests until the reset time it reports ("resets 10:10pm"), or for
+`cooldown_minutes`, and is used again after that. A CLI's limit covers its whole login, so
+`cli:claude-code/haiku` rests too. API rate limits and a local model server that is not running
+count as limits as well. The backup is told an earlier attempt stopped part-way, so it checks the
+workspace first. Every switch is logged and shown under **Company knowledge**, and the project
+only pauses when every option is resting. A backup on the API bills per token, within the
+project's budget. Independent reviews never fall back to the builder's own model.
+
+```bash
+orgforge engines                                  # failover order and resting engines
+orgforge engines --wake cli:claude-code           # try it again now (no value: wake all)
+```
+
 **Review depth** also sets cost: `pipeline.review_mode` is `standard` by default (a code reviewer
 and QA check each ticket), `thorough` (every reviewer role, including security, per ticket) or
 `light` (one reviewer). Release QA and the audits always run.

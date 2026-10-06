@@ -44,7 +44,14 @@ class AnthropicProvider:
         kwargs = dict(model=model, system=system, messages=messages, max_tokens=max_tokens)
         if tools:
             kwargs["tools"] = tools
-        resp = self.client.messages.create(**kwargs)
+        import anthropic
+        try:
+            resp = self.client.messages.create(**kwargs)
+        except anthropic.APIStatusError as exc:       # still limited after the client's own retries
+            if exc.status_code in (429, 529):
+                from .engines import EngineUnavailable
+                raise EngineUnavailable(f"Anthropic API rate limit or overload ({exc.status_code})") from exc
+            raise
         content, texts, calls = [], [], []
         for block in resp.content:
             if block.type == "text":
@@ -347,9 +354,14 @@ class OpenAICompatProvider:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 data = json.loads(resp.read())
         except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"{self.name} refused the request ({exc.code}): {exc.read().decode(errors='replace')[:300]}")
+            detail = f"{self.name} refused the request ({exc.code}): {exc.read().decode(errors='replace')[:300]}"
+            if exc.code in (429, 503):
+                from .engines import EngineUnavailable
+                raise EngineUnavailable(detail) from exc
+            raise RuntimeError(detail)
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"Could not reach {self.name} at {self.base_url}: is it running? ({exc.reason})")
+            from .engines import EngineUnavailable
+            raise EngineUnavailable(f"Could not reach {self.name} at {self.base_url}: is it running? ({exc.reason})")
         choice = (data.get("choices") or [{}])[0]
         msg = choice.get("message") or {}
         text = msg.get("content") or ""

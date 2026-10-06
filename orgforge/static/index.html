@@ -343,6 +343,7 @@
           <div id="brain-team"><p class="muted">Choose a project above to inspect its team and workload.</p></div></div>
         <div class="card"><h2>Model results</h2><p class="muted">Completed runs and work that passed review are counted separately. Costs are estimates.</p>
           <div id="brain-routing"></div></div>
+        <div class="card"><h2>Engine failover</h2><div id="brain-failover"></div></div>
       </section>
 
       <section class="view" data-view="costs" hidden>
@@ -519,6 +520,12 @@ function renderBrain() {
   const rows = state.routing || [];
   paint("brain-routing", rows.length ? `<div style="overflow:auto"><table><thead><tr><th>Model</th><th>Work</th><th>Runs</th><th>Passed review</th><th>Quality</th><th>Time per run</th><th>Cost per success</th></tr></thead><tbody>${rows.map(r =>
     `<tr><td>${esc(r.model)}</td><td>${esc(r.task_kind)}</td><td>${r.runs}</td><td>${r.evaluated ? `${r.successes} / ${r.evaluated}` : "Not evaluated"}</td><td>${r.quality == null ? "—" : r.quality.toFixed(0) + "/100"}</td><td>${r.latency.toFixed(1)}s</td><td>${r.cost_per_success == null ? "—" : usd(r.cost_per_success)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">Model evidence appears here as the team completes work.</p>`);
+  const fo = state.failover || {enabled: false, models: [], resting: []};
+  paint("brain-failover", (fo.enabled
+      ? `<p>On. When an engine hits its usage limit, work moves to: ${fo.models.length ? fo.models.map(esc).join(" → ") : "no backup models set"}.</p>`
+      : `<p class="muted">Off. Turn it on under <code>failover:</code> in org.yaml to keep working when an engine hits its usage limit.</p>`)
+    + (fo.resting.length ? fo.resting.map(r => `<div class="ev"><span class="grow"><b>${esc(r.engine)}</b> is resting until ${esc(r.until_local)}<br><span class="muted">${esc(r.reason)}</span></span></div>`).join("")
+      : `<p class="muted">No engine is resting.</p>`));
 }
 $("memory-search").onsubmit = e => {
   e.preventDefault();

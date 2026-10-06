@@ -12,6 +12,7 @@ from .db import DB
 from .llm import RoutingProvider, make_provider
 from .integrations import Integrations
 from .memory import Memory
+from .failover import Failover
 from .routing import ModelRouter
 from .operations_store import initialize
 from .learning import Learning
@@ -64,6 +65,8 @@ class Company:
         self.router = ModelRouter(self.db, self.s)
         self.router.learning = self.learning
         self.runtime.router = self.router
+        self.failover = Failover(self.db, self.s, self.router)
+        self.runtime.failover = self.failover
         self.runtime.integrations = Integrations(self.s)
         self.swarms = Swarms(self.db, self.s, self.org)
         self.pipeline.swarms = self.swarms

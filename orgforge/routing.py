@@ -62,8 +62,12 @@ class ModelRouter:
             return bool(endpoint and (not endpoint.get('key_env') or os.environ.get(endpoint['key_env'])))
         return self.s.provider != 'anthropic' or bool(os.environ.get('ANTHROPIC_API_KEY'))
 
-    def start(self, agent, project_id, meta, kind):
-        model, reason = (agent['model'], 'Explicit arena candidate') if meta.get('model_override') else self.select(agent, kind, meta)
+    def choose(self, agent, meta, kind):
+        return (agent['model'], 'Explicit arena candidate') if meta.get('model_override') else self.select(agent, kind, meta)
+
+    def start(self, agent, project_id, meta, kind, model=None, reason=None):
+        if model is None:
+            model, reason = self.choose(agent, meta, kind)
         route = self.db.run('INSERT INTO routing_decisions(agent_id,project_id,task_id,task_kind,model,reason,created_at) '
                             'VALUES (?,?,?,?,?,?,?)', agent['id'], project_id, meta.get('ticket_id'),
                             kind, model, reason, now())

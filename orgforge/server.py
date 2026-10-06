@@ -327,6 +327,8 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
             "presence": presence(co.db),
             "memories": co.memory.list(limit=60),
             "routing": co.router.summary(),
+            "failover": {"enabled": co.failover.enabled, "models": [str(m) for m in co.failover.config.get("models") or []],
+                         "resting": [{**r, "until_local": co.failover.when(r["until"])} for r in co.failover.status()]},
             "skills": [{k: s[k] for k in ("name", "title", "kinds", "departments", "enabled", "builtin", "source")} for s in co.skills.all()],
             "telemetry": telemetry(co.db),
             "chats": co.db.all("SELECT agent_id, MAX(id) AS last_id, SUM(status='pending') AS pending FROM messages "

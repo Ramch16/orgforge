@@ -142,6 +142,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("source", nargs="?", help="For add: a Markdown file or URL (e.g. a CLAUDE.md)")
     p = sub.add_parser("engines", help="Coding CLIs agents can work through, and whether they are ready")
     p.add_argument("--test", metavar="ENGINE", help="Run a tiny prompt through this engine")
+    p.add_argument("--wake", metavar="MODEL", nargs="?", const="all",
+                   help="Try a resting engine again now (no value: all of them)")
     sub.add_parser("costs", help="What the company's AI work has cost (estimate)")
     p = sub.add_parser("budget", help="CEO: set a project's budget in USD (0 = no limit)")
     p.add_argument("project", type=int); p.add_argument("amount", type=float)
@@ -368,6 +370,14 @@ def _dispatch(args) -> int:
             print(f"  {name:<12} {state}  ({e['base_url']})  · use {name}:<model>")
         users = co.db.all("SELECT model, COUNT(*) AS n FROM agents WHERE status!='fired' GROUP BY model")
         print("Agents by model: " + ", ".join(f"{u['model']} ({u['n']})" for u in users))
+        if args.wake:
+            n = co.failover.clear(None if args.wake == "all" else args.wake)
+            print(f"Woke {n} resting engine{'s' if n != 1 else ''}.")
+        fo = co.failover
+        print("Failover: " + (("on · " + (" → ".join(fo.models()) or "no backup models set")) if fo.enabled
+                              else "off (failover: in org.yaml)"))
+        for r in fo.status():
+            print(f"  resting  {r['engine']:<24} until {fo.when(r['until'])}  · {r['reason'][:100]}")
         if args.test and ":" in args.test:          # a model on an endpoint, e.g. ollama:qwen2.5-coder
             try:
                 r = co.runtime.provider.complete(model=args.test, system="You are testing a connection.",

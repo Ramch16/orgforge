@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.0 (in progress)
+- **Engine failover.** With `failover.enabled`, an engine that hits its usage limit rests until
+  its stated reset time (or `cooldown_minutes`) and the work continues on the next ready model in
+  `failover.models`; the project pauses only when every option is resting. Switches are logged,
+  recorded in routing decisions, and shown under Company knowledge and in `orgforge engines`;
+  `orgforge engines --wake` tries a resting engine again. Off by default.
+- Anthropic API rate limits and overloads (after the client's retries), HTTP 429/503 from
+  OpenAI-compatible endpoints, and an unreachable local model server now count as usage limits:
+  the project pauses (or fails over) instead of logging an error.
+
 ## 0.13.0 — 2026-10-06
 - Reviewed strategy trajectories, task-specific routing evidence and cost per successful run.
 - Persistent scheduled employees with leases, heartbeats, retries and dashboard lifecycle controls.

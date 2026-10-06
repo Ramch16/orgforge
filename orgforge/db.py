@@ -161,6 +161,12 @@ CREATE TABLE IF NOT EXISTS routing_decisions (
   priced INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS engine_cooldowns (
+  engine TEXT PRIMARY KEY,
+  until REAL NOT NULL,
+  reason TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   agent_id INTEGER NOT NULL,

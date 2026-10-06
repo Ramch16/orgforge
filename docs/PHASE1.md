@@ -111,8 +111,10 @@ and estimated cost. New models receive a neutral prior; configuration order
 breaks ties. Only explicitly configured candidates are selected. Local readiness
 checks exclude absent CLI executables and missing API credential bindings; they
 do not prove a login, endpoint reachability, or remote model availability. Remote
-provider errors still pause/fail through the existing runtime rather than silently
-replaying side-effecting work on another model.
+provider errors still fail through the existing runtime. Usage limits pause the
+project unless `failover` is enabled (0.14, see the README): then the assignment is
+replayed on the next configured model, visibly logged, with a note that the
+workspace may hold a partial attempt. Without failover, nothing is replayed.
 
 Independent reviews exclude the builder's selected model identifier. If no other
 available candidate remains, review fails closed. This enforces a different model

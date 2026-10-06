@@ -51,6 +51,13 @@ routing:
   enabled: false
   independent_reviews: false
   rules: {}
+# When an engine hits its usage limit, keep working on the next ready model in this list instead of
+# pausing; the limited engine rests until its stated reset time (or cooldown_minutes). Backups that
+# bill per token (the API) count against project budgets as usual.
+failover:
+  enabled: false
+  models: []              # e.g. ['cli:codex', 'cli:gemini', 'claude-sonnet-5-5', 'ollama:qwen2.5-coder']
+  cooldown_minutes: 60
 learning:
   enabled: false
   min_trials: 2

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from .config import Settings
 from .costs import record_usage
 from .engines import ACTIONS, EngineError, EngineUnavailable, actions_to_calls, parse_block, protocol, run_cli
+from .failover import limit_key
 from .memory import MEMORY_TOOL_SPECS
 from .runs import describe_call
 from .db import DB
@@ -43,6 +44,7 @@ class AgentRuntime:
         self.skills = None                  # set by Company; guidelines by kind of role
         self.learning = None
         self.router = None
+        self.failover = None
         self.integrations = None
 
     def _system(self, agent: dict, role: dict, on_project: bool = False, chat_with: str | None = None,
@@ -92,26 +94,61 @@ class AgentRuntime:
         if self.learning:
             strategy, signature, instructions = self.learning.prepare(kind,instructions,meta.get('strategy'))
             meta = {**meta,'strategy':strategy,'signature':signature}
-        route_id, route_started = None, None
-        if self.router:
-            agent, route_id, route_started = self.router.start(agent, kw.get('project_id'), meta, kind)
-        run_id = self.runs.start(agent, kw.get("project_id"), meta.get("ticket_id"),
-                                 meta.get("purpose") or ("chat" if kw.get("chat_with") else kind), instructions)
-        for s in waiting:
-            self.runs.event(run_id, "steer", f"{s['author']}: {s['body']}")
-        kw["meta"] = {**meta, "run_id": run_id}
-        try:
-            res = self._run(agent, instructions, ws, **kw)
-        except Exception as exc:
-            self.runs.finish(run_id, "failed", f"{type(exc).__name__}: {exc}")
+        pid = kw.get("project_id")
+        model, reason = self.router.choose(agent, meta, kind) if self.router else (agent["model"], "")
+        failover = self.failover if self.failover and self.failover.enabled else None
+        routing = self.s.raw.get("routing") or {}
+        avoid = meta.get("author_model") if routing.get("enabled") is True and routing.get("independent_reviews") else None
+        rest = failover.resting(model) if failover else None
+        if rest:                                 # already resting: go straight to a backup, without spending a call
+            ready = failover.pick(model, avoid=avoid)
+            if ready is None:
+                raise EngineUnavailable(f"{limit_key(model)} is resting until {failover.when(rest['until'])} "
+                                        f"({rest['reason']}) and no failover engine is ready")
+            reason = f"Failover: {limit_key(model)} is resting until {failover.when(rest['until'])}"
+            model = ready
+        tried: list[str] = []
+        while True:
+            agent = {**agent, "model": model}
+            route_id, route_started = None, None
+            if self.router:
+                agent, route_id, route_started = self.router.start(agent, pid, meta, kind, model, reason)
+            run_id = self.runs.start(agent, pid, meta.get("ticket_id"),
+                                     meta.get("purpose") or ("chat" if kw.get("chat_with") else kind), instructions)
+            if not tried:
+                for s in waiting:
+                    self.runs.event(run_id, "steer", f"{s['author']}: {s['body']}")
+            else:
+                self.runs.event(run_id, "text", f"(Continuing on {model}: {reason}.)")
+            kw["meta"] = {**meta, "run_id": run_id}
+            try:
+                res = self._run(agent, instructions, ws, **kw)
+            except Exception as exc:
+                self.runs.finish(run_id, "failed", f"{type(exc).__name__}: {exc}")
+                limited = isinstance(exc, EngineUnavailable)
+                if route_id:
+                    self.router.finish(route_id, route_started, 'unavailable' if limited else 'failed', run_id)
+                if not (limited and failover):
+                    raise
+                until = failover.rest(model, str(exc))
+                tried.append(model)
+                following = failover.pick(model, exclude=set(tried), avoid=avoid)
+                if following is None:
+                    raise EngineUnavailable(f"{exc}; no failover engine is ready") from exc
+                reason = f"Failover from {limit_key(model)}: usage limit, back around {failover.when(until)}"
+                self.db.log("failover", f"{agent['name']} moved from {model} to {following}: {limit_key(model)} hit "
+                            f"its usage limit (back around {failover.when(until)}).", pid, actor=agent["name"])
+                if len(tried) == 1 and ws is not None:
+                    instructions += ("\n\nNote: an earlier attempt at this assignment on another engine stopped "
+                                     "part-way (usage limit). Files in the workspace may already be partly changed: "
+                                     "check what is there (for example git status and git diff) before continuing.")
+                model = following
+                continue
+            self.runs.finish(run_id, "done" if res.completed else "stopped", res.text)
             if route_id:
-                self.router.finish(route_id, route_started, 'failed', run_id)
-            raise
-        self.runs.finish(run_id, "done" if res.completed else "stopped", res.text)
-        if route_id:
-            res.route_id = route_id
-            self.router.finish(route_id, route_started, 'completed' if res.completed else 'stopped', run_id)
-        return res
+                res.route_id = route_id
+                self.router.finish(route_id, route_started, 'completed' if res.completed else 'stopped', run_id)
+            return res
 
     def _run(self, agent: dict, instructions: str, ws: Workspace | None, *, project_id: int | None = None,
              meta: dict | None = None, depth: int = 0, history: list[dict] | None = None,
