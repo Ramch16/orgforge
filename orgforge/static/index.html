@@ -250,6 +250,7 @@
       <button class="nav" data-go="team"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg>Team</button>
       <button class="nav" data-go="operations"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Operations</button>
       <button class="nav" data-go="brain"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h5"/></svg>Company knowledge</button>
+      <button class="nav" data-go="machine"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v11H3zM8 20h8M12 16v4"/></svg>Machine</button>
       <button class="nav" data-go="costs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M17 6.5c0-1.9-2.2-3-5-3s-5 1.3-5 3.5 2.2 3 5 3.5 5 1.5 5 3.5-2.2 3.5-5 3.5-5-1.1-5-3"/></svg>Costs</button>
       <button class="nav" data-go="activity"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Activity</button>
       <div class="me"><span class="who" id="whoami"></span><button class="quiet" id="signout">Sign out</button></div>
@@ -346,6 +347,12 @@
         <div class="card"><h2>Reviewer accuracy</h2><p class="muted">Verdicts checked against what happened next: the CTO's call on escalated tickets, release checks, and accepted releases.</p><div id="brain-reviewers"></div></div>
         <div class="card"><h2>Approaches the team learned</h2><p class="muted">Proposed from repeated failed reviews. The CTO approves each one; it is then tried next to the current approach and kept only if reviews are better.</p><div id="brain-strategies"></div></div>
         <div class="card"><h2>Engine failover</h2><div id="brain-failover"></div></div>
+      </section>
+
+      <section class="view" data-view="machine" hidden>
+        <div class="page-head"><div><h1>Machine</h1><p>Is this computer ready for the company and its projects? Nothing is installed without your click.</p></div>
+          <div class="actions"><select id="machine-project" style="width:auto"></select><button id="machine-refresh">Check again</button></div></div>
+        <div id="machine"></div>
       </section>
 
       <section class="view" data-view="costs" hidden>
@@ -488,6 +495,45 @@ async function refresh(force) {
 
 
 let operationsLoading = false, operationsData = null;
+let machineData = null, machineAt = 0, machineFor = "";
+const MACHINE_STATE = { ready: ["done", "Ready"], missing: ["fired", "Missing"], outdated: ["probation", "Too old"],
+  not_ready: ["probation", "Not running"], signed_out: ["probation", "Signed out"] };
+async function loadMachine(force) {
+  const pid = $("machine-project").value;
+  options($("machine-project"), [["", "Company and all projects"], ...state.projects.map(p => [p.id, p.name])]);
+  $("machine-project").value = pid;
+  const busy = machineData && machineData.running.length;
+  if (!force && pid === machineFor && Date.now() - machineAt < (busy ? 3000 : 20000)) return;
+  machineAt = Date.now(); machineFor = pid;
+  machineData = await api("/api/machine" + (pid ? `?project_id=${pid}` : ""));
+  const m = machineData, s = m.system;
+  paint("machine", `
+    <div class="card"><div class="card-head"><h2>${m.ready ? "Ready" : "Not ready yet"}</h2><span class="chip ${m.ready ? "done" : "probation"}">${m.tools.filter(t => t.ok).length} of ${m.tools.length} ready</span></div>
+      <p class="muted" style="margin:0">${esc(s.os)} ${esc(s.release)} (${esc(s.machine)}) · ${s.cpus} CPUs · ${s.free_disk_gb} GB free ·
+        package managers: ${Object.entries(s.managers).filter(([, ok]) => ok).map(([n]) => esc(n)).join(", ") || "none found"}
+        ${m.installs_allowed ? "" : " · installing is switched off here"}</p></div>
+    <div class="card"><div style="overflow:auto"><table><thead><tr><th>Tool</th><th>Status</th><th>Version</th><th>Needed by</th><th></th></tr></thead><tbody>
+      ${m.tools.map(t => { const [tone, label] = MACHINE_STATE[t.state]; const busy = m.running.includes(t.id);
+        return `<tr><td><b>${esc(t.name)}</b></td><td><span class="chip ${tone}">${busy ? "Installing…" : label}</span></td><td>${esc(t.version || "—")}</td>
+        <td class="muted">${t.needed_by.map(esc).join("<br>")}${t.detail ? `<br><span style="color:var(--text)">${esc(t.detail)}</span>` : ""}</td>
+        <td>${t.installed ? "" : t.install.auto && m.installs_allowed
+          ? `<button class="primary" data-install="${esc(t.id)}" ${busy ? "disabled" : ""} title="${esc(t.install.how)}">Install</button>`
+          : `<code style="white-space:normal">${esc(t.install.how)}</code>${t.install.why ? `<br><span class="muted">${esc(t.install.why)}</span>` : ""}`}</td></tr>`; }).join("")}
+      </tbody></table></div></div>
+    ${m.history.length ? `<div class="card"><h2>Installs</h2>${m.history.map(h => `<div class="ev"><span class="grow"><b>${esc(h.tool)}</b> <span class="chip ${h.status === "installed" ? "done" : h.status === "running" ? "in_review" : "fired"}">${esc(h.status)}</span>
+      <span class="muted">· ${esc(h.command)} · ${esc(h.requested_by)} · ${ago(h.started_at)}</span>
+      ${h.status === "failed" ? `<pre class="report" style="max-height:8rem;overflow:auto">${esc(h.output.slice(-1500))}</pre>` : ""}</span></div>`).join("")}</div>` : ""}`);
+}
+$("machine-refresh").onclick = () => act(() => loadMachine(true));
+$("machine-project").onchange = () => act(() => loadMachine(true));
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-install]");
+  if (!b) return;
+  const t = machineData.tools.find(x => x.id === b.dataset.install);
+  if (!confirm(`Install ${t.name} on this computer?\n\n${t.install.how}`)) return;
+  act(async () => { await api(`/api/machine/install/${encodeURIComponent(t.id)}`, {}); await loadMachine(true); });
+});
+
 async function loadOperations() {
   if (operationsLoading) return;
   operationsLoading = true;
@@ -559,7 +605,7 @@ $("brain-team-load").onclick = () => act(async () => {
 $("brain-project").onchange = () => paint("brain-team", `<p class="muted">Select Show selected team to refresh assignments.</p>`);
 
 // ---- pages and navigation ----
-const VIEWS = ["home", "office", "decisions", "projects", "project", "tickets", "team", "operations", "brain", "costs", "activity"];
+const VIEWS = ["home", "office", "decisions", "projects", "project", "tickets", "team", "operations", "brain", "machine", "costs", "activity"];
 let view = "home", viewId = null, dfilter = "mine";
 const expanded = new Set(), showDone = new Set(), painted = {}, projReports = {};
 const WAITING = ["idea_review", "idea_decision", "plan_approval", "prd_approval", "architecture_approval", "release_approval", "signoff", "deploy_approval"];
@@ -851,6 +897,7 @@ function render() {
   renderBrain();
   options($("ops-project"), state.projects.map(p => [p.id,p.name]));
   if (view === "operations") loadOperations().catch(e => {$("error").textContent=e.message;});
+  if (view === "machine") loadMachine().catch(e => {$("error").textContent=e.message;});
 }
 
 document.addEventListener("click", e => {

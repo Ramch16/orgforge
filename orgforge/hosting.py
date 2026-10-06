@@ -13,6 +13,7 @@ def application():
     if any(len(value)<32 for value in tokens.values()) or tokens['ceo']==tokens['cto']:
         raise ValueError('Hosted OrgForge requires distinct CEO/CTO runtime tokens of at least 32 characters.')
     company=Company(root,create=not (root/'.orgforge'/'company.db').exists())
+    company.machine.installs_allowed=False   # a hosted server never installs software on its host
     return create_app(company,tokens)
 
 

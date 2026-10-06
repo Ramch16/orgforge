@@ -83,6 +83,7 @@ class Pipeline:
         self._cycle_limits = {}
         self.reporter = None                    # writes a pending status report (set by Company)
         self.production = None                  # deploys signed-off releases (set by Company)
+        self.machine = None                     # what this computer has and needs (set by Company)
 
     # ---- helpers ---------------------------------------------------------
     def project(self, pid: int) -> dict:
@@ -765,6 +766,9 @@ class Pipeline:
             self.runtime.learning.settle_project(pid, False, "OrgForge", "the release checks then failed")
         rounds = self.db.one("SELECT COUNT(*) AS n FROM tasks WHERE project_id=? AND key LIKE 'verify-%'", pid)["n"]
         feedback = "\n".join(findings)
+        if self.machine and (hints := self.machine.explain(feedback)):
+            feedback += "\n\nThis computer may be the problem, not the code:\n" + "\n".join(f"- {h}" for h in hints)
+            self.db.log("machine", "Release checks failed on a missing command: " + " ".join(hints), pid)
         if rounds < self.s.max_rework:
             task = p["kind"] == "task"
             self._fix_task(pid, "Make the failing checks pass" if task else "Repair product acceptance failures",
@@ -1170,6 +1174,11 @@ class Pipeline:
                 self._stage(pid, "architecture" if ok else "prd", "" if ok else feedback)
             else:
                 self._stage(pid, "build" if ok else "architecture", "" if ok else feedback)
+                if ok and self.machine:
+                    for tool in self.machine.missing(pid):
+                        self.db.log("machine", f"This computer is missing {tool['name']}, which the project needs "
+                                    f"({'; '.join(tool['needed_by'])}). Install it from Machine, or run: "
+                                    f"{tool['install']['how']}", pid)
         elif kind == "escalation":
             task = self.db.one("SELECT * FROM tasks WHERE id=?", payload["task_id"])
             if self.runtime.learning:

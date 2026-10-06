@@ -406,6 +406,32 @@ orgforge report 1 --as cto
 orgforge feedback 1 "Crashes when the name is empty" --source "support email" --as ceo
 ```
 
+## Machine readiness
+
+`orgforge doctor` (and **Machine** in the dashboard) shows whether this computer is ready: what the
+company and each project need, what is installed, which version, and whether each AI CLI and the
+GitHub CLI are signed in.
+
+- **Needs come from what is actually used:** Git and Python for OrgForge itself, the CLIs your
+  agents work through (and failover backups), Docker when the sandbox uses it, and for each project
+  its files (`package.json` means Node.js, `go.mod` Go, `Cargo.toml` Rust, ...) and the commands in
+  its `product.json` and production config. Pick a project to see exactly why.
+- **Nothing is installed without asking.** Only tools OrgForge knows can be installed: with
+  Homebrew on macOS, winget on Windows, and npm for the AI CLIs, one at a time after you confirm.
+  Anything needing admin rights or a licence (Docker Desktop, Homebrew itself, Apple's command line
+  tools, apt on Linux) is shown as the command for you to run. Signing in is always yours.
+  A hosted OrgForge never installs; `machine.installs: false` switches it off anywhere.
+- **Failures point at the machine.** When release checks fail with "command not found", the CTO is
+  told which tool is missing (including the `python` vs `python3` trap), and approving a design
+  warns if the project needs something this computer lacks.
+
+```bash
+orgforge doctor                                   # company-wide
+orgforge doctor --project 2                       # one project, with reasons
+orgforge doctor --install node gemini             # asks before each one (--yes to skip asking)
+orgforge doctor --missing                         # everything missing that can be installed
+```
+
 ## Production: deploy, health checks and rollback
 
 Give a project a `production:` entry in `org.yaml` and the CEO's sign-off deploys it, instead of

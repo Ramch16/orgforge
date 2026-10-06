@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 import sys
@@ -145,6 +146,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--wake", metavar="MODEL", nargs="?", const="all",
                    help="Try a resting engine again now (no value: all of them)")
     sub.add_parser("learning", help="Reviewer accuracy, and approaches the team learned from failed reviews")
+    p = sub.add_parser("doctor", help="Is this computer ready? What the company and its projects need, and installing it")
+    p.add_argument("--project", type=int, help="Only what this project needs")
+    p.add_argument("--install", nargs="+", metavar="TOOL", help="Install these (e.g. node gemini), asking first")
+    p.add_argument("--missing", action="store_true", help="Install everything needed that is missing, asking first")
+    p.add_argument("--yes", action="store_true", help="Do not ask before each install")
     p = sub.add_parser("deployments", help="What each project has deployed, where, and whether it is live")
     p.add_argument("project", type=int, nargs="?")
     sub.add_parser("costs", help="What the company's AI work has cost (estimate)")
@@ -401,6 +407,44 @@ def _dispatch(args) -> int:
                     print("Sign in first: run `claude` in a terminal and type /login.")
             except EngineError as exc:
                 print(f"\n{args.test}: {exc}")
+    elif args.cmd == "doctor":
+        from .machine import CATALOG
+        r = co.machine.report(args.project)
+        s = r["system"]
+        print(f"This computer: {s['os']} {s['release']} ({s['machine']}), {s['cpus']} CPUs, {s['free_disk_gb']} GB free. "
+              "Package managers: " + (", ".join(m for m, ok in s["managers"].items() if ok) or "none found"))
+        marks = {"ready": "ok  ", "missing": "MISS", "outdated": "OLD ", "not_ready": "WAIT", "signed_out": "SIGN"}
+        for t in r["tools"]:
+            print(f"  {marks[t['state']]} {t['name']:<20} {t['version'] or '-':<10} needed by: {'; '.join(t['needed_by'])[:70]}")
+            if t["detail"]:
+                print(f"       {t['detail']}")
+            if not t["installed"]:
+                print(f"       install: {t['install']['how']}" + ("" if t["install"]["auto"] else "   (run it yourself)"))
+        print("\nReady." if r["ready"] else "\nNot ready yet.")
+        wanted = list(args.install or [])
+        if args.missing:
+            wanted += [t["id"] for t in r["tools"] if not t["installed"] and t["install"]["auto"]]
+        for tool in dict.fromkeys(wanted):
+            if tool not in CATALOG:
+                raise OrgError(f"Unknown tool '{tool}'. Known: {', '.join(sorted(CATALOG))}.")
+            recipe = co.machine.recipe(tool)
+            if not recipe["auto"]:
+                print(f"\n{CATALOG[tool]['name']}: run this yourself: {recipe['how']}"
+                      + (f"\n  {recipe['why']}" if recipe.get("why") else ""))
+                continue
+            try:
+                answer = "y" if args.yes else input(f"\nInstall {CATALOG[tool]['name']} with `{recipe['how']}`? [y/N] ")
+            except EOFError:                       # nobody to ask: never install without a yes
+                answer = ""
+            if answer.strip().lower() != "y":
+                print("Skipped.")
+                continue
+            print(f"Installing {CATALOG[tool]['name']}...")
+            done = co.machine.install(tool, by=getpass.getuser())
+            after = co.machine.check(tool)
+            print(f"{'Installed' if done['status'] == 'installed' else 'Failed'}: {CATALOG[tool]['name']} "
+                  f"{after['version']}".rstrip() + (f"\n{done['output'][-800:]}" if done["status"] != "installed" else "")
+                  + (f"\n  {after['detail']}" if after["detail"] else ""))
     elif args.cmd == "learning":
         print("Learning is " + ("on." if co.learning.enabled else "off (learning.enabled in org.yaml)."))
         rows = co.learning.reviewers()

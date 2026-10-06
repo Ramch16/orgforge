@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.15.0 (in progress)
+- **Machine readiness.** `orgforge doctor` and a Machine page show what the company and each
+  project need (from agents' engines, the sandbox, project files, `product.json` and production
+  commands), what is installed and at which version, whether Docker is running, and whether
+  Claude Code, Codex and the GitHub CLI are signed in. Missing tools install with consent, one at a
+  time, from a fixed catalog via Homebrew, winget or npm; admin-only installs (Docker Desktop,
+  Homebrew, Apple's command line tools, apt) are shown as commands to run. Never on a hosted
+  server. Failed checks that hit "command not found" now name the missing tool, and approving a
+  design warns about tools the project needs. macOS command line tool stubs are detected without
+  triggering their install dialog.
+
 ## 0.14.0 — 2026-10-06
 - **The learning loop runs itself.** Learning and routing are on by default (no change without
   evidence or rules). Every review verdict is settled by what happened next (the CTO's call on an

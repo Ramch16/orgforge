@@ -342,6 +342,14 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
         guard(lambda: co.pipeline.project(pid))
         return co.swarms.snapshot(pid)
 
+    @app.get('/api/machine')
+    def machine(project_id: int | None = None, role: str = Depends(auth)):
+        return guard(lambda: co.machine.report(project_id))
+
+    @app.post('/api/machine/install/{tool}')
+    def machine_install(tool: str, role: str = Depends(auth)):
+        return guard(lambda: co.machine.install(tool, by=co.s.human(role), wait=False))
+
     @app.get('/api/routing')
     def routing(role: str = Depends(auth)):
         return co.router.summary()

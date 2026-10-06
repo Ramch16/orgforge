@@ -172,6 +172,16 @@ CREATE TABLE IF NOT EXISTS deployments (
   started_at TEXT NOT NULL,
   finished_at TEXT
 );
+CREATE TABLE IF NOT EXISTS machine_installs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tool TEXT NOT NULL,
+  command TEXT NOT NULL,
+  status TEXT NOT NULL,
+  output TEXT NOT NULL DEFAULT '',
+  requested_by TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  finished_at TEXT
+);
 CREATE TABLE IF NOT EXISTS review_verdicts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   project_id INTEGER,
