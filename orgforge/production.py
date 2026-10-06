@@ -182,7 +182,9 @@ class Production:
         environ = {k: v for k, v in os.environ.items() if not SECRET_ENV.search(k) or k in allowed}
         timeout = int(env.get("timeout_seconds") or conf.get("timeout_seconds") or 900)
         try:
-            proc = subprocess.run(command, shell=True, cwd=project["workspace"], env=environ, capture_output=True,
+            from .platforms import shell_command
+            args, shell = shell_command(command)
+            proc = subprocess.run(args, shell=shell, cwd=project["workspace"], env=environ, capture_output=True,
                                   text=True, timeout=timeout)
         except subprocess.TimeoutExpired:
             return False, f"timed out after {timeout}s"

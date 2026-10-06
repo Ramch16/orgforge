@@ -75,10 +75,11 @@ def version_tuple(text: str) -> tuple[int, ...]:
 
 
 def _run(argv: list[str], timeout: int = 15) -> tuple[int, str]:
+    from .platforms import UnsafeCommand, safe_argv
     try:
-        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(safe_argv(argv), capture_output=True, text=True, timeout=timeout)
         return p.returncode, (p.stdout + p.stderr).strip()
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except (OSError, subprocess.TimeoutExpired, UnsafeCommand) as exc:
         return 127, str(exc)
 
 
@@ -110,6 +111,10 @@ def check_tool(tool: str) -> dict:
         out["detail"] = "Needs Apple's command line tools. Run: xcode-select --install"
         return out
     code, text = _run([p.replace("{bin}", binary) for p in t["version"]])
+    if system() == "windows" and "\\windowsapps\\" in path.lower() and not version_tuple(text):
+        out["detail"] = "That is the Microsoft Store shortcut, not an installed program." + (
+            f" Install it: winget install --id {t['winget']} -e" if t.get("winget") else "")
+        return out
     out["installed"] = code == 0 or bool(version_tuple(text))
     if not out["installed"]:
         out["detail"] = text[:200]

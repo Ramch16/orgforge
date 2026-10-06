@@ -27,6 +27,14 @@ DENIED = [
     (r"(^|\s)(/etc/|/var/|/usr/|/root/|~/\.ssh|\$HOME/\.ssh)", "touching system or credential paths"),
     (r"\.\./\.\.", "leaving the workspace"),
     (r"\bgit\s+push\b", "pushing (a human publishes releases)"),
+    # Windows (cmd.exe, PowerShell)
+    (r"(?i)\b(format|diskpart|bcdedit|vssadmin|cipher\s+/w)\b", "system command"),
+    (r"(?i)\b(rd|rmdir|del|erase)\s+(/\w\s+)*[a-z]:\\?\s*($|/|\*)", "deleting outside the workspace"),
+    (r"(?i)remove-item\b.*\b[a-z]:\\(\*|\s|$)", "deleting outside the workspace"),
+    (r"(?i)\b(reg\s+(add|delete)|set-executionpolicy|runas)\b", "system or privilege change"),
+    (r"(?i)(%systemroot%|%windir%|[a-z]:\\windows\\|%userprofile%\\\.ssh|\$env:userprofile\\\.ssh)",
+     "touching system or credential paths"),
+    (r"(?i)(iwr|irm|invoke-webrequest|invoke-restmethod)\b[^|;&]*\|\s*iex\b", "piping a download into a shell"),
 ]
 
 
@@ -253,7 +261,9 @@ class Workspace:
             argv += [self.docker_image, "sh", "-lc", command]
             kwargs = dict(args=argv)
         else:
-            kwargs = dict(args=command, shell=True, cwd=self.root)
+            from .platforms import shell_command
+            args, shell = shell_command(command)
+            kwargs = dict(args=args, shell=shell, cwd=self.root)
         try:
             proc = subprocess.run(capture_output=True, text=True, timeout=timeout, env=env, **kwargs)
         except subprocess.TimeoutExpired:
@@ -290,6 +300,8 @@ class Workspace:
     def init_repo(self) -> None:
         if not (self.root / ".git").exists():
             self.git("init", "-q", "-b", "main")
+            if os.name == "nt":                # workspaces nest deeply; Windows' default limit is 260 characters
+                self.git("config", "core.longpaths", "true")
         self.ensure_ignores()
 
     def ensure_ignores(self, shared: bool = True) -> bool:

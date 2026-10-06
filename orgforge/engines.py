@@ -163,6 +163,11 @@ def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: s
     if engine.get("subscription"):
         env.pop("ANTHROPIC_API_KEY", None)
     workdir = cwd or tempfile.mkdtemp(prefix="orgforge-chat-")
+    from .platforms import UnsafeCommand, safe_argv
+    try:
+        argv = safe_argv(argv)
+    except UnsafeCommand as exc:
+        raise EngineError(str(exc)) from exc
     try:
         proc = subprocess.run(argv, input=prompt if engine.get("prompt", "stdin") == "stdin" else None,
                               capture_output=True, text=True, cwd=workdir, env=env, timeout=timeout)
