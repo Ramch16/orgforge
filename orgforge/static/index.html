@@ -353,6 +353,9 @@
         <div class="page-head"><div><h1>Machine</h1><p>Is this computer ready for the company and its projects? Nothing is installed without your click.</p></div>
           <div class="actions"><select id="machine-project" style="width:auto"></select><button id="machine-refresh">Check again</button></div></div>
         <div id="machine"></div>
+        <div class="card"><div class="card-head"><h2>Worker machines</h2><button id="machine-pair">Add a worker machine</button></div>
+          <p class="muted">Other computers that run your agents' coding CLIs, on their own logins. They connect to this one; nothing connects to them.</p>
+          <div id="machine-pairing"></div><div id="machine-nodes"></div></div>
       </section>
 
       <section class="view" data-view="costs" hidden>
@@ -524,6 +527,38 @@ async function loadMachine(force) {
       <span class="muted">· ${esc(h.command)} · ${esc(h.requested_by)} · ${ago(h.started_at)}</span>
       ${h.status === "failed" ? `<pre class="report" style="max-height:8rem;overflow:auto">${esc(h.output.slice(-1500))}</pre>` : ""}</span></div>`).join("")}</div>` : ""}`);
 }
+async function loadNodes() {
+  const nodes = await api("/api/machines");
+  const cli = state.departments.flatMap(d => d.agents).filter(a => a.status !== "fired" && String(a.model).startsWith("cli:"));
+  paint("machine-nodes", (nodes.length ? nodes.map(n => `<div class="ev"><span class="grow">
+      <b>${esc(n.name)}</b> <span class="chip ${n.online ? "done" : "fired"}">${n.online ? "online" : "offline"}</span>
+      <span class="muted">${esc(n.info.os || "")} ${esc(n.info.machine || "")} · ${n.jobs.done || 0} jobs done${n.jobs.active ? ` · ${n.jobs.active} running` : ""}</span>
+      <br><span class="muted">Engines: ${Object.entries(n.info.engines || {}).map(([e, s]) => `${esc(e)} (${esc(s)})`).join(", ") || "none found"}
+        · Agents: ${n.agents.map(esc).join(", ") || "none yet"}</span></span>
+      <button class="quiet" data-node-revoke="${esc(n.name)}">Revoke</button></div>`).join("")
+    : `<p class="muted">None yet.</p>`)
+    + (nodes.length && cli.length ? `<div class="row" style="margin-top:.6rem;gap:.5rem;flex-wrap:wrap"><select id="node-agent" style="width:auto">${cli.map(a =>
+        `<option value="${esc(a.name)}">${esc(a.name)} (${esc(a.model)})</option>`).join("")}</select>
+      <select id="node-target" style="width:auto"><option value="">this computer</option>${nodes.map(n => `<option value="${esc(n.name)}">${esc(n.name)}</option>`).join("")}</select>
+      <button id="node-assign">Assign</button></div>` : nodes.length ? `<p class="muted">Only agents on a coding CLI (Engine: cli:…) can work on another machine.</p>` : ""));
+}
+$("machine-pair").onclick = () => act(async () => {
+  const name = prompt("Name for the new worker machine (e.g. windows-laptop):");
+  if (!name) return;
+  const p = await api("/api/machines/pair", { name });
+  paint("machine-pairing", `<div class="report" style="margin:.4rem 0">On ${esc(p.name)}, within 10 minutes (the code works once):<br><br>
+    Install the same OrgForge version there (${esc(state.version || "")} from github.com/Ramch16/orgforge), then:<br>
+    <code>orgforge worker join ${esc(location.origin)} ${esc(p.code)}</code><br><code>orgforge worker run</code><br><br>
+    <span class="muted">This dashboard must be reachable from that computer: start it with <code>orgforge serve --host 0.0.0.0</code>
+    on a private network, or use Tailscale or HTTPS.</span></div>`);
+});
+document.addEventListener("click", e => {
+  const r = e.target.closest("[data-node-revoke]");
+  if (r && confirm(`Revoke ${r.dataset.nodeRevoke}? It can no longer take work.`))
+    act(async () => { await api(`/api/machines/${encodeURIComponent(r.dataset.nodeRevoke)}/revoke`, {}); await loadNodes(); });
+  if (e.target.id === "node-assign")
+    act(async () => { await api("/api/machines/assign", { agent: $("node-agent").value, machine: $("node-target").value || null }); await loadNodes(); });
+});
 $("machine-refresh").onclick = () => act(() => loadMachine(true));
 $("machine-project").onchange = () => act(() => loadMachine(true));
 document.addEventListener("click", e => {
@@ -897,7 +932,7 @@ function render() {
   renderBrain();
   options($("ops-project"), state.projects.map(p => [p.id,p.name]));
   if (view === "operations") loadOperations().catch(e => {$("error").textContent=e.message;});
-  if (view === "machine") loadMachine().catch(e => {$("error").textContent=e.message;});
+  if (view === "machine") Promise.all([loadMachine(), loadNodes()]).catch(e => {$("error").textContent=e.message;});
 }
 
 document.addEventListener("click", e => {

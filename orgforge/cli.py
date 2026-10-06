@@ -151,6 +151,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--install", nargs="+", metavar="TOOL", help="Install these (e.g. node gemini), asking first")
     p.add_argument("--missing", action="store_true", help="Install everything needed that is missing, asking first")
     p.add_argument("--yes", action="store_true", help="Do not ask before each install")
+    p = sub.add_parser("machines", help="Worker machines: other computers that run your agents' coding CLIs")
+    p.add_argument("action", nargs="?", choices=["list", "pair", "assign", "unassign", "revoke"], default="list")
+    p.add_argument("name", nargs="?", help="pair/revoke: machine name; assign/unassign: agent name")
+    p.add_argument("machine", nargs="?", help="assign: the machine the agent works on"); who(p)
+    p = sub.add_parser("worker", help="On another computer: join a company as a worker machine, then work for it")
+    p.add_argument("action", choices=["join", "run", "status"])
+    p.add_argument("url", nargs="?", help="join: the company's dashboard address, e.g. http://my-mac.local:4700")
+    p.add_argument("code", nargs="?", help="join: the pairing code from Machines in the dashboard")
+    p.add_argument("--insecure", action="store_true", help="join: allow plain HTTP to a public address")
     p = sub.add_parser("deployments", help="What each project has deployed, where, and whether it is live")
     p.add_argument("project", type=int, nargs="?")
     sub.add_parser("costs", help="What the company's AI work has cost (estimate)")
@@ -214,6 +223,24 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _dispatch(args) -> int:
+    if args.cmd == "worker":                   # runs on the worker computer, which has no company of its own
+        from . import worker_client as wc
+        if args.action == "join":
+            if not args.url or not args.code:
+                raise ValueError("Usage: orgforge worker join <url> <pairing code>")
+            config = wc.join(args.url, args.code, insecure=args.insecure)
+            print(f"Joined as worker machine '{config['name']}'. Start working with: orgforge worker run")
+        elif args.action == "status":
+            config = wc.load()
+            print(f"Worker machine '{config['name']}' for {config['url']} (config: {wc.CONFIG})")
+            for engine, state in wc.info()["engines"].items():
+                print(f"  {engine:<12} {state}")
+        else:
+            try:
+                wc.Worker().run_forever()
+            except KeyboardInterrupt:
+                print("\nStopped.")
+        return 0
     if args.cmd == "init":
         co = Company(args.home, create=True)
         print(f"{co.s.company} is set up in {co.s.root}")
@@ -460,6 +487,31 @@ def _dispatch(args) -> int:
                   f"from {s['evidence']} failed reviews\n      {s['prompt'][:300]}")
         if not co.learning.proposals():
             print("  None yet.")
+    elif args.cmd == "machines":
+        by = co.s.human(role)
+        if args.action == "pair":
+            if not args.name:
+                raise ValueError("Usage: orgforge machines pair <name>")
+            pairing = co.nodes.pair(args.name, by)
+            print(f"On the other computer, within 10 minutes:\n\n  orgforge worker join <this dashboard's address> "
+                  f"{pairing['code']}\n\nThe code works once.")
+        elif args.action in ("assign", "unassign"):
+            if not args.name or (args.action == "assign" and not args.machine):
+                raise ValueError("Usage: orgforge machines assign <agent> <machine>  |  unassign <agent>")
+            co.nodes.assign(args.name, args.machine if args.action == "assign" else None, by)
+            print("Done.")
+        elif args.action == "revoke":
+            co.nodes.revoke(args.name, by)
+            print(f"Revoked '{args.name}'. It can no longer take work; pair it again to bring it back.")
+        else:
+            nodes = co.nodes.list()
+            for n in nodes:
+                i = n["info"]
+                print(f"  {'online ' if n['online'] else 'offline'} {n['name']:<16} {i.get('os', '')} {i.get('machine', '')}"
+                      f" · engines: {', '.join(f'{e} ({s})' for e, s in i.get('engines', {}).items()) or 'none'}"
+                      f" · agents: {', '.join(n['agents']) or 'none'} · jobs done: {n['jobs']['done'] or 0}")
+            if not nodes:
+                print("No worker machines. Pair one: orgforge machines pair <name>")
     elif args.cmd == "deployments":
         rows = co.production.list(args.project)
         if not rows:

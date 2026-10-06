@@ -11,10 +11,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
+from . import __version__
 from .chat import ChatError
 from .company import Company
 from .costs import summary as cost_summary
@@ -317,6 +318,7 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
             "idea_stages": IDEA_STAGES,
             "next_steps": NEXT_STEP,
             "departments": co.org.chart(include_fired=True),
+            "version": __version__,
             "projects": co.pipeline.overview(),
             "approvals": co.pipeline.inbox(),
             "tickets": co.tickets.search(),
@@ -341,6 +343,69 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
     def swarm(pid: int, role: str = Depends(auth)):
         guard(lambda: co.pipeline.project(pid))
         return co.swarms.snapshot(pid)
+
+    # ---- worker machines: these calls are signed by the worker, not made with a CEO/CTO token ----
+    async def node_call(request: Request):
+        body = await request.body()
+        if len(body) > 80 * 1024 * 1024:
+            raise HTTPException(413, "Too large.")
+        headers = {k.lower(): v for k, v in request.headers.items()}
+        try:
+            node = co.nodes.verify(headers, request.method, request.url.path, body)
+        except PermissionError as exc:
+            raise HTTPException(401, str(exc))
+        return node, headers["x-nonce"], (json.loads(body) if body else {})
+
+    def node_reply(node, nonce, payload):
+        data, headers = co.nodes.respond(node, nonce, payload)
+        return Response(data, media_type="application/octet-stream" if isinstance(payload, bytes)
+                        else "application/json", headers=headers)
+
+    @app.post('/api/nodes/join')
+    async def node_join(request: Request):
+        data = json.loads(await request.body() or b"{}")
+        return guard(lambda: co.nodes.join(data.get("nonce"), data.get("proof"), data.get("info") or {}))
+
+    @app.post('/api/nodes/heartbeat')
+    async def node_heartbeat(request: Request):
+        node, nonce, data = await node_call(request)
+        co.nodes.heartbeat(node, data)
+        return node_reply(node, nonce, {"ok": True})
+
+    @app.post('/api/nodes/next')
+    async def node_next(request: Request):
+        node, nonce, _ = await node_call(request)
+        return node_reply(node, nonce, co.nodes.next_job(node))
+
+    @app.post('/api/nodes/jobs/{job_id}/archive')
+    async def node_archive(job_id: int, request: Request):
+        node, nonce, _ = await node_call(request)
+        return node_reply(node, nonce, guard(lambda: co.nodes.archive(node, job_id)))
+
+    @app.post('/api/nodes/jobs/{job_id}/result')
+    async def node_result(job_id: int, request: Request):
+        node, nonce, data = await node_call(request)
+        guard(lambda: co.nodes.finish(node, job_id, data))
+        return node_reply(node, nonce, {"ok": True})
+
+    # ---- worker machines, for the CEO and CTO ----
+    @app.get('/api/machines')
+    def machines(role: str = Depends(auth)):
+        return co.nodes.list()
+
+    @app.post('/api/machines/pair')
+    def machines_pair(data: dict, role: str = Depends(auth)):
+        return guard(lambda: co.nodes.pair(str(data.get("name", "")), co.s.human(role)))
+
+    @app.post('/api/machines/{name}/revoke')
+    def machines_revoke(name: str, role: str = Depends(auth)):
+        guard(lambda: co.nodes.revoke(name, co.s.human(role)))
+        return {"ok": True}
+
+    @app.post('/api/machines/assign')
+    def machines_assign(data: dict, role: str = Depends(auth)):
+        guard(lambda: co.nodes.assign(str(data.get("agent", "")), data.get("machine") or None, co.s.human(role)))
+        return {"ok": True}
 
     @app.get('/api/machine')
     def machine(project_id: int | None = None, role: str = Depends(auth)):

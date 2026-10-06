@@ -432,6 +432,44 @@ orgforge doctor --install node gemini             # asks before each one (--yes 
 orgforge doctor --missing                         # everything missing that can be installed
 ```
 
+## Worker machines
+
+Lend another computer's coding CLIs to the company: a spare laptop, a desktop with more memory, a
+Windows machine. Agents assigned to it do their CLI work there, on that computer's own logins
+(its Codex or Claude subscription); reviews, checks and decisions stay here.
+
+```bash
+# here (the company): make the dashboard reachable on your network, then pair
+orgforge serve --host 0.0.0.0
+orgforge machines pair windows-laptop             # prints a one-time code (10 minutes)
+
+# on the other computer (same OrgForge version, its CLIs installed and signed in)
+orgforge worker join http://my-mac.local:4700 ABCD-EFGH-JKMN-PQRS
+orgforge worker run
+
+# here again
+orgforge machines assign Hari windows-laptop      # unassign Hari: back to this computer
+orgforge machines                                 # online, engines, agents, jobs done
+```
+
+- **The worker connects; nothing connects to it.** It needs no open port.
+- **Pairing never sends the code or the key in the clear.** The worker proves it knows the code,
+  the company proves it does too, and the worker's key arrives encrypted under the code. Codes are
+  16 characters, work once and expire after 10 minutes. Revoke a machine any time.
+- **Every message is signed both ways,** with a timestamp and a single-use nonce. The worker only
+  acts on jobs its own company signed; the company only accepts results from paired, unrevoked
+  workers.
+- **A job names an engine, never a command.** The worker runs its own definition of that engine,
+  in a fresh folder that is deleted afterwards, and returns the changes as a patch applied here.
+  Dependency folders (`node_modules`, `.venv`, ...) are not sent.
+- **Use HTTPS, a private network or Tailscale.** Workers refuse other addresses unless told
+  `--insecure`. Run the worker under a dedicated user account: agents run commands there.
+- **Offline is not a failure.** If the worker is offline, the turn runs on this computer when the
+  engine is installed here; otherwise it counts as unavailable, so failover or a pause takes over.
+
+Only agents on a coding CLI (`cli:...`) can move; API agents need no machine. Machine in the
+dashboard shows the same, and adds pairing, assignment and revoking.
+
 ## Production: deploy, health checks and rollback
 
 Give a project a `production:` entry in `org.yaml` and the CEO's sign-off deploys it, instead of

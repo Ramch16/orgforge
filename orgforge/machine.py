@@ -94,6 +94,53 @@ def tokens(command: str) -> set[str]:
     return found
 
 
+def check_tool(tool: str) -> dict:
+    """Installed? Which version? Running and signed in, where that can be checked?"""
+    t = CATALOG[tool]
+    binary = t.get("win_bin") if system() == "windows" and t.get("win_bin") else t["bin"]
+    path = shutil.which(binary)
+    out = {"id": tool, "name": t["name"], "installed": False, "version": "", "path": path or "",
+           "ok": False, "state": "missing", "signed_in": None, "detail": ""}
+    if not path and t.get("bundled") and Path(t["bundled"]).exists():
+        out["detail"] = f"Installed but not on PATH. Run: ln -s '{t['bundled']}' ~/.local/bin/{binary}"
+        return out
+    if not path:
+        return out
+    if system() == "macos" and path in APPLE_STUBS and _run(["xcode-select", "-p"])[0] != 0:
+        out["detail"] = "Needs Apple's command line tools. Run: xcode-select --install"
+        return out
+    code, text = _run([p.replace("{bin}", binary) for p in t["version"]])
+    out["installed"] = code == 0 or bool(version_tuple(text))
+    if not out["installed"]:
+        out["detail"] = text[:200]
+        return out
+    found = version_tuple(text)
+    out["version"] = ".".join(map(str, found))
+    if t.get("min") and found and found < version_tuple(t["min"]):
+        out.update(state="outdated", detail=f"Version {out['version']} is older than {t['min']}.")
+        return out
+    if t.get("ready") and _run(t["ready"], timeout=20)[0] != 0:
+        out.update(state="not_ready", detail=t["not_ready"])
+        return out
+    if t.get("login"):
+        code, text = _run(t["login"], timeout=20)
+        if t.get("login_json"):
+            try:
+                signed = bool(json.loads(text).get(t["login_json"]))
+            except ValueError:
+                signed = False
+        else:
+            signed = code == 0 and (not t.get("login_text") or t["login_text"] in text)
+        out["signed_in"] = signed
+        if not signed:
+            out.update(state="signed_out", detail=f"Sign in: run `{t['sign_in']}` in a terminal.")
+            return out
+    elif t.get("sign_in"):
+        out["detail"] = f"Sign-in is not checked; if needed run `{t['sign_in']}`."
+    out.update(ok=True, state="ready")
+    return out
+
+
 class Machine:
     def __init__(self, company) -> None:
         self.co, self.db, self.s = company, company.db, company.s
@@ -162,49 +209,7 @@ class Machine:
 
     # ---- what is here ------------------------------------------------------
     def check(self, tool: str) -> dict:
-        t = CATALOG[tool]
-        binary = t.get("win_bin") if system() == "windows" and t.get("win_bin") else t["bin"]
-        path = shutil.which(binary)
-        out = {"id": tool, "name": t["name"], "installed": False, "version": "", "path": path or "",
-               "ok": False, "state": "missing", "signed_in": None, "detail": ""}
-        if not path and t.get("bundled") and Path(t["bundled"]).exists():
-            out["detail"] = f"Installed but not on PATH. Run: ln -s '{t['bundled']}' ~/.local/bin/{binary}"
-            return out
-        if not path:
-            return out
-        if system() == "macos" and path in APPLE_STUBS and _run(["xcode-select", "-p"])[0] != 0:
-            out["detail"] = "Needs Apple's command line tools. Run: xcode-select --install"
-            return out
-        code, text = _run([p.replace("{bin}", binary) for p in t["version"]])
-        out["installed"] = code == 0 or bool(version_tuple(text))
-        if not out["installed"]:
-            out["detail"] = text[:200]
-            return out
-        found = version_tuple(text)
-        out["version"] = ".".join(map(str, found))
-        if t.get("min") and found and found < version_tuple(t["min"]):
-            out.update(state="outdated", detail=f"Version {out['version']} is older than {t['min']}.")
-            return out
-        if t.get("ready") and _run(t["ready"], timeout=20)[0] != 0:
-            out.update(state="not_ready", detail=t["not_ready"])
-            return out
-        if t.get("login"):
-            code, text = _run(t["login"], timeout=20)
-            if t.get("login_json"):
-                try:
-                    signed = bool(json.loads(text).get(t["login_json"]))
-                except ValueError:
-                    signed = False
-            else:
-                signed = code == 0 and (not t.get("login_text") or t["login_text"] in text)
-            out["signed_in"] = signed
-            if not signed:
-                out.update(state="signed_out", detail=f"Sign in: run `{t['sign_in']}` in a terminal.")
-                return out
-        elif t.get("sign_in"):
-            out["detail"] = f"Sign-in is not checked; if needed run `{t['sign_in']}`."
-        out.update(ok=True, state="ready")
-        return out
+        return check_tool(tool)
 
     def report(self, pid: int | None = None) -> dict:
         need = self.requirements(pid)

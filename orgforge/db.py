@@ -172,6 +172,41 @@ CREATE TABLE IF NOT EXISTS deployments (
   started_at TEXT NOT NULL,
   finished_at TEXT
 );
+CREATE TABLE IF NOT EXISTS node_pairings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  code TEXT NOT NULL,
+  expires_at REAL NOT NULL,
+  used_at TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS nodes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  secret TEXT NOT NULL,
+  status TEXT NOT NULL,
+  info TEXT NOT NULL DEFAULT '{}',
+  last_seen REAL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS node_assignments (
+  agent_id INTEGER PRIMARY KEY,
+  node_id INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS node_jobs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  node_id INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  archive TEXT,
+  result TEXT,
+  error TEXT,
+  deadline REAL NOT NULL,
+  created_at TEXT NOT NULL,
+  claimed_at REAL,
+  finished_at TEXT
+);
 CREATE TABLE IF NOT EXISTS machine_installs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tool TEXT NOT NULL,

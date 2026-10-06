@@ -14,6 +14,7 @@ from .integrations import Integrations
 from .memory import Memory
 from .failover import Failover
 from .machine import Machine
+from .nodes import Nodes
 from .production import Production
 from .routing import ModelRouter
 from .operations_store import initialize
@@ -90,6 +91,8 @@ class Company:
         self.workers = Workers(self)
         self.production = Production(self)
         self.machine = Machine(self)
+        self.nodes = Nodes(self)
+        self.runtime.nodes = self.nodes
         self.pipeline.machine = self.machine
         self.pipeline.production = self.production
         self.arena = Arena(self)

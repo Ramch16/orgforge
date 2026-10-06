@@ -46,6 +46,7 @@ class AgentRuntime:
         self.learning = None
         self.router = None
         self.failover = None
+        self.nodes = None                   # worker machines (set by Company)
         self.integrations = None
 
     def _system(self, agent: dict, role: dict, on_project: bool = False, chat_with: str | None = None,
@@ -254,9 +255,23 @@ class AgentRuntime:
             prompt += f"\n\nThe project's tickets right now:\n{board}"
         can_write = bool(ws) and bool({"write_file", "replace_in_file"} & set(names))   # same rights as the role's tools
         can_run = bool(ws) and "run_command" in names
+        node = self.nodes.assigned(agent) if self.nodes else None
         try:
-            out = run_cli(engine, system=system, prompt=prompt, cwd=str(ws.root) if ws else None, model=model,
-                          write=can_write, run=can_run, timeout=self.s.cli_timeout)
+            out = None
+            if node:                          # this seat works on another computer
+                from .nodes import NodeOffline
+                try:
+                    out = self.nodes.run(node, engine=engine_name, model=model, system=system, prompt=prompt, ws=ws,
+                                         write=can_write, run=can_run, timeout=self.s.cli_timeout, agent=agent["name"])
+                except NodeOffline as exc:
+                    import shutil
+                    if not shutil.which(engine["command"][0]):
+                        raise
+                    self.db.log("machine", f"{exc}; {agent['name']} works on this computer meanwhile.",
+                                project_id, actor=agent["name"])
+            if out is None:
+                out = run_cli(engine, system=system, prompt=prompt, cwd=str(ws.root) if ws else None, model=model,
+                              write=can_write, run=can_run, timeout=self.s.cli_timeout)
         except EngineUnavailable as exc:      # a usage limit is nobody's failure: stop, don't score or rework
             raise EngineUnavailable(f"{engine_name} is unavailable: {exc}") from exc
         except EngineError as exc:
@@ -268,7 +283,8 @@ class AgentRuntime:
                      run_id=meta.get('run_id'))
         text, data, problem = parse_block(out["text"])
         if meta.get("run_id") and self.runs:
-            self.runs.event(meta["run_id"], "text", f"(through {engine_name}, {out['turns']} turns)")
+            self.runs.event(meta["run_id"], "text", f"(through {engine_name}, {out['turns']} turns"
+                            + (f", on worker machine '{out['node']}')" if out.get("node") else ")"))
         result.turns, result.completed = out["turns"], not out["is_error"]
         notes = [problem] if problem else []
         for name, args in actions_to_calls(data):

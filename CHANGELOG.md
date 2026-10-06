@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.16.0 (in progress)
+- **Worker machines.** Other computers can run agents' coding CLIs for the company: pair with a
+  one-time code (`orgforge machines pair`, `orgforge worker join`), assign CLI agents to them, and
+  their CLI work runs there on that machine's logins while reviews and checks stay here. Workers
+  connect out and need no open port; pairing proves the code both ways without sending it; every
+  request and reply is signed with a timestamp and single-use nonce; jobs name an engine, never a
+  command; workspaces travel as archives without dependency folders and changes come back as
+  patches. An offline worker hands the turn back to this computer when the engine is installed
+  here. Machine in the dashboard pairs, assigns and revokes.
+
 ## 0.15.0 (in progress)
 - **Machine readiness.** `orgforge doctor` and a Machine page show what the company and each
   project need (from agents' engines, the sandbox, project files, `product.json` and production
