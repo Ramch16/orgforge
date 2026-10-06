@@ -6,12 +6,14 @@ import secrets
 import shutil
 import tempfile
 import threading
+import json
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from starlette.background import BackgroundTask
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .chat import ChatError
 from .company import Company
@@ -107,8 +109,48 @@ class Message(BaseModel):
     project_id: int | None = None
 
 
+class WorkerRequest(BaseModel):
+    name: str = Field(min_length=1,max_length=100)
+    project_id: int
+    kind: str
+    interval_seconds: int = Field(ge=10)
+    config: dict = Field(default_factory=dict)
+
+class ObservationRequest(BaseModel):
+    project_id: int
+    source: str = Field(min_length=1,max_length=200)
+    title: str = Field(min_length=1,max_length=200)
+    body: str = Field(min_length=1,max_length=8000)
+    severity: str = 'error'
+    event_key: str | None = Field(default=None,max_length=200)
+
+class ArenaRequest(BaseModel):
+    goal: str = Field(min_length=1,max_length=8000)
+    candidates: list[dict] = Field(min_length=2,max_length=8)
+    checks: list[str] | None = None
+
+class CustomerRequest(BaseModel):
+    journeys: dict
+
+class RedTeamRequest(BaseModel):
+    commands: list[str] = Field(min_length=1,max_length=30)
+
+class PackageRequest(BaseModel):
+    manifest: dict
+    assets: dict[str,str]
+
+class InstallRequest(BaseModel):
+    name: str
+    sha256: str
+
+
 def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
-    app = FastAPI(title="OrgForge", docs_url=None, redoc_url=None)
+    @asynccontextmanager
+    async def lifespan(app):
+        if co.workers.service()['enabled']:co.workers.start()
+        try:yield
+        finally:co.workers.stop()
+    app = FastAPI(title="OrgForge", docs_url=None, redoc_url=None,lifespan=lifespan)
 
     def auth(x_token: str = Header(default="")) -> str:
         for role, token in tokens.items():
@@ -116,10 +158,10 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
                 return role
         raise HTTPException(401, "Sign in with your CEO or CTO token.")
 
-    def run_in_background(pid: int) -> None:
+    def run_in_background(pid: int, **limits) -> None:
         def work():
             try:
-                co.pipeline.advance(pid)
+                co.pipeline.advance(pid, **limits)
             except Exception:
                 pass                            # already written to the activity log
         threading.Thread(target=work, daemon=True).start()
@@ -132,7 +174,7 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
             return fn()
         except PermissionError as exc:
             raise HTTPException(403, str(exc))
-        except (OrgError, PipelineError, TicketError, ChatError, FeedbackError, ToolError, ValueError) as exc:
+        except (OrgError, PipelineError, TicketError, ChatError, FeedbackError, ToolError, ValueError, KeyError, TypeError) as exc:
             raise HTTPException(400, str(exc))
 
     def managed(role: str, ref: int) -> dict:
@@ -173,6 +215,98 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
     def service_worker():
         return FileResponse(STATIC / "sw.js", media_type="text/javascript")
 
+    @app.get('/healthz')
+    def health():
+        co.db.one('SELECT 1 AS ready')
+        return {'status':'ok'}
+
+    @app.get('/api/operations')
+    def operations(role: str = Depends(auth)):
+        from .observability import sanitize
+        return sanitize({'service':co.workers.service(),'workers':co.workers.list(),'worker_runs':co.db.all('SELECT * FROM worker_runs ORDER BY id DESC LIMIT 100'),
+                         'observations':co.observability.list(),'learning':co.learning.summary(),
+                         'arena':co.db.all('SELECT id,project_id,status,winner,created_at FROM arena_runs ORDER BY id DESC LIMIT 50'),
+                         'assessments':co.db.all('SELECT id,project_id,kind,status,revision,created_at FROM company_assessments ORDER BY id DESC LIMIT 50'),
+                         'marketplace':co.marketplace.list()})
+
+    @app.post('/api/workers')
+    def add_worker(data: WorkerRequest,role: str = Depends(auth)):
+        return guard(lambda:co.workers.add(**data.model_dump()))
+
+    @app.post('/api/workers/service')
+    def worker_service(enabled: bool,role: str = Depends(auth)):
+        return guard(lambda:co.workers.service(enabled))
+
+    @app.post('/api/workers/tick')
+    def worker_tick(role: str = Depends(auth)):
+        return guard(lambda:co.workers.tick())
+
+    @app.post('/api/workers/{job_id}/enabled')
+    def toggle_worker(job_id: int,enabled: bool,role: str = Depends(auth)):
+        guard(lambda:co.workers.enable(job_id,enabled));return {'id':job_id,'enabled':enabled}
+
+    @app.post('/api/observations')
+    def observation(data: ObservationRequest,role: str = Depends(auth)):
+        return guard(lambda:co.observability.ingest(**data.model_dump()))
+
+    @app.post('/api/telemetry/events')
+    def ingest_event(data: ObservationRequest,x_observation_token: str = Header(default='')):
+        config=co.s.raw.get('observability') or {}
+        expected=os.environ.get(config.get('key_env','ORGFORGE_OBSERVABILITY_TOKEN'),'')
+        if len(expected)<32 or not x_observation_token or not secrets.compare_digest(expected,x_observation_token):
+            raise HTTPException(403,'Observation credential is missing or invalid.')
+        if data.project_id not in (config.get('projects') or []):raise HTTPException(403,'Observation project is outside the producer scope.')
+        return guard(lambda:co.observability.ingest(**data.model_dump()))
+
+    @app.post('/api/projects/{pid}/arena')
+    def arena(pid: int,data: ArenaRequest,role: str = Depends(auth)):
+        return guard(lambda:co.arena.compete(pid,**data.model_dump()))
+
+    @app.get('/api/arena/{run_id}')
+    def arena_result(run_id: int,role: str = Depends(auth)):
+        return guard(lambda:co.arena.get(run_id))
+
+    @app.post('/api/projects/{pid}/customers')
+    def customers(pid: int,data: CustomerRequest,role: str = Depends(auth)):
+        return guard(lambda:co.assessments.customers(pid,data.journeys))
+
+    @app.post('/api/projects/{pid}/board')
+    def board(pid: int,role: str = Depends(auth)):
+        if role!='ceo':raise HTTPException(403,'Only the CEO commissions board reviews.')
+        return guard(lambda:co.assessments.board(pid))
+
+    @app.post('/api/projects/{pid}/red-team')
+    def red_team(pid: int,data: RedTeamRequest,role: str = Depends(auth)):
+        return guard(lambda:co.assessments.red_team(pid,data.commands))
+
+    @app.post('/api/projects/{pid}/security-scan')
+    def security_scan(pid: int,role: str = Depends(auth)):
+        return guard(lambda:co.security.scan(pid))
+
+    @app.get('/api/assessments/{run_id}')
+    def assessment(run_id: int,role: str = Depends(auth)):
+        return guard(lambda:co.assessments.get(run_id))
+
+    @app.post('/api/marketplace/register')
+    def register_package(data: PackageRequest,role: str = Depends(auth)):
+        if role!='ceo':raise HTTPException(403,'Only the CEO manages company packages.')
+        return guard(lambda:co.marketplace.register(data.manifest,data.assets))
+
+    @app.post('/api/marketplace/install')
+    def install_package(data: InstallRequest,role: str = Depends(auth)):
+        if role!='ceo':raise HTTPException(403,'Only the CEO manages company packages.')
+        return guard(lambda:co.marketplace.install(data.name,data.sha256))
+
+    @app.post('/api/federation/inbox')
+    async def federation_inbox(request: Request):
+        body=bytearray()
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body)>64000:raise HTTPException(413,'Federation envelope exceeds 64KB.')
+        try:envelope=json.loads(body)
+        except ValueError:raise HTTPException(400,'Malformed federation envelope.')
+        return guard(lambda:co.federation.receive(envelope))
+
     @app.get("/api/state")
     def state(role: str = Depends(auth)) -> dict:
         return {
@@ -192,11 +326,34 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
             "costs": cost_summary(co.db),
             "presence": presence(co.db),
             "memories": co.memory.list(limit=60),
+            "routing": co.router.summary(),
             "skills": [{k: s[k] for k in ("name", "title", "kinds", "departments", "enabled", "builtin", "source")} for s in co.skills.all()],
             "telemetry": telemetry(co.db),
             "chats": co.db.all("SELECT agent_id, MAX(id) AS last_id, SUM(status='pending') AS pending FROM messages "
                                "WHERE human=? GROUP BY agent_id", role),
         }
+
+    @app.get('/api/projects/{pid}/swarm')
+    def swarm(pid: int, role: str = Depends(auth)):
+        guard(lambda: co.pipeline.project(pid))
+        return co.swarms.snapshot(pid)
+
+    @app.get('/api/routing')
+    def routing(role: str = Depends(auth)):
+        return co.router.summary()
+
+    @app.get('/api/memories')
+    def memories(query: str, project_id: int | None = None, category: str | None = None,
+                 include_history: bool = False, role: str = Depends(auth)):
+        return guard(lambda: co.memory.search(project_id, query, category=category, include_history=include_history))
+
+    @app.post('/api/projects/{pid}/work')
+    def work(pid: int, cycles: int = 5, seconds: float = 300, role: str = Depends(auth)):
+        guard(lambda: co.pipeline.project(pid))
+        if not 1 <= cycles <= 100 or not 0 < seconds <= 3600:
+            raise HTTPException(400, 'Use 1–100 cycles and a time budget of at most 3600 seconds.')
+        run_in_background(pid, max_cycles=cycles, max_seconds=seconds)
+        return {'project_id': pid, 'cycles': cycles, 'seconds': seconds}
 
     @app.post("/api/projects")
     def new_project(body: NewProject, role: str = Depends(auth)) -> dict:

@@ -1,0 +1,21 @@
+services:
+  orgforge:
+    ports: !reset []
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      ORGFORGE_DOMAIN: ${ORGFORGE_DOMAIN:?Set the public hostname pointing at this server}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - proxy_data:/data
+      - proxy_config:/config
+    depends_on:
+      orgforge:
+        condition: service_healthy
+volumes:
+  proxy_data:
+  proxy_config:

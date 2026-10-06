@@ -248,6 +248,8 @@
       <button class="nav" data-go="projects"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Projects</button>
       <button class="nav" data-go="tickets"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></svg>Tickets</button>
       <button class="nav" data-go="team"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg>Team</button>
+      <button class="nav" data-go="operations"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Operations</button>
+      <button class="nav" data-go="brain"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h5"/></svg>Company knowledge</button>
       <button class="nav" data-go="costs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M17 6.5c0-1.9-2.2-3-5-3s-5 1.3-5 3.5 2.2 3 5 3.5 5 1.5 5 3.5-2.2 3.5-5 3.5-5-1.1-5-3"/></svg>Costs</button>
       <button class="nav" data-go="activity"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Activity</button>
       <div class="me"><span class="who" id="whoami"></span><button class="quiet" id="signout">Sign out</button></div>
@@ -308,6 +310,41 @@
         <div id="people"></div>
       </section>
 
+      <section class="view" data-view="operations" hidden>
+        <div class="page-head"><div><h1>Operations</h1><p>Scheduled employees, incidents, learning, competitions and independent reviews.</p></div><button id="ops-refresh">Refresh</button></div>
+        <div class="card"><div class="card-head"><h2>Scheduled employees</h2><div class="actions"><button id="ops-service">Start scheduler</button><button id="ops-tick">Run due jobs</button></div></div>
+          <p id="ops-service-status" class="muted"></p><div id="ops-workers"></div>
+          <form id="ops-worker-form"><div class="row">
+            <label class="field"><span>Name</span><input id="ops-name" required></label>
+            <label class="field"><span>Project</span><select id="ops-project" required></select></label>
+            <label class="field"><span>Employee</span><select id="ops-kind"><option value="check">QA check</option><option value="security">Security scan</option><option value="performance">Performance check</option><option value="documentation">Documentation check</option><option value="report">Status report</option><option value="work">Bounded engineering work</option></select></label>
+            <label class="field"><span>Interval in seconds</span><input id="ops-interval" type="number" min="10" value="3600" required></label></div>
+            <label class="field"><span>Command (optional for security, reports and bounded work)</span><input id="ops-command" placeholder="python -m pytest -q"></label>
+            <button class="primary" type="submit">Schedule employee</button></form></div>
+        <div class="card"><h2>Incidents awaiting triage</h2><div id="ops-observations"></div></div>
+        <div class="card"><h2>Learned approaches</h2><div id="ops-learning"></div></div>
+        <div class="card"><h2>Competitions and reviews</h2><p class="muted">Executable competition and customer evidence is separate from board judgement.</p><div id="ops-evaluations"></div></div>
+        <div class="card"><h2>Agent package catalog</h2><p class="muted">Installation requires the CEO and a reviewed content checksum.</p><div id="ops-marketplace"></div></div>
+      </section>
+      <section class="view" data-view="brain" hidden>
+        <div class="page-head"><div><h1>Company knowledge</h1><p>Find past decisions, inspect project teams, and compare model results.</p></div></div>
+        <div class="card"><h2>Search memory</h2>
+          <form id="memory-search">
+            <label class="field"><span>Question or keywords</span><input id="memory-query" required placeholder="Why did we choose PostgreSQL?"></label>
+            <div class="row"><label>Project <select id="brain-project"></select></label>
+              <label>Category <select id="memory-category"><option value="">All categories</option>
+                <option>business</option><option>product</option><option>architecture</option><option>code</option>
+                <option>customer</option><option>security</option><option>agent</option><option>failure</option><option>decision</option></select></label>
+              <label class="row"><input type="checkbox" id="memory-history" checked style="width:auto"> Include past projects</label>
+              <button class="primary" type="submit">Search</button></div>
+          </form><div id="memory-results" aria-live="polite"></div>
+        </div>
+        <div class="card"><div class="card-head"><h2>Project team</h2><button id="brain-team-load">Show selected team</button></div>
+          <div id="brain-team"><p class="muted">Choose a project above to inspect its team and workload.</p></div></div>
+        <div class="card"><h2>Model results</h2><p class="muted">Completed runs and work that passed review are counted separately. Costs are estimates.</p>
+          <div id="brain-routing"></div></div>
+      </section>
+
       <section class="view" data-view="costs" hidden>
         <div class="page-head"><div><h1>Costs</h1><p>What the AI work has cost, estimated from Anthropic list prices.</p></div></div>
         <div id="costs"></div>
@@ -323,6 +360,7 @@
   <div id="error" role="alert"></div>
 </div>
 
+<dialog id="ops-detail"><h2>Evidence</h2><pre id="ops-detail-body" style="white-space:pre-wrap;max-height:65vh;overflow:auto"></pre><button data-close="ops-detail">Close</button></dialog>
 <dialog id="idea-dlg">
   <div class="row" style="justify-content:space-between"><h2 style="margin:0">New idea or project</h2><button class="quiet" data-close="idea-dlg">Close</button></div>
   <label class="field"><span>Name</span><input id="p-name" placeholder="e.g. Leave Tracker"></label>
@@ -444,8 +482,66 @@ async function refresh(force) {
   if (openTicketId && !force) loadTicket(openTicketId).catch(() => {});
 }
 
+
+
+let operationsLoading = false, operationsData = null;
+async function loadOperations() {
+  if (operationsLoading) return;
+  operationsLoading = true;
+  try {
+    const data = await api('/api/operations');operationsData=data;
+    $("ops-service").textContent=data.service.enabled ? "Stop scheduler" : "Start scheduler";
+    $("ops-service-status").textContent=data.service.running ? "Scheduler running" : data.service.enabled ? "Scheduler enabled; starts with the company service" : "Scheduler stopped. Jobs are saved and can run on demand.";
+    paint('ops-workers',data.workers.map(j => `<div class="ev"><span class="grow"><b>${esc(j.name)}</b> · ${esc(j.kind)} · every ${j.interval_seconds}s · ${j.enabled ? "enabled" : "disabled"}</span><button data-worker-toggle="${j.id}" data-enabled="${!j.enabled}">${j.enabled ? "Disable" : "Enable"}</button></div>`).join('') || `<p class="muted">No scheduled employees yet.</p>`);
+    paint('ops-observations',data.observations.map(o => `<div class="ev"><span class="grow"><b>${esc(o.title)}</b> · ${esc(o.severity)} · ${o.occurrences} occurrence(s)<br>${esc(o.body)}</span>${o.ticket_id ? `<button data-ticket="${o.ticket_id}">T-${o.ticket_id}</button>` : ""}</div>`).join('') || `<p class="muted">No incidents recorded.</p>`);
+    paint('ops-learning',data.learning.map(t => `<p><b>${esc(t.strategy)}</b> · ${esc(t.task_kind)} · ${esc(t.signature)}: ${t.successes} of ${t.attempts} reviewed attempts succeeded${t.quality == null ? "" : ` · quality ${t.quality.toFixed(0)}/100`}</p>`).join('') || `<p class="muted">Reviewed work contributes evidence here.</p>`);
+    paint('ops-evaluations',data.arena.map(a => `<div class="ev"><span class="grow">Competition ${a.id} · ${esc(a.status)} · winner: ${esc(a.winner || "none")}</span><button data-arena-detail="${a.id}">Evidence</button></div>`).join('') + data.assessments.map(a => `<div class="ev"><span class="grow">${esc(a.kind.replace(/_/g," "))} review ${a.id} · ${esc(a.status)}</span><button data-assessment-detail="${a.id}">Evidence</button></div>`).join('') || `<p class="muted">Run a competition, customer journey, security check or board review to collect evidence.</p>`);
+    paint('ops-marketplace',data.marketplace.map(p => `<div class="ev"><span class="grow"><b>${esc(p.name)}</b> · ${p.installed ? "installed" : "review available"}<br><small>${esc(p.digest)}</small></span></div>`).join('') || `<p class="muted">Register a reviewed agent package to populate the catalog.</p>`);
+  } finally {operationsLoading=false;}
+}
+$("ops-refresh").onclick=()=>act(loadOperations);
+$("ops-tick").onclick=()=>act(async()=>{await api('/api/workers/tick',{});await loadOperations();});
+$("ops-service").onclick=()=>act(async()=>{await api('/api/workers/service?enabled='+!operationsData?.service.enabled,{});await loadOperations();});
+$("ops-worker-form").onsubmit=e=>{e.preventDefault();act(async()=>{
+  const command=$("ops-command").value.trim();
+  await api('/api/workers',{name:$("ops-name").value,project_id:Number($("ops-project").value),kind:$("ops-kind").value,interval_seconds:Number($("ops-interval").value),config:command ? {command} : {}});
+  $("ops-name").value='';$("ops-command").value='';await loadOperations();
+});};
+document.addEventListener('click',e=>{
+  const toggle=e.target.closest('[data-worker-toggle]');
+  if(toggle)act(async()=>{await api(`/api/workers/${toggle.dataset.workerToggle}/enabled?enabled=${toggle.dataset.enabled}`,{});await loadOperations();});
+  const detail=e.target.closest('[data-arena-detail],[data-assessment-detail]');
+  if(detail)act(async()=>{const result=await api(detail.dataset.arenaDetail ? `/api/arena/${detail.dataset.arenaDetail}` : `/api/assessments/${detail.dataset.assessmentDetail}`);$("ops-detail-body").textContent=JSON.stringify(result,null,2);$("ops-detail").showModal();});
+});
+
+function renderBrain() {
+  options($("brain-project"), [["", "Company-wide"], ...state.projects.map(p => [p.id, p.name])]);
+  const rows = state.routing || [];
+  paint("brain-routing", rows.length ? `<div style="overflow:auto"><table><thead><tr><th>Model</th><th>Work</th><th>Runs</th><th>Passed review</th><th>Quality</th><th>Time per run</th><th>Cost per success</th></tr></thead><tbody>${rows.map(r =>
+    `<tr><td>${esc(r.model)}</td><td>${esc(r.task_kind)}</td><td>${r.runs}</td><td>${r.evaluated ? `${r.successes} / ${r.evaluated}` : "Not evaluated"}</td><td>${r.quality == null ? "—" : r.quality.toFixed(0) + "/100"}</td><td>${r.latency.toFixed(1)}s</td><td>${r.cost_per_success == null ? "—" : usd(r.cost_per_success)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">Model evidence appears here as the team completes work.</p>`);
+}
+$("memory-search").onsubmit = e => {
+  e.preventDefault();
+  act(async () => {
+    const params = new URLSearchParams({query: $("memory-query").value, include_history: $("memory-history").checked});
+    if ($("brain-project").value) params.set("project_id", $("brain-project").value);
+    if ($("memory-category").value) params.set("category", $("memory-category").value);
+    const rows = await api("/api/memories?" + params);
+    paint("memory-results", rows.map(m => `<div class="ev"><span class="grow">${esc(m.text)}<br><span class="muted">${esc(m.category)} · ${esc(m.author)} · ${esc(m.source || "No evidence reference supplied")}</span></span></div>`).join("") || `<p class="muted">No matching memories.</p>`);
+  });
+};
+$("brain-team-load").onclick = () => act(async () => {
+  const id = $("brain-project").value;
+  if (!id) { paint("brain-team", `<p class="muted">Choose a project first.</p>`); return; }
+  const team = await api(`/api/projects/${id}/swarm`);
+  paint("brain-team", `<p class="muted">${team.auto_staff ? "Automatic staffing enabled" : "Staffing changes require approval"}</p>` +
+    team.queues.map(q => `<p>${esc(q.role)}: ${q.waiting} waiting · ${q.staff} on staff${q.bottleneck ? " · workload bottleneck" : ""}</p>`).join("") +
+    (team.members.length ? `<table><thead><tr><th>Agent</th><th>Role</th><th>Task</th><th>Status</th></tr></thead><tbody>${team.members.map(m => `<tr><td>${esc(m.name)}</td><td>${esc(m.role)}</td><td>${esc(m.title)}</td><td>${esc(m.task_status)}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">A team forms when ready tickets are assigned.</p>`));
+});
+$("brain-project").onchange = () => paint("brain-team", `<p class="muted">Select Show selected team to refresh assignments.</p>`);
+
 // ---- pages and navigation ----
-const VIEWS = ["home", "office", "decisions", "projects", "project", "tickets", "team", "costs", "activity"];
+const VIEWS = ["home", "office", "decisions", "projects", "project", "tickets", "team", "operations", "brain", "costs", "activity"];
 let view = "home", viewId = null, dfilter = "mine";
 const expanded = new Set(), showDone = new Set(), painted = {}, projReports = {};
 const WAITING = ["idea_review", "idea_decision", "plan_approval", "prd_approval", "architecture_approval", "release_approval", "signoff"];
@@ -630,6 +726,9 @@ function renderProject() {
         ${p.kind === "task" ? `<button class="primary" data-changes="${p.id}">Changes</button>${p.base_branch ? `<button data-patch="${p.id}">Download patch</button>` : ""}`
           : state.idea_stages.includes(p.stage) && p.stage !== "plan_approval" ? "" : `<button class="primary" data-review="${p.id}">Review product</button>`}
         <button data-report="${p.id}">Status report</button>
+        ${me === "ceo" ? `<button data-board-review="${p.id}">Board review</button>` : ""}
+        <button data-security-scan="${p.id}">Security scan</button>
+        ${["idea", "plan", "prd", "architecture", "build"].includes(p.stage) ? `<button data-work="${p.id}" title="Run up to five work cycles; stop at approvals or budget limits">Work 5 cycles</button>` : ""}
         ${built(p) && p.kind !== "task" ? `<button data-feedback="${p.id}">Customer feedback</button>` : ""}
         ${pm ? `<button data-chat="${pm.id}">Message ${esc(pm.name)}</button>` : ""}
         ${p.stage === "parked" && me === "ceo" ? `<button data-revisit="${p.id}">Revisit this idea</button>` : ""}
@@ -654,7 +753,7 @@ function renderProject() {
             : `<p class="muted">No report yet. <button class="quiet" data-report="${p.id}">Ask for one</button></p>`}</div>
         <div class="card"><div class="card-head"><h2>Team memory</h2><span class="muted">what agents have learned</span></div>
           ${(state.memories || []).filter(m => m.project_id === p.id || m.project_id === null).slice(0, 8).map(m =>
-            `<div class="ev"><span class="grow">${esc(m.text)} <span class="muted">· ${esc(m.author)}${m.project_id === null ? ", company-wide" : ""}</span></span></div>`).join("")
+            `<div class="ev"><span class="grow">${esc(m.text)} <span class="muted">· ${esc(m.category || "decision")} · ${esc(m.author)}${m.project_id === null ? ", company-wide" : ""}</span></span></div>`).join("")
             || `<p class="muted">Nothing yet. Agents save lasting facts and decisions here as they work.</p>`}</div>
         <div class="card"><div class="card-head"><h2>Activity</h2></div>
           ${events.map(e => `<div class="ev"><span class="t">${ago(e.ts).replace(" ago", "")}</span><span class="grow"><span class="a">${esc(e.actor)}</span> ${linkTickets(esc(e.message))}</span></div>`).join("") || `<p class="muted">Nothing yet.</p>`}</div>
@@ -723,6 +822,9 @@ function render() {
   if (pick) $("h-role").value = pick;
   renderTickets();
   renderCosts();
+  renderBrain();
+  options($("ops-project"), state.projects.map(p => [p.id,p.name]));
+  if (view === "operations") loadOperations().catch(e => {$("error").textContent=e.message;});
 }
 
 document.addEventListener("click", e => {
@@ -1004,6 +1106,9 @@ document.addEventListener("click", e => {
   const d = e.target.dataset;
   if (d.decide) act(async () => { await api(`/api/approvals/${d.id}`, { decision: d.decide, feedback: drafts[d.id] || "", choice: d.choice || "" }); delete drafts[d.id]; });
   else if (d.revisit) act(() => api(`/api/projects/${d.revisit}/revisit`, {}));
+  else if (d.boardReview) act(async()=>{await api(`/api/projects/${d.boardReview}/board`,{});location.hash='#/operations';await loadOperations();});
+  else if (d.securityScan) act(async()=>{const report=await api(`/api/projects/${d.securityScan}/security-scan`,{});$("ops-detail-body").textContent=JSON.stringify(report,null,2);$("ops-detail").showModal();});
+  else if (d.work) act(() => api(`/api/projects/${d.work}/work?cycles=5&seconds=300`, {}));
   else if (d.run) act(() => api(`/api/projects/${d.run}/run`, {}));
   else if (d.rehire) act(() => api(`/api/agents/${d.rehire}/rehire`, {}));
   else if (d.fire) {

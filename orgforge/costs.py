@@ -28,15 +28,15 @@ def price(settings: Settings, model: str) -> tuple[float, float] | None:
 
 
 def record_usage(db: DB, settings: Settings, agent: dict, project_id: int | None, input_tokens: int,
-                 output_tokens: int, purpose: str = "", cost: float | None = None) -> float:
+                 output_tokens: int, purpose: str = "", cost: float | None = None, run_id: int | None = None) -> float:
     """Add one model call to the ledger (and the agent's running totals). Returns its estimated cost.
     `cost` overrides the price list: CLI engines report their own (0 on a flat-fee subscription)."""
     rate = (0.0, 0.0) if cost is not None else price(settings, agent["model"])
     if cost is None:
         cost = (input_tokens * rate[0] + output_tokens * rate[1]) / 1_000_000 if rate else 0.0
     db.run("INSERT INTO usage (agent_id, project_id, model, input_tokens, output_tokens, cost, priced, purpose, "
-           "created_at) VALUES (?,?,?,?,?,?,?,?,?)", agent["id"], project_id, agent["model"], input_tokens,
-           output_tokens, cost, 1 if rate else 0, purpose, now())
+           "created_at, run_id) VALUES (?,?,?,?,?,?,?,?,?,?)", agent["id"], project_id, agent["model"], input_tokens,
+           output_tokens, cost, 1 if rate else 0, purpose, now(), run_id)
     db.run("UPDATE agents SET input_tokens=input_tokens+?, output_tokens=output_tokens+? WHERE id=?",
            input_tokens, output_tokens, agent["id"])
     return cost

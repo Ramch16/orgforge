@@ -54,7 +54,9 @@ BUILTIN_ENGINES: dict[str, dict] = {
 }
 
 ACTIONS = {
+    'submit_journey': ('journey','{"steps": [{"action": "click|fill|assert_text|screenshot|goto", "selector": "...", "value": "..."}], "rationale": "customer goal"}'),
     # orgforge tool -> (key in the JSON block, how to describe its value)
+    'submit_evaluation': ('evaluation','{"scores": {"functionality": 0, "ux": 0, "security": 0, "cost": 0, "architecture": 0, "scalability": 0, "customer_value": 0, "maintainability": 0}, "findings": [{"title": "...", "body": "evidence", "severity": "error"}]}'),
     "submit_plan": ("plan", '[{"key": "short-id", "title": "...", "description": "what to build and how to tell it '
                             'is done", "role": "role id", "depends_on": ["other-key"]}]'),
     "submit_review": ("review", '{"score": 0-100, "verdict": "approve" or "request_changes", "notes": "concrete findings"}'),
@@ -114,7 +116,7 @@ def actions_to_calls(data: dict) -> list[tuple[str, dict]]:
     calls: list[tuple[str, dict]] = []
     if "plan" in data:
         calls.append(("submit_plan", {"tasks": data["plan"]}))
-    for key, tool in (("review", "submit_review"), ("assessment", "submit_assessment"),
+    for key, tool in (("journey", "submit_journey"), ("evaluation", "submit_evaluation"), ("review", "submit_review"), ("assessment", "submit_assessment"),
                       ("department_plan", "submit_department_plan"), ("transfer", "transfer_ticket")):
         if isinstance(data.get(key), dict):
             calls.append((tool, data[key]))

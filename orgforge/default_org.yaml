@@ -43,6 +43,37 @@ llm:
 #     prompt: arg
 #     output: text
 
+# Phase 1 integrations and routing are opt-in. See docs/PHASE1.md for examples.
+swarms:
+  auto_staff: false
+  capabilities: {}
+routing:
+  enabled: false
+  independent_reviews: false
+  rules: {}
+learning:
+  enabled: false
+  min_trials: 2
+  strategies: {}
+workers:
+  enabled: false
+  poll_seconds: 5
+observability:
+  key_env: ORGFORGE_OBSERVABILITY_TOKEN
+  projects: []
+security:
+  osv_enabled: false
+federation:
+  enabled: false
+  identity: ""
+  peers: {}
+tools:
+  mcp: {}
+  browser:
+    enabled: false
+    roles: []
+    timeout_seconds: 30
+
 sandbox:
   mode: local                    # local | docker (recommended for real work)
   docker_image: python:3.12-slim

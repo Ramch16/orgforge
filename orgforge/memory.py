@@ -10,14 +10,25 @@ import re
 
 from .db import DB, now
 
+CATEGORIES = ('business', 'product', 'architecture', 'code', 'customer', 'security', 'agent', 'failure', 'decision')
+
 MEMORY_TOOL_SPECS = {
     "remember": {
         "description": "Save a lasting fact or decision the team should know later: a convention, a choice and why, "
                        "a gotcha, a preference from the CEO or CTO. Not for progress updates (comment on the ticket).",
         "input_schema": {"type": "object", "properties": {
             "text": {"type": "string", "description": "One or two sentences"},
+            "category": {"type": "string", "enum": list(CATEGORIES)},
+            "source": {"type": "string", "description": "Evidence reference: document, ticket, or discussion"},
             "scope": {"type": "string", "enum": ["project", "company"],
                       "description": "project (default) or company-wide"}}, "required": ["text"]},
+    },
+    "recall_memory": {
+        "description": "Search persistent decisions and lessons; returns authors and evidence references. "
+                       "Set include_history to search past projects too.",
+        "input_schema": {"type": "object", "properties": {
+            "query": {"type": "string"}, "category": {"type": "string", "enum": list(CATEGORIES)},
+            "include_history": {"type": "boolean"}}, "required": ["query"]},
     },
 }
 WORD = re.compile(r"[a-z0-9]{3,}")
@@ -33,26 +44,52 @@ class Memory:
     def __init__(self, db: DB) -> None:
         self.db = db
 
-    def remember(self, text: str, author: str, project_id: int | None, scope: str = "project") -> str:
-        text = " ".join(str(text).split())[:600]
+    def remember(self, text: str, author: str, project_id: int | None, scope: str = "project",
+                 category: str = "decision", source: str = "") -> str:
+        if scope not in ('project', 'company') or category not in CATEGORIES:
+            raise ValueError('Use a supported memory scope and category.')
+        text = " ".join(str(text).split())[:4000]
         if len(text) < 8:
             raise ValueError("Write the fact in a sentence or two.")
         pid = None if scope == "company" or not project_id else project_id
-        same = self.db.one("SELECT id FROM memories WHERE lower(text)=lower(?) AND project_id IS ?", text, pid)
+        same = self.db.one("SELECT id FROM memories WHERE lower(text)=lower(?) AND project_id IS ? AND category=?",
+                           text, pid, category)
         if same:
             return "Already remembered."
-        self.db.run("INSERT INTO memories (project_id, author, text, created_at) VALUES (?,?,?,?)", pid, author, text, now())
+        self.db.run("INSERT INTO memories (project_id, author, text, created_at, category, source) VALUES (?,?,?,?,?,?)",
+                    pid, author, text, now(), category, str(source)[:1000])
         self.db.log("memory", f"{author} remembered: {text[:120]}", project_id, actor=author)
         return "Remembered" + (" for the whole company." if pid is None else " for this project.")
 
-    def recall(self, project_id: int | None, about: str, limit: int = 8) -> list[dict]:
-        """The memories most relevant to `about`: shared words first, then the newest."""
-        rows = self.db.all("SELECT * FROM memories WHERE project_id IS NULL OR project_id=? ORDER BY id DESC LIMIT 300",
-                           project_id)
-        want = words(about)
-        ranked = sorted(rows, key=lambda m: (len(want & words(m["text"])), m["project_id"] == project_id, m["id"]),
-                        reverse=True)
-        return ranked[:limit]
+    def recall(self, project_id: int | None, about: str, limit: int = 8, *, category: str | None = None,
+               include_history: bool = False) -> list[dict]:
+        """Context injection retains recent conventions when an assignment has no matching keywords."""
+        matched = self.search(project_id, about, limit, category=category, include_history=include_history)
+        return matched or self.search(project_id, '', limit, category=category, include_history=include_history)
+
+    def search(self, project_id: int | None, about: str, limit: int = 8, *, category: str | None = None,
+               include_history: bool = False) -> list[dict]:
+        """Indexed lexical retrieval across all retained memories, with explicit project scope."""
+        if category is not None and category not in CATEGORIES:
+            raise ValueError('Use a supported memory category.')
+        limit = max(1, min(100, int(limit)))
+        filters, args = [], []
+        if not include_history:
+            filters.append('(m.project_id IS NULL OR m.project_id=?)')
+            args.append(project_id)
+        if category:
+            filters.append('m.category=?')
+            args.append(category)
+        where = (' AND ' + ' AND '.join(filters)) if filters else ''
+        query = ' OR '.join('"' + w + '"' for w in sorted(words(about))[:50])
+        if query:
+            rows = self.db.all('SELECT m.* FROM memory_search JOIN memories m ON m.id=memory_search.rowid '
+                               'WHERE memory_search MATCH ?' + where +
+                               ' ORDER BY bm25(memory_search), m.id DESC LIMIT ?', query, *args, limit)
+            if rows:
+                return rows
+            return []
+        return self.db.all('SELECT m.* FROM memories m WHERE 1=1' + where + ' ORDER BY m.id DESC LIMIT ?', *args, limit)
 
     def list(self, project_id: int | None = None, limit: int = 50) -> list[dict]:
         if project_id:
@@ -65,4 +102,5 @@ class Memory:
         if not memories:
             return ""
         return ("What the team has learned (shared memory; follow it unless the CEO or CTO says otherwise):\n"
-                + "\n".join(f"- {m['text']}" for m in memories))
+                + "\n".join(f"- [{m.get('category', 'decision')}] {m['text']} "
+                            f"(by {m['author']}; source: {m.get('source') or 'not supplied'})" for m in memories))

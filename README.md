@@ -17,6 +17,18 @@ brief ─► requirements + UX design ─► CEO ─► architecture + plan ─�
                         fails: rework (max_rework times) ─► escalate to CTO                     then the audits run again
 ```
 
+## Adaptive company operations
+
+OrgForge now supports dynamic teams, persistent company memory, reviewed model/strategy
+routing, native MCP/browser tools, scheduled employees, benchmark competitions and
+production incident triage. Customer personas plan journeys that Chromium verifies;
+an independent board reports eight product dimensions for CEO review. Pinned role/skill
+packages and signed peer proposals connect the company to reviewed external work.
+
+Setup and scope: [Phase 1](docs/PHASE1.md), [Phase 2](docs/PHASE2.md),
+[Phase 3](docs/PHASE3.md), and [Docker/HTTPS hosting](docs/DEPLOYMENT.md).
+The Operations dashboard shows workers, incidents, learned approaches and assessment evidence.
+
 ## Verified product delivery (0.3)
 
 OrgForge now requires executable acceptance evidence before release. It remains
@@ -98,6 +110,21 @@ Python 3.11+ and git.
 pip install -e ".[dev]"
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+## Adaptive company foundations
+
+Project teams now adapt to ready work, with configurable role capabilities and
+optional capped automatic staffing. Persistent memory has nine categories,
+evidence references, and indexed retrieval across past projects. Optional model
+routing uses reviewed success, quality, latency, and cost; bounded autonomous
+work preserves human approvals. Role-scoped MCP tools and native browser journeys
+let API agents interact with external tools and validate real applications.
+
+The dashboard's **Company knowledge** page provides memory search, project teams,
+and model results. Start with `orgforge work 1 --cycles 5 --seconds 300`,
+`orgforge swarm 1`, `orgforge memory 'architecture decisions' --history`, and
+`orgforge routing`. Routing, automatic staffing, MCP, and browser access are opt-in.
+See [Phase 1 setup, configuration, and limitations](docs/PHASE1.md).
 
 ## The company
 
@@ -533,8 +560,8 @@ Each role gets only the tools listed for it.
   that bind fixed ports or write outside the workspace can clash; use `max_parallel: 1` or Docker for those.
   Reviewers, QA and auditors may check several tickets at once.
 - Long tasks are bounded by `llm.max_turns` and the model's context window.
-- Only the Anthropic provider and the offline mock are included. Another vendor
-  is one class with a `complete()` method in `orgforge/llm.py`.
+- Anthropic, the offline mock, OpenAI-compatible endpoints, and coding CLI engines
+  are supported. Another provider implements `complete()` in `orgforge/llm.py`.
 - API usage costs money, and the full company spends more of it: every task
   attempt is checked by three agents and every release by three auditors. To
   run leaner, let go of roles you do not need (`orgforge org fire Mani

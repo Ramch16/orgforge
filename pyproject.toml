@@ -18,6 +18,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "httpx>=0.27"]
+mcp = ["mcp>=1.12,<2"]
+browser = ["playwright>=1.48,<2"]
 
 [project.scripts]
 orgforge = "orgforge.cli:main"

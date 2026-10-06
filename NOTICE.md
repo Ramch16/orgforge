@@ -17,6 +17,8 @@ licensed and allow commercial use. Check each licence before you ship.
 | anthropic | MIT          |
 | FastAPI   | MIT          |
 | Uvicorn   | BSD-3-Clause |
+| mcp (optional) | MIT |
+| playwright (optional) | Apache-2.0 |
 
 Use of the Claude API is governed by Anthropic's commercial terms for your
 API account. Products your agents build may pull in their own dependencies;

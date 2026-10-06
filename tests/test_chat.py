@@ -55,7 +55,7 @@ def test_chat_tools_are_read_only_plus_tickets(tmp_path):
     p = co.pipeline.create_project("Greeter", "A tiny library.")
     co.chat.send("Hari", "cto", "How is it going?", project_id=p["id"], wait=True)
     offered = {t["name"] for t in provider.calls[-1]["tools"]}
-    assert offered == {"read_file", "list_files", "list_tickets", "view_ticket", "create_ticket", "comment_ticket"}
+    assert offered == {"read_file", "list_files", "list_tickets", "view_ticket", "create_ticket", "comment_ticket", "recall_memory"}
     assert "direct chat with Lucky" in provider.calls[-1]["system"]
     co.chat.send("Hari", "cto", "Thanks", wait=True)                 # no project: nothing to open
     assert provider.calls[-1]["tools"] == []

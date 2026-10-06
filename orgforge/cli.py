@@ -82,8 +82,37 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("new", help="Start a project from a brief")
     p.add_argument("name"); p.add_argument("--brief"); p.add_argument("--brief-file"); p.add_argument("--no-run", action="store_true")
     p = sub.add_parser("run", help="Continue a project until it needs a decision"); p.add_argument("project", type=int)
+    p = sub.add_parser('work', help='Run bounded autonomous cycles; preserve human approval gates')
+    p.add_argument('project', type=int)
+    p.add_argument('--cycles', type=int, default=5)
+    p.add_argument('--seconds', type=float, default=300)
+    p = sub.add_parser('swarm', help='Show the adaptive project team and workload bottlenecks')
+    p.add_argument('project', type=int)
+    p = sub.add_parser('memory', help='Search persistent company and project knowledge')
+    p.add_argument('query'); p.add_argument('--project', type=int); p.add_argument('--category')
+    p.add_argument('--history', action='store_true', help='Include other projects')
+    sub.add_parser('routing', help='Model performance evidence and costs')
     p = sub.add_parser("export", help="Package a signed-off product as a zip")
     p.add_argument("project", type=int); p.add_argument("--output", required=True)
+    p = sub.add_parser('learn',help='Review learned strategy evidence')
+    p.add_argument('--kind');p.add_argument('--signature')
+    p = sub.add_parser('workers',help='Schedule bounded company employees')
+    p.add_argument('action',choices=['list','add','tick','enable','disable'])
+    p.add_argument('--name');p.add_argument('--project',type=int);p.add_argument('--kind')
+    p.add_argument('--interval',type=int,default=3600);p.add_argument('--config');p.add_argument('--id',type=int)
+    p = sub.add_parser('observe',help='Record an incident for deduplicated triage')
+    p.add_argument('project',type=int);p.add_argument('--source',required=True);p.add_argument('--title',required=True)
+    p.add_argument('--body',required=True);p.add_argument('--severity',default='error')
+    p = sub.add_parser('arena',help='Benchmark strategies in isolated snapshots')
+    p.add_argument('project',type=int);p.add_argument('--goal',required=True);p.add_argument('--candidates',required=True)
+    p.add_argument('--check',action='append')
+    p = sub.add_parser('assess',help='Customer, board, or red-team evaluations')
+    p.add_argument('kind',choices=['customers','board','red-team','security','dependencies']);p.add_argument('project',type=int)
+    p.add_argument('--journeys');p.add_argument('--check',action='append')
+    p = sub.add_parser('marketplace',help='Review and install SHA256-pinned agent packages')
+    p.add_argument('action',choices=['list','register','install']);p.add_argument('--bundle');p.add_argument('--name');p.add_argument('--sha256')
+    p = sub.add_parser('federation',help='Exchange signed scoped proposals, observations, or results')
+    p.add_argument('action',choices=['sign','send','receive']);p.add_argument('--peer');p.add_argument('--kind');p.add_argument('--payload',required=True)
     sub.add_parser("status", help="Projects and tasks")
     p = sub.add_parser("inbox", help="Decisions waiting for you"); who(p)
     for name in ("approve", "reject"):
@@ -168,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     try:
         return _dispatch(args)
-    except (OrgError, PipelineError, TicketError, ChatError, FeedbackError, PermissionError, RuntimeError) as exc:
+    except (OrgError, PipelineError, TicketError, ChatError, FeedbackError, PermissionError, RuntimeError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
@@ -184,7 +213,44 @@ def _dispatch(args) -> int:
     co = Company(args.home)
     role = _role(args)
 
-    if args.cmd == "new":
+    if args.cmd == 'learn':
+        print(json.dumps(co.learning.summary(args.kind,args.signature),indent=2))
+    elif args.cmd=='workers':
+        if args.action=='list':result=co.workers.list()
+        elif args.action=='tick':result=co.workers.tick()
+        elif args.action in ('enable','disable'):
+            co.workers.enable(args.id,args.action=='enable');result={'id':args.id,'enabled':args.action=='enable'}
+        else:
+            if not args.name or args.project is None or not args.kind:raise ValueError('Worker add needs name, project and kind.')
+            result=co.workers.add(args.name,args.project,args.kind,args.interval,json.loads(Path(args.config).read_text()) if args.config else {})
+        print(json.dumps(result,indent=2))
+    elif args.cmd=='observe':
+        print(json.dumps(co.observability.ingest(args.project,args.source,args.title,args.body,args.severity),indent=2))
+    elif args.cmd=='arena':
+        print(json.dumps(co.arena.compete(args.project,args.goal,json.loads(Path(args.candidates).read_text()),args.check),indent=2))
+    elif args.cmd=='assess':
+        if args.kind=='board':result=co.assessments.board(args.project)
+        elif args.kind=='customers':
+            if not args.journeys:raise ValueError('Customer evaluation needs a journey JSON file.')
+            result=co.assessments.customers(args.project,json.loads(Path(args.journeys).read_text()))
+        elif args.kind=='red-team':result=co.assessments.red_team(args.project,args.check)
+        elif args.kind=='dependencies':result=co.security.dependencies(args.project)
+        else:result=co.security.scan(args.project)
+        print(json.dumps(result,indent=2))
+    elif args.cmd=='marketplace':
+        if args.action=='list':result=co.marketplace.list()
+        elif args.action=='register':
+            if not args.bundle:raise ValueError('Registration needs a bundle JSON file.')
+            bundle=json.loads(Path(args.bundle).read_text());result=co.marketplace.register(bundle['manifest'],bundle['assets'])
+        else:result=co.marketplace.install(args.name,args.sha256)
+        print(json.dumps(result,indent=2))
+    elif args.cmd=='federation':
+        payload=json.loads(Path(args.payload).read_text())
+        if args.action=='receive':result=co.federation.receive(payload)
+        elif args.action=='sign':result=co.federation.envelope(args.peer,args.kind,payload)
+        else:result=co.federation.send(args.peer,args.kind,payload)
+        print(json.dumps(result,indent=2))
+    elif args.cmd == "new":
         brief = Path(args.brief_file).read_text() if args.brief_file else args.brief
         if not brief:
             raise PipelineError("Give the brief with --brief or --brief-file.")
@@ -192,6 +258,18 @@ def _dispatch(args) -> int:
         print(f"Project {project['id']} created: {project['workspace']}")
         if not args.no_run:
             _advance(co, project["id"])
+    elif args.cmd == 'work':
+        project = co.pipeline.advance(args.project, max_cycles=args.cycles, max_seconds=args.seconds)
+        print(f"Project {args.project}: {project['stage']} (bounded work cycle complete)")
+        _print_inbox(co, None)
+    elif args.cmd == 'swarm':
+        co.pipeline.project(args.project)
+        print(json.dumps(co.swarms.snapshot(args.project), indent=2))
+    elif args.cmd == 'memory':
+        print(json.dumps(co.memory.search(args.project, args.query, category=args.category,
+                                        include_history=args.history), indent=2))
+    elif args.cmd == 'routing':
+        print(json.dumps(co.router.summary(), indent=2))
     elif args.cmd == "run":
         _advance(co, args.project)
     elif args.cmd == "export":

@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 from .db import now
 
-CHAT_TOOLS = {"read_file", "list_files", "list_tickets", "view_ticket", "create_ticket", "comment_ticket"}
+CHAT_TOOLS = {"read_file", "list_files", "list_tickets", "view_ticket", "create_ticket", "comment_ticket", "recall_memory"}
 READ_TOOLS = {"read_file", "list_files", "list_tickets", "view_ticket"}
 HISTORY = 30                                    # earlier messages the agent sees when replying
 STALE = timedelta(minutes=15)                   # a reply still pending after this is treated as lost

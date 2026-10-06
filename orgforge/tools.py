@@ -30,7 +30,7 @@ DENIED = [
 ]
 
 
-GITIGNORE = ["__pycache__/", "*.py[cod]", ".pytest_cache/", ".mypy_cache/", ".ruff_cache/", ".coverage", "htmlcov/",
+GITIGNORE = [".orgforge/browser/", "__pycache__/", "*.py[cod]", ".pytest_cache/", ".mypy_cache/", ".ruff_cache/", ".coverage", "htmlcov/",
              ".venv/", "venv/", "node_modules/", "dist/", "*.egg-info/", ".next/", ".cache/", "*.log", ".DS_Store"]
 
 
@@ -124,6 +124,46 @@ TOOL_SPECS: dict[str, dict] = {
         ),
     },
 }
+
+
+INTEGRATION_SPECS = {
+    'mcp_list_tools': {
+        'description': 'List the tools permitted on a configured MCP server.',
+        'input_schema': {'type': 'object', 'properties': {'server': {'type': 'string'}}, 'required': ['server']},
+    },
+    'mcp_call': {
+        'description': 'Call a company-configured MCP tool. Inspect its schema with mcp_list_tools first.',
+        'input_schema': {'type': 'object', 'properties': {
+            'server': {'type': 'string'}, 'tool': {'type': 'string'}, 'arguments': {'type': 'object'}},
+            'required': ['server', 'tool', 'arguments']},
+    },
+    'browser_journey': {
+        'description': 'Use the application in a fresh browser: navigate, fill, click, assert text and save screenshots. '
+                       'A journey retains login state between steps. Returns page text and screenshot paths.',
+        'input_schema': {'type': 'object', 'properties': {
+            'url': {'type': 'string'}, 'steps': {'type': 'array', 'maxItems': 30, 'items': {
+                'type': 'object', 'properties': {
+                    'action': {'type': 'string', 'enum': ['click', 'fill', 'assert_text', 'screenshot', 'goto']},
+                    'selector': {'type': 'string'}, 'value': {'type': 'string'}, 'path': {'type': 'string'}},
+                'required': ['action']}}}, 'required': ['url']},
+    },
+}
+
+TOOL_SPECS.update(INTEGRATION_SPECS)
+TOOL_SPECS['submit_evaluation'] = {'description':'Submit an independent board assessment with eight evidence-based scores and findings.',
+ 'input_schema':{'type':'object','properties':{
+ 'scores':{'type':'object','properties':{d:{'type':'number','minimum':0,'maximum':100} for d in
+ ('functionality','ux','security','cost','architecture','scalability','customer_value','maintainability')},
+ 'required':['functionality','ux','security','cost','architecture','scalability','customer_value','maintainability'],'additionalProperties':False},
+ 'findings':{'type':'array','items':{'type':'object','properties':{'title':{'type':'string'},'body':{'type':'string'},
+ 'severity':{'type':'string','enum':['info','warning','error','critical']}},'required':['title','body','severity']}}},
+ 'required':['scores','findings']}}
+
+
+TOOL_SPECS['submit_journey'] = {'description':'Propose a browser journey for your customer persona. It will be independently executed; include an assert_text step.',
+ 'input_schema':{'type':'object','properties':{'rationale':{'type':'string'},'steps':{'type':'array','minItems':1,'maxItems':30,
+ 'items':{'type':'object','properties':{'action':{'type':'string','enum':['click','fill','assert_text','screenshot','goto']},
+ 'selector':{'type':'string'},'value':{'type':'string'},'path':{'type':'string'}},'required':['action']}}},'required':['steps','rationale']}}
 
 
 def tool_schema(name: str) -> dict:

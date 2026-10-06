@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+- Reviewed strategy trajectories, task-specific routing evidence and cost per successful run.
+- Persistent scheduled employees with leases, heartbeats, retries and dashboard lifecycle controls.
+- Immutable benchmark competitions with separate candidate artifacts and no automatic promotion.
+- Scoped production observations, deduplicated incident tickets, local credential scans, optional OSV and executable red-team checks.
+- Model-planned customer personas verified in Chromium; independent eight-dimension board reviews with CEO decisions and stale-revision checks.
+- SHA256-pinned local agent/skill catalog and signed, scoped, replay-safe federation proposals/results.
+- Nonroot Docker hosting, persistent company volume, health checks, SQLite backups and Caddy HTTPS deployment files.
+- Adaptive project teams with persisted assignments, configured capability matching,
+  bottleneck visibility, and opt-in staffing bounded by existing role caps.
+- Nine-category persistent memory with evidence references, SQLite FTS5 retrieval,
+  migration of old memories, cross-project search, and failed-review lessons.
+- Opt-in model selection from reviewed success/quality, latency and estimated costs;
+  selected-model usage attribution and optional independent review models.
+- Bounded `work` cycles that resume project state while preserving approval gates.
+- Optional role-scoped stdio MCP tools and native Chromium journeys with origin
+  restrictions, executable assertions and workspace screenshots.
+- Company knowledge dashboard for memory, teams and model performance, with
+  authenticated APIs and setup documentation in `docs/PHASE1.md`.
+
+
 ## 0.12.0
 - **Skills.** Guidelines agents work by, by kind of role and department, on every engine. Built
   in: the Karpathy coding guidelines (andrej-karpathy-skills, MIT), on for technical roles. Add

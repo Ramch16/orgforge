@@ -138,6 +138,29 @@ CREATE TABLE IF NOT EXISTS memories (
   text TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS swarm_members (
+  project_id INTEGER NOT NULL,
+  agent_id INTEGER NOT NULL,
+  task_id INTEGER NOT NULL,
+  assigned_at TEXT NOT NULL,
+  PRIMARY KEY (project_id, task_id)
+);
+CREATE TABLE IF NOT EXISTS routing_decisions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id INTEGER NOT NULL,
+  project_id INTEGER,
+  task_id INTEGER,
+  task_kind TEXT NOT NULL,
+  model TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'running',
+  success INTEGER,
+  quality REAL,
+  latency REAL NOT NULL DEFAULT 0,
+  cost REAL NOT NULL DEFAULT 0,
+  priced INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   agent_id INTEGER NOT NULL,
@@ -217,6 +240,30 @@ class DB:
         self._migrate()
 
     def _migrate(self) -> None:
+        usage_columns = {r['name'] for r in self.conn.execute('PRAGMA table_info(usage)')}
+        if 'run_id' not in usage_columns:
+            self.conn.execute('ALTER TABLE usage ADD COLUMN run_id INTEGER')
+        have = {r["name"] for r in self.conn.execute("PRAGMA table_info(memories)")}
+        for column, default in (("category", "decision"), ("source", "")):
+            if column not in have:
+                self.conn.execute(f"ALTER TABLE memories ADD COLUMN {column} TEXT NOT NULL DEFAULT '{default}'")
+        had_memory_index = self.conn.execute("SELECT 1 FROM sqlite_master WHERE name='memory_search'").fetchone()
+        self.conn.executescript("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS memory_search USING fts5(text, content='memories', content_rowid='id');
+            CREATE TRIGGER IF NOT EXISTS memory_insert AFTER INSERT ON memories BEGIN
+              INSERT INTO memory_search(rowid, text) VALUES (new.id, new.text);
+            END;
+            CREATE TRIGGER IF NOT EXISTS memory_delete AFTER DELETE ON memories BEGIN
+              INSERT INTO memory_search(memory_search, rowid, text) VALUES ('delete', old.id, old.text);
+            END;
+            CREATE TRIGGER IF NOT EXISTS memory_update AFTER UPDATE OF text ON memories BEGIN
+              INSERT INTO memory_search(memory_search, rowid, text) VALUES ('delete', old.id, old.text);
+              INSERT INTO memory_search(rowid, text) VALUES (new.id, new.text);
+            END;
+        """)
+        # Build the index once for companies created before searchable memory.
+        if not had_memory_index:
+            self.conn.execute("INSERT INTO memory_search(memory_search) VALUES ('rebuild')")
         # 0.4 turned tasks into tickets.
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(tasks)")}
         for column, default in (("type", "task"), ("priority", "medium"), ("origin", "plan"), ("reporter", "OrgForge")):

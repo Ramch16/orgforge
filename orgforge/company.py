@@ -10,7 +10,19 @@ from .reports import Reports
 from .config import ensure_org_file, load_settings, resolve_root
 from .db import DB
 from .llm import RoutingProvider, make_provider
+from .integrations import Integrations
 from .memory import Memory
+from .routing import ModelRouter
+from .operations_store import initialize
+from .learning import Learning
+from .observability import Observability
+from .workers import Workers
+from .arena import Arena
+from .assessments import Assessments
+from .marketplace import Marketplace
+from .federation import Federation
+from .security import Security
+from .swarms import Swarms
 from .runs import Runs
 from .skills import Skills
 from .naming import make_namer
@@ -41,11 +53,20 @@ class Company:
         if not create and not self.s.db_path.exists():
             raise SystemExit(f"No company found in {root}. Run `orgforge init` there first.")
         self.db = DB(self.s.db_path)
+        initialize(self.db)
         self.org = Org(self.db, self.s)
         self.perf = Performance(self.db, self.s, self.org)
         self.runtime = AgentRuntime(self.db, self.s, self.org,
                                     RoutingProvider(provider or _LazyProvider(self.s.provider), self.s.endpoints))
         self.pipeline = Pipeline(self.db, self.s, self.org, self.perf, self.runtime)
+        self.learning = Learning(self)
+        self.runtime.learning = self.learning
+        self.router = ModelRouter(self.db, self.s)
+        self.router.learning = self.learning
+        self.runtime.router = self.router
+        self.runtime.integrations = Integrations(self.s)
+        self.swarms = Swarms(self.db, self.s, self.org)
+        self.pipeline.swarms = self.swarms
         self.tickets = Tickets(self.db, self.pipeline)
         self.runtime.tickets = self.tickets
         self.memory = Memory(self.db)
@@ -60,6 +81,13 @@ class Company:
         self.reports = Reports(self)
         self.pipeline.reporter = self.reports.write
         self.feedback = Feedback(self)
+        self.observability = Observability(self)
+        self.workers = Workers(self)
+        self.arena = Arena(self)
+        self.assessments = Assessments(self)
+        self.marketplace = Marketplace(self)
+        self.federation = Federation(self)
+        self.security = Security(self)
         if create:
             self.org.seed()
 

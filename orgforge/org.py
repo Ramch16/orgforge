@@ -7,7 +7,7 @@ from .config import Settings
 from .db import DB, now
 from .tools import TOOL_SPECS
 
-KINDS = ("product", "designer", "planner", "builder", "reviewer", "qa", "auditor")
+KINDS = ("product", "designer", "planner", "builder", "reviewer", "qa", "auditor", "advisor", "customer")
 NAME_POOL = [
     "Amara", "Bao", "Carmen", "Dmitri", "Elif", "Farid", "Greta", "Hana", "Idris", "Jonas",
     "Kavya", "Leon", "Malia", "Noor", "Oskar", "Paloma", "Quinn", "Rafael", "Sana", "Teo",

@@ -89,6 +89,14 @@ class MockProvider:
 
     def _script(self, meta: dict, step: int = 0) -> list[list[dict]]:
         kind, purpose = meta.get("kind"), meta.get("purpose", "")
+        if purpose == 'customer_plan':
+            return [[self._call('submit_journey',rationale='Scripted mock onboarding check.',steps=[
+                {'action':'fill','selector':'#name','value':'Customer'},
+                {'action':'click','selector':'#login'},
+                {'action':'assert_text','selector':'#greeting','value':'Welcome Customer'}])]]
+        if purpose == 'board':
+            from .assessments import DIMENSIONS
+            return [[self._call('submit_evaluation',scores={d:90 for d in DIMENSIONS},findings=[])]]
         if purpose == "consult":                # a colleague's input on an idea
             return [[self._call("write_file", path=meta["file"],
                                 content=f"# Input from {meta.get('agent')}\n\nLooks achievable as a small first "
@@ -286,6 +294,7 @@ ENDPOINTS: dict[str, dict] = {
     "openai": {"base_url": "https://api.openai.com/v1", "key_env": "OPENAI_API_KEY"},
     "openrouter": {"base_url": "https://openrouter.ai/api/v1", "key_env": "OPENROUTER_API_KEY"},
     "groq": {"base_url": "https://api.groq.com/openai/v1", "key_env": "GROQ_API_KEY"},
+    "gemini": {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "key_env": "GEMINI_API_KEY"},
     # Routers you run on this machine (MIT; from their READMEs, untested here). Both route to many providers,
     # so your prompts and code go wherever they route; each provider's terms apply. Use "<router>:auto".
     "omniroute": {"base_url": "http://localhost:20128/v1", "free": True},     # npm i -g omniroute; free providers by default

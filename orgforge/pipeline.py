@@ -16,6 +16,7 @@ import json
 import re
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 from .agent import AgentRuntime
@@ -75,6 +76,8 @@ class Pipeline:
         self.db, self.s, self.org, self.perf, self.runtime = db, settings, org, perf, runtime
         self._locks: dict[int, threading.Lock] = {}
         self._solo: set[int] = set()            # tickets that hit a merge conflict: redo them alone
+        self.swarms = None
+        self._cycle_limits = {}
         self.reporter = None                    # writes a pending status report (set by Company)
 
     # ---- helpers ---------------------------------------------------------
@@ -239,12 +242,19 @@ class Pipeline:
                        {"verified_head": ws.git("rev-parse", "HEAD")})
         self._stage(pid, "release_approval")
 
-    def advance(self, pid: int) -> dict:
+    def advance(self, pid: int, *, max_cycles: int | None = None, max_seconds: float | None = None) -> dict:
         """Run the project forward until it needs a human or is finished."""
         from .engines import EngineUnavailable
+        if max_cycles is not None and (isinstance(max_cycles, bool) or not isinstance(max_cycles, int) or max_cycles < 1):
+            raise ValueError('max_cycles must be a positive integer.')
+        if max_seconds is not None and (not isinstance(max_seconds, (int, float)) or
+                                       not 0 < max_seconds < float('inf')):
+            raise ValueError('max_seconds must be positive and finite.')
         lock = self._locks.setdefault(pid, threading.Lock())
         if not lock.acquire(blocking=False):
             return self.project(pid)          # already running in another thread
+        self._cycle_limits[pid] = {'remaining': max_cycles,
+                                   'deadline': time.monotonic() + max_seconds if max_seconds else None}
         try:
             return self._advance(pid)
         except EngineUnavailable as exc:
@@ -255,7 +265,18 @@ class Pipeline:
             raise PipelineError(f"Work paused: {exc}. Nothing was counted against the team; resume once it is back "
                                 f"with Resume work or `orgforge run {pid}`.") from exc
         finally:
+            self._cycle_limits.pop(pid, None)
             lock.release()
+
+    def _cycle_available(self, pid: int, consume: bool = False) -> bool:
+        limit = self._cycle_limits.get(pid)
+        if not limit:
+            return True
+        available = ((limit['remaining'] is None or limit['remaining'] > 0) and
+                     (limit['deadline'] is None or time.monotonic() < limit['deadline']))
+        if available and consume and limit['remaining'] is not None:
+            limit['remaining'] -= 1
+        return available
 
     def _advance(self, pid: int) -> dict:
         try:
@@ -264,7 +285,7 @@ class Pipeline:
                      "build": self._build}
             self.write_reports(pid)
             while (stage := self.project(pid)["stage"]) in steps:
-                if not self._budget_ok(pid):
+                if not self._budget_ok(pid) or not self._cycle_available(pid, consume=stage != 'build'):
                     break
                 steps[stage](self.project(pid))
             self.write_reports(pid)
@@ -598,7 +619,7 @@ class Pipeline:
             self._stage(pid, "escalation")      # another failed ticket is still waiting for the CTO
             return
         while True:
-            if not self._budget_ok(pid):
+            if not self._budget_ok(pid) or not self._cycle_available(pid, consume=True):
                 return
             self._check_staffing(pid)
             batch = self._claim_batch(pid)
@@ -759,6 +780,8 @@ class Pipeline:
             if not agent:
                 continue                        # everyone who can do it is busy: it waits for the next round
             busy.add(agent["id"])
+            if self.swarms:
+                self.swarms.assign(pid, task['id'], agent)
             self.db.run("UPDATE tasks SET assignee_id=?, updated_at=? WHERE id=?", agent["id"], now(), task["id"])
             batch.append(self.db.one("SELECT * FROM tasks WHERE id=?", task["id"]))
         if ready and not batch:
@@ -767,6 +790,8 @@ class Pipeline:
 
     def _free_agent(self, task: dict, pid: int, busy: set[int]) -> dict | None:
         """Rework stays with the same seat; new work goes to the least-loaded free agent in the role."""
+        if self.swarms:
+            return self.swarms.pick(task, pid, busy)
         if task["assignee_id"]:
             prev = self.db.one("SELECT * FROM agents WHERE id=?", task["assignee_id"])
             holder = prev and self.db.one("SELECT * FROM agents WHERE seat=? AND status!='fired'", prev["seat"])
@@ -839,6 +864,8 @@ class Pipeline:
 
     def _check_staffing(self, pid: int) -> None:
         """Ask the department's boss to hire when a role's waiting work outgrows its people."""
+        if self.swarms and self.swarms.scale(pid):
+            return
         waiting = self.db.all("SELECT role, COUNT(*) AS n FROM tasks WHERE status='todo' AND origin!='stage' "
                               "GROUP BY role")
         for row in waiting:
@@ -931,7 +958,7 @@ class Pipeline:
             changed = ws.changed_files()
             self.db.run("UPDATE tasks SET status='in_review', updated_at=? WHERE id=?", now(), task["id"])
             note(self.db, task["id"], agent["name"], "Submitted for review.\n" + (res.text or "")[:1500])
-            findings, approved = [], res.completed
+            findings, approved, scores = [], res.completed, []
             if not res.completed:
                 findings.append("Builder did not finish within its turn budget.")
             for check_role in self._checkers():
@@ -948,7 +975,9 @@ class Pipeline:
                     f"{agent['name']}'s summary:\n{res.text}\n\nFiles changed (git status):\n{changed}\n\n"
                     "Requirements are in docs/PRD.md and the design in docs/ARCHITECTURE.md. "
                     "Finish by calling submit_review.",
-                    ws, project_id=pid, meta={**meta, "author": agent["name"]})
+                    ws, project_id=pid, meta={**meta, "author": agent["name"],
+                                               "author_model": self.db.one('SELECT model FROM routing_decisions WHERE id=?',
+                                                                           res.route_id)['model'] if res.route_id else agent['model']})
                 note(self.db, task["id"], checker["name"], self._verdict(check.review), kind="comment")
                 if not check.review:
                     self.db.log("warn", f"{checker['name']} gave no verdict on [{task['key']}].", pid)
@@ -959,12 +988,19 @@ class Pipeline:
                     approved = False
                     findings.append(f"{checker['name']} did not complete the review.")
                 rv = check.review
+                scores.append(rv["score"])
                 self.perf.record(agent["id"], rv["score"], source=source, reviewer=checker["name"], notes=rv["notes"],
                                  task_id=task["id"], project_id=pid)
                 if rv["verdict"] != "approve":
                     approved = False
                     findings.append(f"{checker['name']} ({check_role['title']}, {rv['score']:.0f}/100): {rv['notes']}")
             self.perf.evaluate(agent["id"])
+            if res.route_id and self.runtime.router:
+                self.runtime.router.evaluate(res.route_id, approved, sum(scores) / len(scores) if scores else None, lessons='\n'.join(findings))
+            if not approved and self.runtime.memory:
+                self.runtime.memory.remember(
+                    f"Task {task['key']} failed review: " + '\n'.join(findings), 'OrgForge', pid,
+                    category='failure', source=f"ticket:{task['id']};attempt:{task['attempts'] + 1}")
 
             if approved:
                 ws.commit(f"[{task['key']}] {task['title']} ({agent['name']})")
@@ -1038,6 +1074,11 @@ class Pipeline:
             raise PipelineError("Say what needs to change when you reject, so the team can act on it.")
         who, ok, pid = self.s.human(role), decision == "approved", a["project_id"]
         payload = json.loads(a["payload"])
+        if a['kind']=='board':
+            assessment=self.db.one('SELECT * FROM company_assessments WHERE id=?',payload.get('assessment_id'))
+            board_ws=self.workspace(self.project(pid))
+            if not assessment or board_ws.changed_files()!='(no uncommitted changes)' or board_ws.git('rev-parse','HEAD')!=assessment['revision']:
+                raise PipelineError('Board assessment is stale; rerun it on the current product revision.')
         if ok and a["kind"] == "release_blocked":
             raise PipelineError("Failed release checks cannot be approved. Reject with repair guidance to retry.")
         if ok and a["kind"] in ("release", "signoff", "task_review"):
@@ -1191,6 +1232,12 @@ class Pipeline:
                 hired = self.org.hire(payload["role"], by=who)
                 self.db.log("hire", f"{who} approved hiring {hired['name']} as {payload['role']} for the workload.",
                             pid, actor=who)
+        elif kind == 'board':
+            assessment = self.db.one('SELECT * FROM company_assessments WHERE id=?',payload['assessment_id'])
+            self.db.run('UPDATE company_assessments SET status=? WHERE id=?','accepted' if ok else 'changes_requested',assessment['id'])
+            if not ok:
+                from .tickets import Tickets
+                Tickets(self.db,self).create(pid,'Address board feedback',feedback,who,status='backlog',origin='board')
         elif kind == "hr":
             if ok:
                 self.perf.execute(payload["action"], payload["agent_id"], payload.get("reason", ""), by=who)
