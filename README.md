@@ -253,11 +253,17 @@ orgforge engines --test claude-code              # check it works
 orgforge org set-model --all cli:claude-code     # move the whole team (or name one agent)
 ```
 
-Seven CLI engines are built in: `claude-code` (tested), and `codex`, `gemini`, `copilot`, `cursor`,
-`opencode` and `qwen`, set up from each CLI's documentation but not yet run against OrgForge. Their
-permissions are coarser than Claude Code's: read-only roles get the CLI's read-only or ask-first
-mode, builders its edit mode. `orgforge engines` shows which are installed. Add or override any
-engine under `engines:` in `org.yaml`.
+Seven CLI engines are built in. Tested: `claude-code` and `codex` (Codex CLI 0.160, on a ChatGPT
+plan: a full task built, reviewed and checked through it). Set up from each CLI's documentation but
+not yet run against OrgForge: `gemini`, `copilot`, `cursor`, `opencode` and `qwen`. Codex runs
+read-only roles in its `read-only` sandbox and builders in `workspace-write`; the others' permissions
+are coarser than Claude Code's: read-only roles get the CLI's read-only or ask-first mode, builders
+its edit mode. `orgforge engines` shows which are installed. Add or override any engine under
+`engines:` in `org.yaml`.
+
+The ChatGPT desktop app includes the Codex CLI. To put it on your PATH:
+`ln -s /Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex ~/.local/bin/codex`
+(or `npm i -g @openai/codex`), then `codex login` if you are not signed in.
 
 **Local models and other keys.** Any OpenAI-compatible endpoint works, per agent:
 `ollama:<model>` and `lmstudio:<model>` (local, $0), `openai:<model>`, `openrouter:<model>` and

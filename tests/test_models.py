@@ -102,7 +102,8 @@ def test_cli_presets_put_the_role_in_the_prompt_and_gate_edits(co, tmp_path, mon
     fake = tmp_path / "fake.py"
     fake.write_text(textwrap.dedent('''
         import json, os, sys
-        open(os.environ["FAKE_LOG"], "a").write(json.dumps(sys.argv[1:]) + "\\n")
+        args = sys.argv[1:] + ([sys.stdin.read()] if "-" in sys.argv[1:] else [])    # a stdin prompt, logged with the args
+        open(os.environ["FAKE_LOG"], "a").write(json.dumps(args) + "\\n")
         print("Checked it.")
     '''))
     log = tmp_path / "log.jsonl"
@@ -117,5 +118,5 @@ def test_cli_presets_put_the_role_in_the_prompt_and_gate_edits(co, tmp_path, mon
     reviewer, builder = [json.loads(line) for line in log.read_text().splitlines()]
     prompt = next(a for a in reviewer if "Do the work" in a)
     assert prompt.startswith("You are Pavan")                       # role and rules lead the prompt
-    write_flags = preset["level_args"]["write"]
-    assert not set(write_flags) & set(reviewer) and set(write_flags) <= set(builder)
+    write_flags = set(preset["level_args"]["write"]) - set(preset["level_args"]["read"])
+    assert write_flags and not write_flags & set(reviewer) and write_flags <= set(builder)

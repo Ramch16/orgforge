@@ -14,8 +14,8 @@ from datetime import datetime, timedelta
 
 from .db import now
 
-RESETS_AT = re.compile(r"resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)", re.I)
-RESETS_IN = re.compile(r"(?:in|after)\s+(\d+)\s*(second|sec|minute|min|hour|hr)s?\b", re.I)
+RESETS_AT = re.compile(r"(?:resets?|try again)\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)", re.I)
+RESETS_IN = re.compile(r"(?:in|after)\s+(\d+)\s*(second|sec|minute|min|hour|hr|day)s?\b", re.I)
 
 
 def limit_key(model: str) -> str:
@@ -37,7 +37,7 @@ def reset_after(message: str, default_minutes: float, clock: datetime | None = N
         seconds = (at - clock).total_seconds()
     elif m := RESETS_IN.search(message or ""):
         unit = m[2].lower()
-        seconds = int(m[1]) * (3600 if unit.startswith("h") else 60 if unit.startswith("m") else 1)
+        seconds = int(m[1]) * {"d": 86400, "h": 3600, "m": 60}.get(unit[0], 1)
     else:
         seconds = default_minutes * 60
     return min(max(seconds, 60), 24 * 3600)

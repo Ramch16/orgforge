@@ -21,9 +21,12 @@ BUILTIN_ENGINES: dict[str, dict] = {
     # Documented, not yet run against OrgForge: each one's non-interactive flags are from its official docs (Oct 2026).
     # Their permissions are coarser than Claude Code's: "read" roles get the CLI's read-only or ask-first mode,
     # builders get its edit mode. The role and rules go at the top of the prompt (no system-prompt flag).
-    "codex": {"command": ["codex", "exec", "--ephemeral", "--skip-git-repo-check", "{prompt}"], "model_args": ["-m", "{model}"],
-              "level_args": {"read": ["--sandbox", "read-only"], "write": ["--full-auto"]},
-              "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False},
+    # Verified against Codex CLI 0.160.1 (bundled with the ChatGPT app): --full-auto is gone; exec runs with
+    # approval "never", and the sandbox flag alone sets read-only or workspace-write. "-" reads the prompt from stdin.
+    "codex": {"command": ["codex", "exec", "--ephemeral", "--skip-git-repo-check"], "model_args": ["-m", "{model}"],
+              "level_args": {"read": ["--sandbox", "read-only", "-"], "write": ["--sandbox", "workspace-write", "-"]},
+              "prompt": "stdin", "system": "prompt", "output": "text", "subscription": True, "verified": True,
+              "usage_pattern": r"tokens used\s+([\d,]+)"},     # total tokens, printed on stderr
     "gemini": {"command": ["gemini", "-p", "{prompt}"], "model_args": ["-m", "{model}"],
                "level_args": {"read": [], "write": ["--yolo"]},
                "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False},
@@ -83,7 +86,7 @@ class EngineUnavailable(EngineError):
     """The engine refused to work (usage limit, rate limit, not signed in). Nobody failed: pause and resume later."""
 
 
-UNAVAILABLE = re.compile(r"session limit|usage limit|rate limit|limit reached|hit your .{0,30}limit|quota|"
+UNAVAILABLE = re.compile(r"session limit|usage limit|rate limit|limit reached|hit your .{0,30}limit|quota|too many requests|"
                          r"not logged in|please run /login|overloaded", re.I)
 
 
@@ -177,8 +180,11 @@ def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: s
                    input_tokens=int(usage.get("input_tokens", 0)) + int(usage.get("cache_read_input_tokens", 0))
                    + int(usage.get("cache_creation_input_tokens", 0)),
                    output_tokens=int(usage.get("output_tokens", 0)))
+    if engine.get("usage_pattern") and (m := re.search(engine["usage_pattern"], proc.stderr or "")):
+        out["input_tokens"] = int(m[1].replace(",", ""))           # a total only: no input/output split
     if out["is_error"] and not out["text"]:
-        out["text"] = (proc.stderr or "").strip()[:2000]
-    if out["is_error"] and UNAVAILABLE.search(out["text"]):
-        raise EngineUnavailable(out["text"].strip()[:300])
+        out["text"] = (proc.stderr or "").strip()[-2000:]     # the error is at the end (Codex echoes the prompt first)
+    if out["is_error"] and (m := UNAVAILABLE.search(out["text"])):
+        start = out["text"].rfind("\n", 0, m.start()) + 1
+        raise EngineUnavailable(out["text"][start:].strip()[:300])
     return out

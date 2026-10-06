@@ -127,3 +127,23 @@ def test_a_project_keeps_building_when_the_builder_hits_its_limit(limited):
     assert limited_calls() == 1                                     # tried once, then rested
     assert not co.db.one("SELECT 1 FROM events WHERE kind IN ('paused', 'error')")
     assert co.db.one("SELECT 1 FROM routing_decisions WHERE model='claude-sonnet-5-5' AND reason LIKE 'Failover%'")
+
+
+def test_codex_style_limit_messages():
+    nine = datetime(2026, 10, 6, 21, 0)
+    assert reset_after("You've hit your usage limit. Try again in 4 days 3 hours.", 60, nine) == 24 * 3600
+    assert reset_after("Usage limit reached. Try again at 9:30 PM.", 60, nine) == 30 * 60
+
+
+def test_a_limit_after_a_long_echoed_prompt_is_still_seen(limited, tmp_path):
+    co, say, calls, _ = limited
+    codex = tmp_path / "codex_like.py"                 # Codex echoes the whole prompt to stderr, error last
+    codex.write_text("import sys\nprompt = sys.stdin.read()\nsys.stderr.write('user\\n' + prompt + '\\n')\n"
+                     "sys.stderr.write(\"ERROR: You've hit your usage limit. Try again in 2 hours.\\n\")\nsys.exit(1)\n")
+    co.s.engines["codexlike"] = {**BUILTIN_ENGINES["codex"], "command": [sys.executable, str(codex)],
+                                 "level_args": {"read": [], "write": []}, "model_args": []}
+    say("Done on the backup.")
+    res = co.runtime.run(on_cli(co, "Hari", "cli:codexlike"), "Build it. " + "x" * 5000, None)
+    assert res.text == "Done on the backup."
+    rest = co.failover.status()[0]
+    assert rest["engine"] == "cli:codexlike" and 7000 < rest["until"] - time.time() <= 7200

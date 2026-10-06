@@ -9,6 +9,10 @@
 - Anthropic API rate limits and overloads (after the client's retries), HTTP 429/503 from
   OpenAI-compatible endpoints, and an unreachable local model server now count as usage limits:
   the project pauses (or fails over) instead of logging an error.
+- **Codex tested.** Verified against Codex CLI 0.160.1 on a ChatGPT plan with a full task (build,
+  code review, QA, checks). Fixed: builders used `--full-auto`, which Codex removed (now
+  `--sandbox workspace-write`); prompts go on stdin instead of the command line; usage limits are
+  found after Codex's echoed prompt, with their "try again in/at" time; token totals are recorded.
 
 ## 0.13.0 — 2026-10-06
 - Reviewed strategy trajectories, task-specific routing evidence and cost per successful run.
