@@ -551,8 +551,10 @@ $("brain-project").onchange = () => paint("brain-team", `<p class="muted">Select
 const VIEWS = ["home", "office", "decisions", "projects", "project", "tickets", "team", "operations", "brain", "costs", "activity"];
 let view = "home", viewId = null, dfilter = "mine";
 const expanded = new Set(), showDone = new Set(), painted = {}, projReports = {};
-const WAITING = ["idea_review", "idea_decision", "plan_approval", "prd_approval", "architecture_approval", "release_approval", "signoff"];
-const TROUBLE = ["escalation", "contract_review", "release_blocked", "paused"];
+const WAITING = ["idea_review", "idea_decision", "plan_approval", "prd_approval", "architecture_approval", "release_approval", "signoff", "deploy_approval"];
+const TROUBLE = ["escalation", "contract_review", "release_blocked", "paused", "deploy_failed"];
+const DEPLOY_STAGES = ["deploying", "deploy_approval", "live"];
+const finished = p => p.production ? p.stage === "live" : ["done", "live"].includes(p.stage);
 const KIND = { prd: "Requirements", architecture: "Design and plan", release: "Release", signoff: "Sign-off", escalation: "Escalation",
   feasibility: "Technical sign-off", idea_decision: "Idea decision", plan: "Plan of action", budget: "Budget", hire: "Hiring",
   hr: "People", contract: "Acceptance checks", release_blocked: "Release blocked", task_review: "Changes review" };
@@ -565,7 +567,7 @@ function ago(ts) {
   const s = (Date.now() - new Date(ts).getTime()) / 1000;
   return s < 60 ? "just now" : s < 3600 ? `${Math.floor(s / 60)}m ago` : s < 86400 ? `${Math.floor(s / 3600)}h ago` : `${Math.floor(s / 86400)}d ago`;
 }
-function tone(stage) { return stage === "done" ? "done" : TROUBLE.includes(stage) ? "fired" : WAITING.includes(stage) ? "probation" : stage === "dropped" || stage === "parked" ? "cancelled" : "in_review"; }
+function tone(stage) { return ["done", "live"].includes(stage) ? "done" : TROUBLE.includes(stage) ? "fired" : WAITING.includes(stage) ? "probation" : stage === "dropped" || stage === "parked" ? "cancelled" : "in_review"; }
 function stageChip(p) { return `<span class="chip ${tone(p.stage)}">${esc(p.stage_label)}</span>`; }
 function chips(p) {
   return (p.kind === "task" ? ` <span class="chip in_review">Task</span>` : "") + (p.version ? ` <span class="chip done">v${p.version}</span>` : "")
@@ -578,11 +580,12 @@ function steps(p) {
     return { list, at, done: p.stage === "done", pct: p.stage === "done" ? 100 : at * 50 };
   }
   const order = state.stages.map(s => s.id), ideaPath = !!p.purpose || state.idea_stages.includes(p.stage) || ["parked", "dropped"].includes(p.stage);
-  const list = state.stages.filter(s => ![...TROUBLE, "parked", "dropped"].includes(s.id) && (ideaPath || !state.idea_stages.includes(s.id)));
+  const list = state.stages.filter(s => ![...TROUBLE, "parked", "dropped"].includes(s.id) && (ideaPath || !state.idea_stages.includes(s.id))
+    && (p.production ? s.id !== "done" : !DEPLOY_STAGES.includes(s.id)));
   const where = p.stage === "paused" ? (p.paused_stage || "build") : ["parked", "dropped"].includes(p.stage) ? "idea_decision" : p.stage;
   let at = list.findIndex(s => s.id === where);
   if (at < 0) { const pos = order.indexOf(where); list.forEach((s, i) => { if (order.indexOf(s.id) <= pos) at = i; }); }
-  const done = p.stage === "done";
+  const done = finished(p);
   return { list, at: Math.max(0, at), done, pct: done ? 100 : Math.round(Math.max(0, at) / (list.length - 1) * 100) };
 }
 function counts(pid) {
@@ -739,7 +742,7 @@ function renderProject() {
         ${built(p) && p.kind !== "task" ? `<button data-feedback="${p.id}">Customer feedback</button>` : ""}
         ${pm ? `<button data-chat="${pm.id}">Message ${esc(pm.name)}</button>` : ""}
         ${p.stage === "parked" && me === "ceo" ? `<button data-revisit="${p.id}">Revisit this idea</button>` : ""}
-        ${["done", "dropped", "paused", "parked"].includes(p.stage) ? "" : `<button class="quiet" data-run="${p.id}">Resume work</button>`}
+        ${["done", "live", "dropped", "paused", "parked"].includes(p.stage) ? "" : `<button class="quiet" data-run="${p.id}">Resume work</button>`}
       </div></div>
     <div class="stepper">${s.list.map((st, i) => `<div class="step ${s.done || i < s.at ? "past" : i === s.at ? "now" : ""}"><i></i>${esc(st.label)}</div>`).join("")}</div>
     <div class="cols">
@@ -755,6 +758,11 @@ function renderProject() {
       </div>
       <div>
         <div class="card"><div class="card-head"><h2>Budget</h2></div>${budgetLine(p)}</div>
+        ${p.production || (p.deployments || []).length ? `<div class="card"><div class="card-head"><h2>Production</h2></div>
+          ${(p.deployments || []).map(d => `<div class="ev"><span class="grow"><b>v${d.version}</b> to ${esc(d.environment)}
+            <span class="chip ${{live: "done", superseded: "cancelled", running: "in_review", rolled_back: "probation"}[d.status] || "fired"}">${esc(d.status.replace("_", " "))}</span>
+            <br><span class="muted">${ago(d.started_at)} · ${esc(d.commit_sha.slice(0, 10))}</span></span></div>`).join("")
+            || `<p class="muted">Deploys after the CEO signs off, using the commands in org.yaml.</p>`}</div>` : ""}
         <div class="card"><div class="card-head"><h2>Latest status report</h2><button class="quiet" data-report="${p.id}">All reports</button></div>
           ${report ? `<div class="muted">${esc(report.author)} · ${ago(report.created_at)} · ${esc(report.trigger)}</div><div class="report" style="margin-top:.4rem;max-height:16rem;overflow:auto">${linkTickets(esc(report.body))}</div>`
             : `<p class="muted">No report yet. <button class="quiet" data-report="${p.id}">Ask for one</button></p>`}</div>

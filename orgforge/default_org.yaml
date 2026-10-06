@@ -58,6 +58,25 @@ failover:
   enabled: false
   models: []              # e.g. ['cli:codex', 'cli:gemini', 'claude-sonnet-5-5', 'ollama:qwen2.5-coder']
   cooldown_minutes: 60
+# Deploy signed-off releases. Without an entry for a project, it stops at "Ready for deployment".
+# Commands run in the product workspace at the release, with {version}, {previous}, {commit} and
+# {environment} filled in. Only you set these: agents cannot change what runs in production.
+# production:
+#   projects:
+#     Greeter:                        # project name or id
+#       env: [FLY_API_TOKEN]          # secrets these commands may use; all others are withheld
+#       environments:
+#         - name: staging
+#           deploy: ./scripts/deploy.sh staging {version}
+#           health: curl -fsS https://staging.example.com/healthz
+#           rollback: ./scripts/deploy.sh staging {previous}
+#         - name: production
+#           approval: ceo             # wait for a go-ahead (ceo or cto)
+#           deploy: ./scripts/deploy.sh production {version}
+#           health: curl -fsS https://example.com/healthz
+#           rollback: ./scripts/deploy.sh production {previous}
+#           health_retries: 5         # health_interval_seconds: 10, timeout_seconds: 900
+#           monitor_minutes: 5        # keep checking once live (with the workers service on)
 learning:
   enabled: false
   min_trials: 2

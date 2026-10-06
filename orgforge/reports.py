@@ -21,6 +21,10 @@ NEXT_STEP = {
     "signoff": "Niki signs off.", "done": "Ready for deployment; feedback can start the next version.",
     "parked": "Waiting until Niki revisits it.", "dropped": "Nothing; it was dropped.",
     "paused": "Niki sets a new budget to resume.",
+    "deploying": "The release is deployed and health-checked.",
+    "deploy_approval": "The go-ahead to deploy to the next environment.",
+    "deploy_failed": "Lucky retries the deployment or sends it back with guidance.",
+    "live": "Live; production checks and feedback can start the next version.",
 }
 READ_ONLY = {"read_file", "list_files", "list_tickets", "view_ticket"}
 

@@ -406,6 +406,49 @@ orgforge report 1 --as cto
 orgforge feedback 1 "Crashes when the name is empty" --source "support email" --as ceo
 ```
 
+## Production: deploy, health checks and rollback
+
+Give a project a `production:` entry in `org.yaml` and the CEO's sign-off deploys it, instead of
+stopping at "Ready for deployment". Projects without one work as before.
+
+```yaml
+production:
+  projects:
+    Greeter:
+      env: [FLY_API_TOKEN]
+      environments:
+        - name: staging
+          deploy: ./scripts/deploy.sh staging {version}
+          health: curl -fsS https://staging.example.com/healthz
+          rollback: ./scripts/deploy.sh staging {previous}
+        - name: production
+          approval: ceo
+          deploy: ./scripts/deploy.sh production {version}
+          health: curl -fsS https://example.com/healthz
+          rollback: ./scripts/deploy.sh production {previous}
+          monitor_minutes: 5
+```
+
+- **In order, environment by environment.** Each runs its deploy command in the product workspace
+  at the signed-off release, then its health check (5 tries, 10 seconds apart, by default). An
+  environment with `approval:` waits for that person's go-ahead; holding it back needs no reason.
+- **Unhealthy means roll back.** The rollback command runs with the last healthy version as
+  `{previous}` and is health-checked too. An urgent incident ticket is filed, and the CTO either
+  retries the deployment or sends it back to the team with guidance. A first deployment has
+  nothing to roll back to, so it just stops.
+- **Live.** When every environment is healthy the project is *Live in production*. With
+  `monitor_minutes` (and the workers service on), its health check keeps running, and an outage
+  becomes an urgent incident ticket (one per outage, not one per check). New tickets, customer
+  feedback and incidents reopen it for the next version, which deploys the same way.
+- **You own these commands, not the agents.** They run with production credentials, so they live
+  in `org.yaml`, outside every workspace. Only the variables listed under `env:` are passed through;
+  other keys, tokens and passwords in your environment are withheld. Output is redacted before it
+  is stored. Nothing deploys if the workspace changed after sign-off.
+
+```bash
+orgforge deployments 1                            # what is where, and its status
+```
+
 ## Talking to the team
 
 The CEO and CTO can talk to any agent directly. On the dashboard, click

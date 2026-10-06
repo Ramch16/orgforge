@@ -61,7 +61,7 @@ def review(co, pid: int) -> dict:
                              "checked_at": (verification or {}).get("checked_at"),
                              "errors": (verification or {}).get("errors", []), "checks": checks},
             "verdicts": verdicts, "docs": docs, "files": files[:800], "history": history, "tickets": counts,
-            "downloadable": p["stage"] == "done"}
+            "downloadable": p["stage"] in ("done", "live")}
 
 
 def read_file(co, pid: int, path: str) -> dict:

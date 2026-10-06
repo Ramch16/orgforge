@@ -13,6 +13,7 @@ from .llm import RoutingProvider, make_provider
 from .integrations import Integrations
 from .memory import Memory
 from .failover import Failover
+from .production import Production
 from .routing import ModelRouter
 from .operations_store import initialize
 from .learning import Learning
@@ -86,6 +87,8 @@ class Company:
         self.feedback = Feedback(self)
         self.observability = Observability(self)
         self.workers = Workers(self)
+        self.production = Production(self)
+        self.pipeline.production = self.production
         self.arena = Arena(self)
         self.assessments = Assessments(self)
         self.marketplace = Marketplace(self)

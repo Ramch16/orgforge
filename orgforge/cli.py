@@ -144,6 +144,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--test", metavar="ENGINE", help="Run a tiny prompt through this engine")
     p.add_argument("--wake", metavar="MODEL", nargs="?", const="all",
                    help="Try a resting engine again now (no value: all of them)")
+    p = sub.add_parser("deployments", help="What each project has deployed, where, and whether it is live")
+    p.add_argument("project", type=int, nargs="?")
     sub.add_parser("costs", help="What the company's AI work has cost (estimate)")
     p = sub.add_parser("budget", help="CEO: set a project's budget in USD (0 = no limit)")
     p.add_argument("project", type=int); p.add_argument("amount", type=float)
@@ -398,6 +400,13 @@ def _dispatch(args) -> int:
                     print("Sign in first: run `claude` in a terminal and type /login.")
             except EngineError as exc:
                 print(f"\n{args.test}: {exc}")
+    elif args.cmd == "deployments":
+        rows = co.production.list(args.project)
+        if not rows:
+            print("No deployments yet. Configure them under production: in org.yaml; they run after the CEO signs off.")
+        for d in rows:
+            print(f"  P{d['project_id']:<3} v{d['version']:<4} {d['environment']:<14} {d['status']:<16} "
+                  f"{d['started_at'][:16].replace('T', ' ')}  {d['commit_sha'][:10]}")
     elif args.cmd == "costs":
         from .costs import summary
         c = summary(co.db)

@@ -8,7 +8,7 @@ import sqlite3
 from .db import now
 from .tools import ToolError
 
-KINDS={'check','security','performance','documentation','report','work','customers'}
+KINDS={'check','security','performance','documentation','report','work','customers','health'}
 
 
 class Workers:
@@ -94,6 +94,10 @@ class Workers:
             self.co.pipeline.queue_report(pid,'scheduled employee','Workers')
             self.co.pipeline.write_reports(pid)
             return self.db.one('SELECT * FROM reports WHERE project_id=? ORDER BY id DESC',pid)
+        if job['kind']=='health':
+            result=self.co.production.check(pid,config.get('environment',''))
+            if not result['healthy']:raise ToolError(result['output'])
+            return result
         if job['kind']=='customers':
             return self.co.assessments.customers(pid,config.get('journeys') or {})
         if job['kind']=='security' and not config.get('command'):

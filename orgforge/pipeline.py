@@ -31,8 +31,8 @@ from .validation import CONTRACT, CONTRACT_GUIDE, validate_plan, verify_product
 
 IDEA_STAGES = ["idea", "idea_review", "idea_decision", "plan", "plan_approval"]
 STAGES = [*IDEA_STAGES, "prd", "prd_approval", "architecture", "architecture_approval", "build",
-          "escalation", "contract_review", "release_blocked", "release_approval", "signoff", "done", "parked", "dropped",
-          "paused"]
+          "escalation", "contract_review", "release_blocked", "release_approval", "signoff", "done", "deploying", "deploy_approval", "deploy_failed", "live",
+          "parked", "dropped", "paused"]
 STAGE_LABELS = {
     "idea": "Assessing the idea", "idea_review": "Technical sign-off with CTO", "idea_decision": "Decision with CEO",
     "plan": "Planning across departments", "plan_approval": "Plan with CEO and CTO",
@@ -43,10 +43,13 @@ STAGE_LABELS = {
     "architecture": "Designing", "architecture_approval": "Design with CTO",
     "build": "Building", "escalation": "Escalated to CTO",
     "release_approval": "Release with CTO", "signoff": "Sign-off with CEO", "done": "Ready for deployment",
+    "deploying": "Deploying", "deploy_approval": "Deployment go-ahead", "deploy_failed": "Deployment failed, with CTO",
+    "live": "Live in production",
 }
 HUMAN_APPROVED, HUMAN_REJECTED = 92, 35
 MILESTONES = {"release_approval": "Ready for release review", "release_blocked": "Release blocked",
-              "done": "Signed off", "paused": "Paused for budget"}
+              "done": "Signed off", "paused": "Paused for budget", "live": "Live in production",
+              "deploy_failed": "Deployment failed"}
 PURPOSES = {"internal": "for internal use", "commercial": "to sell"}
 RECOMMENDATIONS = {"build_internal": "build it for internal use", "build_to_sell": "build it to sell",
                    "park": "park it for now", "drop": "drop it"}
@@ -79,6 +82,7 @@ class Pipeline:
         self.swarms = None
         self._cycle_limits = {}
         self.reporter = None                    # writes a pending status report (set by Company)
+        self.production = None                  # deploys signed-off releases (set by Company)
 
     # ---- helpers ---------------------------------------------------------
     def project(self, pid: int) -> dict:
@@ -283,6 +287,8 @@ class Pipeline:
             self.db.run("UPDATE tasks SET status='todo' WHERE project_id=? AND status IN ('in_progress', 'in_review') AND origin!='stage'", pid)
             steps = {"idea": self._idea, "plan": self._plan, "prd": self._prd, "architecture": self._architecture,
                      "build": self._build}
+            if self.production:
+                steps["deploying"] = self.production.run
             self.write_reports(pid)
             while (stage := self.project(pid)["stage"]) in steps:
                 if not self._budget_ok(pid) or not self._cycle_available(pid, consume=stage != 'build'):
@@ -1070,7 +1076,7 @@ class Pipeline:
             if choice not in allowed:
                 raise PipelineError("Decide the idea with one of: build it for internal use (internal), build it to "
                                     "sell (commercial), park it (park), or drop it (drop).")
-        if decision == "rejected" and not feedback and a["kind"] not in ("hr", "hire", "idea_decision", "budget"):
+        if decision == "rejected" and not feedback and a["kind"] not in ("hr", "hire", "idea_decision", "budget", "deploy"):
             raise PipelineError("Say what needs to change when you reject, so the team can act on it.")
         who, ok, pid = self.s.human(role), decision == "approved", a["project_id"]
         payload = json.loads(a["payload"])
@@ -1211,10 +1217,25 @@ class Pipeline:
                 version = self.project(pid)["version"]
                 ws.git("tag", "-f", "release")
                 ws.git("tag", "-f", f"v{version}")
-                self._stage(pid, "done")
-                self.db.log("project", f"Version {version} verified and ready for deployment.", pid, actor=who)
+                deploys = bool(self.production and self.production.configured(self.project(pid)))
+                self._stage(pid, "deploying" if deploys else "done")
+                self.db.log("project", f"Version {version} verified and " + ("is being deployed." if deploys else
+                            "ready for deployment."), pid, actor=who)
             else:
                 self._fix_task(pid, "Address the CEO's sign-off feedback", feedback, reporter=who)
+                self._stage(pid, "build")
+        elif kind == "deploy":
+            if ok:
+                self._stage(pid, "deploying")
+            else:
+                self._stage(pid, "done")
+                self.db.log("deploy", f"{who} held v{payload['version']} back from {payload['environment']}"
+                            + (f": {feedback}" if feedback else "."), pid, actor=who)
+        elif kind == "deploy_failed":
+            if ok:
+                self._stage(pid, "deploying")
+            else:
+                self._fix_task(pid, "Fix the failed deployment", feedback, reporter=who)
                 self._stage(pid, "build")
         elif kind == "budget":
             if ok:
@@ -1259,5 +1280,7 @@ class Pipeline:
             label = "Changes with CTO" if p["kind"] == "task" and p["stage"] == "release_approval" else \
                 STAGE_LABELS.get(p["stage"], p["stage"])
             out.append({**p, "stage_label": label, "tasks": tasks,
-                        "workspace": str(Path(p["workspace"]))})
+                        "workspace": str(Path(p["workspace"])),
+                        "production": bool(self.production and self.production.configured(p)),
+                        "deployments": self.production.list(p["id"], 10) if self.production else []})
         return out

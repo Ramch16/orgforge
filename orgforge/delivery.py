@@ -9,7 +9,7 @@ from .pipeline import PipelineError
 
 def export_product(pipeline, pid: int, destination: Path) -> Path:
     project = pipeline.project(pid)
-    if project['stage'] != 'done':
+    if project['stage'] not in ('done', 'live'):
         raise PipelineError('Only a signed-off, verified product can be exported.')
     ws = pipeline.workspace(project)
     if ws.changed_files() != '(no uncommitted changes)' or ws.git('rev-parse', 'HEAD') != ws.git('rev-parse', 'release'):

@@ -161,6 +161,17 @@ CREATE TABLE IF NOT EXISTS routing_decisions (
   priced INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS deployments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  environment TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  commit_sha TEXT NOT NULL,
+  status TEXT NOT NULL,
+  log TEXT NOT NULL DEFAULT '',
+  started_at TEXT NOT NULL,
+  finished_at TEXT
+);
 CREATE TABLE IF NOT EXISTS engine_cooldowns (
   engine TEXT PRIMARY KEY,
   until REAL NOT NULL,

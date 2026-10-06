@@ -1,6 +1,14 @@
 # Changelog
 
 ## 0.14.0 (in progress)
+- **Production stage.** A project with a `production:` entry in `org.yaml` is deployed after the
+  CEO signs off: environment by environment, each with a deploy command, a health check with
+  retries, an optional CEO/CTO go-ahead and automatic rollback to the last healthy version. Failures
+  file an urgent incident and go to the CTO (retry, or send back with guidance). When every
+  environment is healthy the project is *Live in production*, optionally monitored by a scheduled
+  health check whose outages become incident tickets. Deploy commands are set by people only, get
+  only the secrets listed under `env:`, and never run on a workspace that changed after sign-off.
+  New: `orgforge deployments`, a Production card on each project, `deployments` table.
 - **Engine failover.** With `failover.enabled`, an engine that hits its usage limit rests until
   its stated reset time (or `cooldown_minutes`) and the work continues on the next ready model in
   `failover.models`; the project pauses only when every option is resting. Switches are logged,

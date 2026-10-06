@@ -20,7 +20,7 @@ STATUS_LABELS = {"backlog": "Backlog", "todo": "To do", "in_progress": "In progr
                  "done": "Done", "failed": "Needs CTO", "cancelled": "Cancelled"}
 OPEN = ("backlog", "todo")                  # statuses a human may set, along with cancelled
 PRIORITY_ORDER = "CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END"
-REOPEN_STAGES = ("release_approval", "signoff", "done")
+REOPEN_STAGES = ("release_approval", "signoff", "done", "deploy_approval", "deploy_failed", "live")
 WORK_KINDS = ("builder", "designer", "product", "qa", "auditor")   # roles that can own and work a ticket
 AGENT_OPEN_LIMIT = 10                       # past these, agent-filed tickets wait in backlog for triage,
 AGENT_TOTAL_LIMIT = 25                      # so agents cannot keep a project busy indefinitely
@@ -342,6 +342,6 @@ class Tickets:
         if project["stage"] not in REOPEN_STAGES:
             return
         self.db.run("UPDATE approvals SET status='withdrawn', decided_by=?, decided_at=? WHERE project_id=? "
-                    "AND status='pending' AND kind IN ('release','signoff')", by, now(), project["id"])
+                    "AND status='pending' AND kind IN ('release','signoff','deploy','deploy_failed')", by, now(), project["id"])
         self.pipeline._stage(project["id"], "build")
         self.db.log("project", "Reopened for new tickets; the release will be verified again.", project["id"], actor=by)
