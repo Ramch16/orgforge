@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.20.0 (in progress)
+## 0.20.0 — 2026-10-06
 - **Idea to production.** One sentence starts it: **What do you want to build?** on Home, or
   `vittics-builder build "..."`. The project is named from the brief and runs until a decision is yours.
 - **Autopilot** per project: `off` (every stage), `key` (you decide the idea, the plan and the final
