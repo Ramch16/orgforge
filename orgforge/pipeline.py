@@ -761,6 +761,8 @@ class Pipeline:
 
     def _release_failure(self, p: dict, findings: list[str]) -> None:
         pid = p["id"]
+        if self.runtime.learning:
+            self.runtime.learning.settle_project(pid, False, "OrgForge", "the release checks then failed")
         rounds = self.db.one("SELECT COUNT(*) AS n FROM tasks WHERE project_id=? AND key LIKE 'verify-%'", pid)["n"]
         feedback = "\n".join(findings)
         if rounds < self.s.max_rework:
@@ -995,6 +997,8 @@ class Pipeline:
                     findings.append(f"{checker['name']} did not complete the review.")
                 rv = check.review
                 scores.append(rv["score"])
+                if self.runtime.learning:
+                    self.runtime.learning.verdict(pid, task["id"], checker["id"], check.route_id, rv["verdict"], rv["score"])
                 self.perf.record(agent["id"], rv["score"], source=source, reviewer=checker["name"], notes=rv["notes"],
                                  task_id=task["id"], project_id=pid)
                 if rv["verdict"] != "approve":
@@ -1007,6 +1011,8 @@ class Pipeline:
                 self.runtime.memory.remember(
                     f"Task {task['key']} failed review: " + '\n'.join(findings), 'OrgForge', pid,
                     category='failure', source=f"ticket:{task['id']};attempt:{task['attempts'] + 1}")
+            if not approved and self.runtime.learning:
+                self.runtime.learning.after_failure(res.route_id, pid)
 
             if approved:
                 ws.commit(f"[{task['key']}] {task['title']} ({agent['name']})")
@@ -1076,7 +1082,7 @@ class Pipeline:
             if choice not in allowed:
                 raise PipelineError("Decide the idea with one of: build it for internal use (internal), build it to "
                                     "sell (commercial), park it (park), or drop it (drop).")
-        if decision == "rejected" and not feedback and a["kind"] not in ("hr", "hire", "idea_decision", "budget", "deploy"):
+        if decision == "rejected" and not feedback and a["kind"] not in ("hr", "hire", "idea_decision", "budget", "deploy", "strategy"):
             raise PipelineError("Say what needs to change when you reject, so the team can act on it.")
         who, ok, pid = self.s.human(role), decision == "approved", a["project_id"]
         payload = json.loads(a["payload"])
@@ -1166,6 +1172,8 @@ class Pipeline:
                 self._stage(pid, "build" if ok else "architecture", "" if ok else feedback)
         elif kind == "escalation":
             task = self.db.one("SELECT * FROM tasks WHERE id=?", payload["task_id"])
+            if self.runtime.learning:
+                self.runtime.learning.settle_task(task["id"], ok, who)
             if ok:
                 self.workspace(self.project(pid)).commit(f"[{task['key']}] accepted by the CTO")
                 self.db.run("UPDATE tasks SET status='done', updated_at=? WHERE id=?", now(), task["id"])
@@ -1192,6 +1200,8 @@ class Pipeline:
             self._fix_task(pid, "Repair blocked release", feedback, reporter=who)
             self._stage(pid, "build")
         elif kind == "task_review":
+            if self.runtime.learning:
+                self.runtime.learning.settle_project(pid, ok, who, f"{who} {'accepted' if ok else 'sent back'} the changes")
             if ok:
                 self._stage(pid, "done")
                 p = self.project(pid)
@@ -1201,6 +1211,8 @@ class Pipeline:
                 self._fix_task(pid, "Address the CTO's review of the changes", feedback, reporter=who)
                 self._stage(pid, "build")
         elif kind == "release":
+            if not ok and self.runtime.learning:
+                self.runtime.learning.settle_project(pid, False, who, f"{who} sent the release back")
             if ok:
                 name = self.project(pid)["name"]
                 self._approval(pid, "signoff", "ceo", f"Sign off {name}",
@@ -1210,6 +1222,8 @@ class Pipeline:
                 self._fix_task(pid, "Address the CTO's release feedback", feedback, reporter=who)
                 self._stage(pid, "build")
         elif kind == "signoff":
+            if ok and self.runtime.learning:
+                self.runtime.learning.settle_project(pid, True, who, "the release was accepted")
             if ok:
                 ws = self.workspace(self.project(pid))
                 ws.commit("Release signed off by the CEO")
@@ -1224,6 +1238,9 @@ class Pipeline:
             else:
                 self._fix_task(pid, "Address the CEO's sign-off feedback", feedback, reporter=who)
                 self._stage(pid, "build")
+        elif kind == "strategy":
+            if self.runtime.learning:
+                self.runtime.learning.decide(payload, ok, who)
         elif kind == "deploy":
             if ok:
                 self._stage(pid, "deploying")

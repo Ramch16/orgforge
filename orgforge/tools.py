@@ -86,6 +86,16 @@ TOOL_SPECS: dict[str, dict] = {
             ["tasks"],
         ),
     },
+    "submit_strategy": {
+        "description": "Propose a strategy (an approach the team can add to its assignments) for the CTO to approve. "
+                       "Call exactly once.",
+        "input_schema": _obj(
+            {"name": {"type": "string", "description": "Short lowercase name with dashes, e.g. failing-test-first"},
+             "prompt": {"type": "string", "description": "The approach, as instructions to the engineer (40-1500 characters)"},
+             "why": {"type": "string", "description": "One or two sentences: which failures it prevents"}},
+            ["name", "prompt", "why"],
+        ),
+    },
     "submit_assessment": {
         "description": "Submit your assessment of an idea, after writing docs/ASSESSMENT.md. Call exactly once.",
         "input_schema": _obj(

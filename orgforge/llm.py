@@ -101,6 +101,13 @@ class MockProvider:
                 {'action':'fill','selector':'#name','value':'Customer'},
                 {'action':'click','selector':'#login'},
                 {'action':'assert_text','selector':'#greeting','value':'Welcome Customer'}])]]
+        if purpose == 'strategy':
+            call = self._call('submit_strategy', prompt='Before changing code, write a test that reproduces what the ticket asks for and '
+                                       'watch it fail. Then make it pass, run the whole suite, and list any edge cases '
+                                       'you checked in your summary.',
+                                why='Most failed reviews found untested edge cases.')
+            call['input']['name'] = f"failing-test-first-{call['id'].split('_')[1]}"     # 'name' is _call's own
+            return [[call]]
         if purpose == 'board':
             from .assessments import DIMENSIONS
             return [[self._call('submit_evaluation',scores={d:90 for d in DIMENSIONS},findings=[])]]

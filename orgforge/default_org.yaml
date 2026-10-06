@@ -43,12 +43,13 @@ llm:
 #     prompt: arg
 #     output: text
 
-# Phase 1 integrations and routing are opt-in. See docs/PHASE1.md for examples.
+# Integrations are opt-in. Routing and learning are on, but change nothing until there is evidence or a
+# rule: see docs/PHASE1.md.
 swarms:
   auto_staff: false
   capabilities: {}
 routing:
-  enabled: false
+  enabled: true             # picks among the models in rules: by reviewed results; no rule, no change
   independent_reviews: false
   rules: {}
 # When an engine hits its usage limit, keep working on the next ready model in this list instead of
@@ -78,8 +79,10 @@ failover:
 #           health_retries: 5         # health_interval_seconds: 10, timeout_seconds: 900
 #           monitor_minutes: 5        # keep checking once live (with the workers service on)
 learning:
-  enabled: false
-  min_trials: 2
+  enabled: true
+  min_trials: 2             # tries of each approved strategy before the best one is kept
+  propose_after: 3          # failed reviews of the same kind of work before an architect proposes a strategy (0: never)
+  score_reviewers: true     # reviewers are scored on whether their verdicts held up (escalations, release checks)
   strategies: {}
 workers:
   enabled: false

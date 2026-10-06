@@ -327,6 +327,8 @@ def create_app(co: Company, tokens: dict[str, str]) -> FastAPI:
             "presence": presence(co.db),
             "memories": co.memory.list(limit=60),
             "routing": co.router.summary(),
+            "learning": {"reviewers": co.learning.reviewers(), "strategies": co.learning.proposals(),
+                         "enabled": co.learning.enabled},
             "failover": {"enabled": co.failover.enabled, "models": [str(m) for m in co.failover.config.get("models") or []],
                          "resting": [{**r, "until_local": co.failover.when(r["until"])} for r in co.failover.status()]},
             "skills": [{k: s[k] for k in ("name", "title", "kinds", "departments", "enabled", "builtin", "source")} for s in co.skills.all()],

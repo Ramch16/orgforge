@@ -68,6 +68,8 @@ ACTIONS = {
                                         '"summary": "three to six sentences"}'),
     "submit_department_plan": ("department_plan", '{"summary": "...", "tickets": [{"role": "role id", "title": "...", '
                                                   '"description": "...", "after_build": true or false}]}'),
+    "submit_strategy": ("strategy", '{"name": "short-lowercase-name", "prompt": "the approach, as instructions '
+                                    'to the engineer", "why": "which failures it prevents"}'),
     "close_as_answered": ("close_as_answered", '"why no work is needed" (only if the ticket asks for information)'),
     "create_ticket": ("create_tickets", '[{"title": "...", "description": "...", "type": "task" | "bug" | "story", '
                                         '"priority": "urgent" | "high" | "medium" | "low", "role": "role id"}]'),
@@ -120,7 +122,8 @@ def actions_to_calls(data: dict) -> list[tuple[str, dict]]:
     if "plan" in data:
         calls.append(("submit_plan", {"tasks": data["plan"]}))
     for key, tool in (("journey", "submit_journey"), ("evaluation", "submit_evaluation"), ("review", "submit_review"), ("assessment", "submit_assessment"),
-                      ("department_plan", "submit_department_plan"), ("transfer", "transfer_ticket")):
+                      ("department_plan", "submit_department_plan"), ("transfer", "transfer_ticket"),
+                      ("strategy", "submit_strategy")):
         if isinstance(data.get(key), dict):
             calls.append((tool, data[key]))
     if data.get("close_as_answered"):

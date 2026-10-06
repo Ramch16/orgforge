@@ -33,6 +33,7 @@ class RunResult:
     route_id: int | None = None
     evaluation: dict | None = None
     journey: dict | None = None
+    strategy: dict | None = None
 
 
 class AgentRuntime:
@@ -98,7 +99,7 @@ class AgentRuntime:
         model, reason = self.router.choose(agent, meta, kind) if self.router else (agent["model"], "")
         failover = self.failover if self.failover and self.failover.enabled else None
         routing = self.s.raw.get("routing") or {}
-        avoid = meta.get("author_model") if routing.get("enabled") is True and routing.get("independent_reviews") else None
+        avoid = meta.get("author_model") if routing.get("enabled", True) is not False and routing.get("independent_reviews") else None
         rest = failover.resting(model) if failover else None
         if rest:                                 # already resting: go straight to a backup, without spending a call
             ready = failover.pick(model, avoid=avoid)
@@ -324,6 +325,13 @@ class AgentRuntime:
                 {"role": t["role"], "title": str(t["title"])[:200], "description": str(t.get("description", ""))[:4000],
                  "after_build": bool(t.get("after_build"))} for t in tickets][:20]}
             return f"Plan received: {len(result.dept_plan['tickets'])} department ticket(s)."
+        if name == "submit_strategy":
+            from .learning import parse_strategy
+            try:
+                result.strategy = parse_strategy(args)
+            except ValueError as exc:
+                raise ToolError(str(exc)) from exc
+            return "Strategy received; the CTO decides whether the team uses it."
         if name == "close_as_answered":
             result.answered = str(args.get("reason", "")) or "Answered; no work needed."
             return "The ticket will be closed as answered once you reply."

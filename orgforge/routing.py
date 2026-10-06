@@ -19,9 +19,8 @@ class ModelRouter:
         config = self.s.raw.get('routing') or {}
         rules = config.get('rules') or {}
         candidates = rules.get(meta.get('purpose')) or rules.get(agent['role']) or rules.get(kind) or []
-        if config.get('enabled') is not True:
+        if config.get('enabled', True) is False or not candidates:     # on by default; without a rule, nothing changes
             return agent['model'], 'Assigned agent model'
-        candidates = candidates or [agent['model']]
         if not isinstance(candidates, list) or any(not isinstance(m, str) or not m.strip() for m in candidates):
             raise ValueError('routing.rules values must be nonempty model lists.')
         candidates = list(dict.fromkeys(candidates))

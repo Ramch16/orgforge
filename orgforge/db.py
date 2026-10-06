@@ -172,6 +172,33 @@ CREATE TABLE IF NOT EXISTS deployments (
   started_at TEXT NOT NULL,
   finished_at TEXT
 );
+CREATE TABLE IF NOT EXISTS review_verdicts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER,
+  task_id INTEGER,
+  reviewer_id INTEGER NOT NULL,
+  route_id INTEGER,
+  verdict TEXT NOT NULL,
+  score REAL,
+  correct INTEGER,
+  settled_by TEXT,
+  created_at TEXT NOT NULL,
+  settled_at TEXT
+);
+CREATE TABLE IF NOT EXISTS learned_strategies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  task_kind TEXT NOT NULL,
+  signature TEXT NOT NULL,
+  prompt TEXT NOT NULL,
+  why TEXT NOT NULL DEFAULT '',
+  evidence INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'proposed',
+  proposed_by TEXT NOT NULL,
+  decided_by TEXT,
+  created_at TEXT NOT NULL,
+  decided_at TEXT
+);
 CREATE TABLE IF NOT EXISTS engine_cooldowns (
   engine TEXT PRIMARY KEY,
   until REAL NOT NULL,

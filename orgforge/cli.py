@@ -144,6 +144,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--test", metavar="ENGINE", help="Run a tiny prompt through this engine")
     p.add_argument("--wake", metavar="MODEL", nargs="?", const="all",
                    help="Try a resting engine again now (no value: all of them)")
+    sub.add_parser("learning", help="Reviewer accuracy, and approaches the team learned from failed reviews")
     p = sub.add_parser("deployments", help="What each project has deployed, where, and whether it is live")
     p.add_argument("project", type=int, nargs="?")
     sub.add_parser("costs", help="What the company's AI work has cost (estimate)")
@@ -400,6 +401,21 @@ def _dispatch(args) -> int:
                     print("Sign in first: run `claude` in a terminal and type /login.")
             except EngineError as exc:
                 print(f"\n{args.test}: {exc}")
+    elif args.cmd == "learning":
+        print("Learning is " + ("on." if co.learning.enabled else "off (learning.enabled in org.yaml)."))
+        rows = co.learning.reviewers()
+        print("\nReviewer accuracy (verdicts checked against what happened next):")
+        for r in rows:
+            print(f"  {r['name']:<12} {r['role']:<20} {r['right']}/{r['settled']} right · {r['missed']} missed problems · "
+                  f"{r['too_strict']} blocked good work · {r['pending']} waiting")
+        if not rows:
+            print("  Nothing settled yet: it appears once releases are accepted or escalations decided.")
+        print("\nApproaches the team learned:")
+        for s in co.learning.proposals():
+            print(f"  [{s['status']}] {s['name']} · {s['task_kind']}s on {s['signature']} work · "
+                  f"from {s['evidence']} failed reviews\n      {s['prompt'][:300]}")
+        if not co.learning.proposals():
+            print("  None yet.")
     elif args.cmd == "deployments":
         rows = co.production.list(args.project)
         if not rows:

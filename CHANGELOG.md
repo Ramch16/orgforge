@@ -1,6 +1,14 @@
 # Changelog
 
 ## 0.14.0 (in progress)
+- **The learning loop runs itself.** Learning and routing are on by default (no change without
+  evidence or rules). Every review verdict is settled by what happened next (the CTO's call on an
+  escalation, failing release checks, an accepted release) and scores reviewers and QA: per ticket
+  for escalations, once per reviewer for release-level results so one failed release cannot get a
+  reviewer fired. After repeated failed reviews of the same kind of work across tickets, an
+  architect proposes an approach (`submit_strategy`); once the CTO approves it, it competes with
+  the current one on reviewed results. New: `orgforge learning`, Reviewer accuracy and learned
+  approaches under Company knowledge, `learning.propose_after`, `learning.score_reviewers`.
 - **Production stage.** A project with a `production:` entry in `org.yaml` is deployed after the
   CEO signs off: environment by environment, each with a deploy command, a health check with
   retries, an optional CEO/CTO go-ahead and automatic rollback to the last healthy version. Failures

@@ -572,6 +572,31 @@ orgforge org rehire Sandy --as cto                                 # current sea
 orgforge org show --all                                            # include former agents
 ```
 
+## The learning loop
+
+On by default (`learning:` in `org.yaml`); `learning.enabled: false` turns it off.
+
+- **Reviewers are held to what happened next.** Every review verdict is settled later by the CTO's
+  call on an escalated ticket (only each reviewer's latest round counts), by release checks failing
+  after tickets were approved, or by the release being accepted. A ruling on a ticket counts like a
+  human approval or rejection (92 or 35). A release-level result is shared, so it counts once per
+  reviewer: 92 when accepted, 60 when checks fail. Accuracy feeds the reviewers' performance (so
+  probation applies to them too) and the routing evidence for their models.
+  `score_reviewers: false` keeps measuring without scoring.
+- **Failures become proposals.** After `propose_after` (3) failed reviews of the same kind of work,
+  across at least two tickets, an architect reads the findings and proposes an approach, such as
+  "write the failing test first". The CTO approves or rejects it; nothing is used before that.
+- **Approved approaches compete.** Each is tried `min_trials` (2) times next to the current approach
+  for that kind of work, then the one with better reviewed results is kept.
+- **Routing is on too,** but picks among models only where you list candidates under
+  `routing.rules`; without a rule every agent keeps its own model.
+
+```bash
+orgforge learning                                 # reviewer accuracy and learned approaches
+```
+
+Company knowledge in the dashboard shows the same, next to model results.
+
 ## Changing the structure
 
 Nothing about the org is fixed. Add or close departments, define roles, hire as many agents as you want.
@@ -638,9 +663,10 @@ Each role gets only the tools listed for it.
   attempt is checked by three agents and every release by three auditors. To
   run leaner, let go of roles you do not need (`orgforge org fire Mani
   --no-replace`). Token counts are tracked per agent in the database.
-- Reviewers, QA and auditors are not scored automatically (nobody reviews the
-  reviewers). Rate them yourself with `orgforge rate` when their checks miss
-  things or block good work.
+- Reviewers and QA are scored only from what can be checked: the CTO's call on
+  escalated tickets, release checks and accepted releases (see *The learning
+  loop*). Auditors are not scored automatically; rate them yourself with
+  `orgforge rate` when their checks miss things or block good work.
 - Audits are done by a language model reading and running the code. They catch
   common problems but are not a substitute for a professional penetration test
   or legal review before a commercial launch.

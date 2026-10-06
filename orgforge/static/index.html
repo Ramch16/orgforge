@@ -343,6 +343,8 @@
           <div id="brain-team"><p class="muted">Choose a project above to inspect its team and workload.</p></div></div>
         <div class="card"><h2>Model results</h2><p class="muted">Completed runs and work that passed review are counted separately. Costs are estimates.</p>
           <div id="brain-routing"></div></div>
+        <div class="card"><h2>Reviewer accuracy</h2><p class="muted">Verdicts checked against what happened next: the CTO's call on escalated tickets, release checks, and accepted releases.</p><div id="brain-reviewers"></div></div>
+        <div class="card"><h2>Approaches the team learned</h2><p class="muted">Proposed from repeated failed reviews. The CTO approves each one; it is then tried next to the current approach and kept only if reviews are better.</p><div id="brain-strategies"></div></div>
         <div class="card"><h2>Engine failover</h2><div id="brain-failover"></div></div>
       </section>
 
@@ -520,6 +522,15 @@ function renderBrain() {
   const rows = state.routing || [];
   paint("brain-routing", rows.length ? `<div style="overflow:auto"><table><thead><tr><th>Model</th><th>Work</th><th>Runs</th><th>Passed review</th><th>Quality</th><th>Time per run</th><th>Cost per success</th></tr></thead><tbody>${rows.map(r =>
     `<tr><td>${esc(r.model)}</td><td>${esc(r.task_kind)}</td><td>${r.runs}</td><td>${r.evaluated ? `${r.successes} / ${r.evaluated}` : "Not evaluated"}</td><td>${r.quality == null ? "—" : r.quality.toFixed(0) + "/100"}</td><td>${r.latency.toFixed(1)}s</td><td>${r.cost_per_success == null ? "—" : usd(r.cost_per_success)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">Model evidence appears here as the team completes work.</p>`);
+  const lr = state.learning || {reviewers: [], strategies: [], enabled: true};
+  paint("brain-reviewers", lr.reviewers.length ? `<div style="overflow:auto"><table><thead><tr><th>Reviewer</th><th>Checked</th><th>Right</th><th>Missed problems</th><th>Blocked good work</th><th>Waiting</th></tr></thead><tbody>${lr.reviewers.map(r =>
+    `<tr><td>${esc(r.name)} <span class="muted">${esc(r.role.replace(/_/g, " "))}</span></td><td>${r.settled}</td><td>${Math.round(100 * r.right / r.settled)}%</td><td>${r.missed}</td><td>${r.too_strict}</td><td>${r.pending}</td></tr>`).join("")}</tbody></table></div>`
+    : `<p class="muted">${lr.enabled ? "Appears once releases are accepted or escalations decided." : "Learning is off (learning.enabled in org.yaml)."}</p>`);
+  paint("brain-strategies", lr.strategies.length ? lr.strategies.map(s => `<div class="ev"><span class="grow"><b>${esc(s.name)}</b>
+      <span class="chip ${{approved: "done", rejected: "cancelled", proposed: "probation"}[s.status]}">${esc(s.status)}</span>
+      <span class="muted">· ${esc(s.task_kind)}s on ${esc(s.signature.replace(/,/g, ", "))} work · from ${s.evidence} failed reviews · ${esc(s.proposed_by)}</span>
+      <br>${esc(s.prompt)}</span></div>`).join("")
+    : `<p class="muted">None yet. After repeated failed reviews of the same kind of work, an architect proposes one for the CTO.</p>`);
   const fo = state.failover || {enabled: false, models: [], resting: []};
   paint("brain-failover", (fo.enabled
       ? `<p>On. When an engine hits its usage limit, work moves to: ${fo.models.length ? fo.models.map(esc).join(" → ") : "no backup models set"}.</p>`
@@ -614,7 +625,7 @@ function decisionCard(a, me) {
     ${long ? `<button class="quiet" style="padding:0" data-expand-toggle="${a.id}">${open ? "Show less" : "Read more"}</button>` : ""}
     ${["release", "signoff"].includes(a.kind) && a.project_id ? `<button class="quiet" style="padding:0;margin-left:.8rem" data-review="${a.project_id}">Open product review</button>` : ""}
     ${a.kind === "task_review" ? `<button class="quiet" style="padding:0;margin-left:.8rem" data-changes="${a.project_id}">See the changes</button>` : ""}
-    ${mine ? `<textarea data-draft="${a.id}" style="margin-top:.6rem" rows="2" placeholder="${a.kind === "idea_decision" ? "Your reasons (optional)" : ["hire", "budget", "hr"].includes(a.kind) ? "Note (optional)" : "What should change? Required to send back."}">${esc(drafts[a.id] || "")}</textarea>
+    ${mine ? `<textarea data-draft="${a.id}" style="margin-top:.6rem" rows="2" placeholder="${a.kind === "idea_decision" ? "Your reasons (optional)" : ["hire", "budget", "hr", "strategy", "deploy"].includes(a.kind) ? "Note (optional)" : "What should change? Required to send back."}">${esc(drafts[a.id] || "")}</textarea>
     <div class="actions" style="margin-top:.5rem">
       ${a.kind === "idea_decision" ? `
       <button class="primary" data-decide="approved" data-choice="internal" data-id="${a.id}">Build for internal use</button>

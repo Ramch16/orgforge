@@ -92,7 +92,7 @@ provenance, not independently verified facts.
 
 ## Model routing and review evidence
 
-Routing is off by default. Without a rule, the assigned agent model is retained.
+Routing is on by default (0.14) but only acts on rules: without a rule, the assigned agent model is retained.
 Rules may target a run purpose, role, or role kind, in that precedence order:
 
 ```yaml
@@ -125,8 +125,10 @@ cost are stored. Builder success/quality are populated only after review; simply
 finishing a run leaves that evidence unevaluated. The cost ledger records the
 selected model and run ID, so parallel runs are attributed separately. Unknown
 prices are marked unpriced, and cost per success is unavailable when costs are
-unknown or no evaluated run succeeded. The first version learns at role-kind
-level; prompt/strategy optimization and task-similarity learning are future work.
+unknown or no evaluated run succeeded. Since 0.14 reviewer and QA runs are evaluated
+too, once their verdicts are settled, and strategies can be proposed from failed
+reviews (README: The learning loop). Learning is by role kind and keyword-based
+work labels, not semantic task similarity.
 
 Providers reuse the existing Anthropic, OpenAI-compatible endpoint, and CLI
 adapters. Gemini API models use `gemini:<model>` and `GEMINI_API_KEY`; Gemini CLI
