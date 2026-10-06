@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.19.0 (in progress)
+## 0.19.0 — 2026-10-06
 - **OrgForge is now Vittics Builder.** The command is `vittics-builder`, the Python package
   `vittics_builder`, settings are `VITTICS_*`, a company's data folder is `.vittics/`, the desktop app
   is *Vittics Builder* (`~/VitticsBuilder`), and the repository is Ramch16/vittics-builder.
