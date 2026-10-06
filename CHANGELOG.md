@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.18.0 (in progress)
+## 0.18.0 — 2026-10-06
 - **Windows.** The tests now run on Windows (and macOS) in CI, and pass. Commands (product checks,
   deploy and health commands, agents' commands) run in Git Bash from Git for Windows, never WSL's
   bash. CLIs installed by npm as `.cmd` wrappers are started through their Node script so cmd.exe
@@ -13,7 +13,7 @@
 - **Desktop installers in CI.** A workflow builds the Windows installer (NSIS `.exe`) and the macOS
   `.dmg`, after smoke-testing the bundled backend on each; both unsigned.
 
-## 0.17.0 (in progress)
+## 0.17.0 — 2026-10-06 (released with 0.18.0)
 - **Desktop app (macOS).** A Tauri app (`desktop/`) that starts a bundled OrgForge backend
   (PyInstaller) and shows the dashboard: company in `~/OrgForge` created on first launch, automatic
   sign-in, a CEO/CTO switch, and a first-run welcome (check this computer, then submit an idea).
@@ -22,7 +22,7 @@
   dashboard gets no Tauri APIs. Builds `OrgForge.app` and a `.dmg`; not signed yet.
   New: `orgforge desktop`, the `desktop` extra.
 
-## 0.16.0 (in progress)
+## 0.16.0 — 2026-10-06 (released with 0.18.0)
 - **Worker machines.** Other computers can run agents' coding CLIs for the company: pair with a
   one-time code (`orgforge machines pair`, `orgforge worker join`), assign CLI agents to them, and
   their CLI work runs there on that machine's logins while reviews and checks stay here. Workers
@@ -32,7 +32,7 @@
   patches. An offline worker hands the turn back to this computer when the engine is installed
   here. Machine in the dashboard pairs, assigns and revokes.
 
-## 0.15.0 (in progress)
+## 0.15.0 — 2026-10-06 (released with 0.18.0)
 - **Machine readiness.** `orgforge doctor` and a Machine page show what the company and each
   project need (from agents' engines, the sandbox, project files, `product.json` and production
   commands), what is installed and at which version, whether Docker is running, and whether

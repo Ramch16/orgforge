@@ -1,7 +1,7 @@
 {
   "name": "orgforge-desktop",
   "private": true,
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "OrgForge as a desktop app: a Tauri shell around the OrgForge dashboard and its bundled backend.",
   "scripts": {
     "server": "python3 scripts/build_server.py",

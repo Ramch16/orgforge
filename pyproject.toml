@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "orgforge"
-version = "0.14.0"
+version = "0.18.0"
 description = "An AI-staffed software company you run as CEO, with a human CTO: agents plan, build, review and ship software, and get replaced when they underperform."
 readme = "README.md"
 requires-python = ">=3.11"
