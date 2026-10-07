@@ -499,8 +499,12 @@ npm run build                                     # bundles the backend, then th
 # -> desktop/src-tauri/target/release/bundle/macos/Vittics Builder.app and bundle/dmg/Vittics Builder_<version>.dmg
 ```
 
-The app is not signed yet: macOS asks for confirmation on first open (Control-click the app, then
-Open). Signing and notarising need an Apple Developer ID; a Windows build needs a Windows machine.
+The app is not yet signed with an Apple Developer ID, so the first time you open it macOS says it
+cannot verify it. Click **Done**, open **System Settings → Privacy & Security**, and click **Open
+Anyway** next to Vittics Builder (once). On Windows, SmartScreen shows "Windows protected your PC":
+click **More info**, then **Run anyway**. Notarising needs an Apple Developer ID; the macOS build is
+sealed with an ad-hoc signature and without the hardened runtime until then (the hardened runtime
+stops the bundled Python from loading). A Windows build needs a Windows machine.
 `vittics-builder desktop` runs the same backend from a terminal.
 
 The `desktop` workflow on GitHub builds both installers (Windows `.exe`, macOS `.dmg`) on pushes to

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.20.2 — 2026-10-06
+- **The macOS app no longer reports itself as "damaged".** The 0.20.1 app's signature did not cover the
+  whole bundle, and macOS refuses downloaded apps with a broken signature as "damaged", with no way to
+  open them. The app is now sealed with an ad-hoc signature, so macOS shows its usual "cannot verify"
+  message and **Privacy & Security → Open Anyway** opens it. The hardened runtime stays off until the
+  app is notarised with an Apple Developer ID: with it on, the bundled Python could not load.
+- The desktop workflow now checks the macOS app's signature (built and inside the `.dmg`) and starts
+  its backend from inside the app before uploading the installers.
+- Corrected the first-open instructions: Control-click → Open does not work on current macOS.
+
 ## 0.20.1 — 2026-10-06
 - **Choose how your agents think, in the app.** A new install could not be set up without a terminal:
   it defaulted to the Anthropic API with no way to enter a key, and the desktop app could not switch

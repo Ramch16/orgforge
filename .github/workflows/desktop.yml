@@ -44,6 +44,17 @@ jobs:
       - name: Build the app
         working-directory: desktop
         run: npx tauri build --bundles ${{ matrix.bundles }}
+      - name: Check the macOS app is sealed and its backend starts from inside it
+        if: runner.os == 'macOS'
+        run: |
+          APP="desktop/src-tauri/target/release/bundle/macos/Vittics Builder.app"
+          codesign --verify --deep --strict "$APP"
+          python desktop/scripts/smoke_server.py "$APP/Contents/MacOS/vittics-builder-server"
+          DMG=$(ls desktop/src-tauri/target/release/bundle/dmg/*.dmg | head -1)
+          MOUNT=$(mktemp -d)
+          hdiutil attach -nobrowse -readonly -mountpoint "$MOUNT" "$DMG"
+          codesign --verify --deep --strict "$MOUNT/Vittics Builder.app"
+          hdiutil detach "$MOUNT"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
