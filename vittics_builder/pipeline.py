@@ -370,6 +370,12 @@ class Pipeline:
             colleague = self.org.pick(kind=ref) if ref == "planner" else self.org.pick(role=ref)
             if not colleague or colleague["id"] == pm["id"]:
                 continue
+            # A usage-limit retry must not reopen a consultation that already
+            # finished. A rejected assessment with feedback still needs fresh input.
+            completed = self.db.one("SELECT status FROM tasks WHERE project_id=? AND key=?",
+                                    pid, f"stage-consult-{colleague['role']}")
+            if not p["feedback"] and completed and completed["status"] == "done" and self._read(ws, path):
+                continue
             note(self.db, lead, pm["name"], f"Asked {colleague['name']}, {where(self.db, colleague['role'])}, "
                  f"for a {label.lower()}.", kind="handoff")
             ticket = self._stage_ticket(pid, f"stage-consult-{colleague['role']}", f"{label}: {p['name']}", colleague,

@@ -33,3 +33,21 @@ jobs:
           git config --global core.autocrlf false
       - name: Test (offline mock agents, no API key needed)
         run: python -m pytest -q -p no:cacheprovider
+
+  dashboard-dialogs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install browser test dependencies
+        run: |
+          pip install -e ".[dev,browser]"
+          python -m playwright install --with-deps chromium
+      - name: Configure git for test projects
+        run: |
+          git config --global user.email "ci@vittics.local"
+          git config --global user.name "Vittics Builder CI"
+      - name: Test desktop dialog interactions
+        run: python -m pytest tests/test_dashboard_dialogs.py -q -p no:cacheprovider
