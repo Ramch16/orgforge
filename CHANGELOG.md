@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.20.3 — 2026-10-07
 - Fixed desktop buttons for AI provider selection, worker pairing, tool installation, budget changes, agent replacement and key/node removal by using in-app dialogs.
 - Empty sign-in, build, message and key submissions now show validation instead of silently doing nothing.
 - Retrying an interrupted idea assessment preserves completed consultations; feedback still triggers fresh consultation.
