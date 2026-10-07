@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+- Fixed desktop buttons for AI provider selection, worker pairing, tool installation, budget changes, agent replacement and key/node removal by using in-app dialogs.
+- Empty sign-in, build, message and key submissions now show validation instead of silently doing nothing.
+- Retrying an interrupted idea assessment preserves completed consultations; feedback still triggers fresh consultation.
+
 ## 0.20.2 — 2026-10-06
 - **The macOS app no longer reports itself as "damaged".** The 0.20.1 app's signature did not cover the
   whole bundle, and macOS refuses downloaded apps with a broken signature as "damaged", with no way to

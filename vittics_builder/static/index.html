@@ -397,12 +397,20 @@
   <div id="error" role="alert"></div>
 </div>
 
+<dialog id="action-dlg" aria-labelledby="action-title"><form id="action-form">
+  <h2 id="action-title" style="margin-top:0"></h2>
+  <p id="action-message" style="white-space:pre-wrap"></p>
+  <label id="action-field" class="field"><span id="action-label"></span><input id="action-input"></label>
+  <p id="action-error" role="alert" style="color:var(--bad)"></p>
+  <div class="row"><button type="submit" class="primary" id="action-ok">Continue</button><button type="button" id="action-cancel">Cancel</button></div>
+</form></dialog>
+
 <dialog id="ops-detail"><h2>Evidence</h2><pre id="ops-detail-body" style="white-space:pre-wrap;max-height:65vh;overflow:auto"></pre><button data-close="ops-detail">Close</button></dialog>
 <dialog id="key-dlg"><form method="dialog" id="key-form">
   <h2 style="margin-top:0">Add a key</h2>
   <p class="muted">For the product, not for the agents: checks, the preview and deploy commands get it as an environment variable; agents only see its name. It is stored privately on this computer and never shown again.</p>
-  <label>Name <input id="key-name" placeholder="STRIPE_SECRET_KEY" autocomplete="off" spellcheck="false"></label>
-  <label>Value <input id="key-value" type="password" autocomplete="off"></label>
+  <label>Name <input id="key-name" required placeholder="STRIPE_SECRET_KEY" autocomplete="off" spellcheck="false"></label>
+  <label>Value <input id="key-value" required type="password" autocomplete="off"></label>
   <div class="row" style="justify-content:flex-end;gap:.5rem;margin-top:.6rem"><button value="cancel" formnovalidate>Cancel</button><button class="primary" id="key-save" value="save">Save</button></div>
 </form></dialog>
 <dialog id="idea-dlg">
@@ -494,6 +502,38 @@ let token = sessionStorage.getItem("vittics-token") || "";
 let state = null;
 const drafts = {};
 
+// Browser-native prompts are unavailable in the desktop webview. Keep all
+// confirmations inside the dashboard, with cancellation and focus restoration.
+let pendingAction = null;
+function askAction(message, { title = "Confirm action", label = null, value = "", type = "text", min = null } = {}) {
+  if (pendingAction) return Promise.resolve(null);
+  const dlg = $("action-dlg"), input = $("action-input"), previous = document.activeElement;
+  $("action-title").textContent = title; $("action-message").textContent = message;
+  $("action-field").hidden = label === null; $("action-label").textContent = label || "";
+  input.value = value; input.type = type; input.required = label !== null;
+  input.removeAttribute("min"); input.removeAttribute("step");
+  if (min !== null) input.min = min;
+  if (type === "number") input.step = "any";
+  $("action-error").textContent = "";
+  return new Promise(resolve => {
+    pendingAction = result => { pendingAction = null; resolve(result); if (previous?.isConnected) previous.focus(); };
+    dlg.showModal(); (label === null ? $("action-cancel") : input).focus();
+  });
+}
+$("action-form").onsubmit = e => {
+  e.preventDefault();
+  if (!$("action-form").reportValidity()) return;
+  if (!$("action-field").hidden && !$("action-input").value.trim()) {
+    $("action-error").textContent = "Enter a value."; return;
+  }
+  const finish = pendingAction;
+  $("action-dlg").close();
+  finish?.($("action-field").hidden ? true : $("action-input").value.trim());
+};
+$("action-cancel").onclick = () => $("action-dlg").close();
+$("action-dlg").addEventListener("cancel", () => pendingAction?.(null));
+$("action-dlg").addEventListener("close", () => pendingAction?.(null));
+
 async function api(path, body) {
   const res = await fetch(path, {
     method: body === undefined ? "GET" : "POST",
@@ -578,7 +618,7 @@ async function loadNodes() {
       <button id="node-assign">Assign</button></div>` : nodes.length ? `<p class="muted">Only agents on a coding CLI (Engine: cli:…) can work on another machine.</p>` : ""));
 }
 $("machine-pair").onclick = () => act(async () => {
-  const name = prompt("Name for the new worker machine (e.g. windows-laptop):");
+  const name = await askAction("Name the computer that will run your agents.", { title: "Add a worker machine", label: "Name (e.g. windows-laptop)" });
   if (!name) return;
   const p = await api("/api/machines/pair", { name });
   paint("machine-pairing", `<div class="report" style="margin:.4rem 0">On ${esc(p.name)}, within 10 minutes (the code works once):<br><br>
@@ -589,8 +629,9 @@ $("machine-pair").onclick = () => act(async () => {
 });
 document.addEventListener("click", e => {
   const r = e.target.closest("[data-node-revoke]");
-  if (r && confirm(`Revoke ${r.dataset.nodeRevoke}? It can no longer take work.`))
-    act(async () => { await api(`/api/machines/${encodeURIComponent(r.dataset.nodeRevoke)}/revoke`, {}); await loadNodes(); });
+  if (r) act(async () => {
+    if (!await askAction(`Revoke ${r.dataset.nodeRevoke}? It can no longer take work.`)) return;
+    await api(`/api/machines/${encodeURIComponent(r.dataset.nodeRevoke)}/revoke`, {}); await loadNodes(); });
   if (e.target.id === "node-assign")
     act(async () => { await api("/api/machines/assign", { agent: $("node-agent").value, machine: $("node-target").value || null }); await loadNodes(); });
 });
@@ -600,8 +641,9 @@ document.addEventListener("click", e => {
   const b = e.target.closest("[data-install]");
   if (!b) return;
   const t = machineData.tools.find(x => x.id === b.dataset.install);
-  if (!confirm(`Install ${t.name} on this computer?\n\n${t.install.how}`)) return;
-  act(async () => { await api(`/api/machine/install/${encodeURIComponent(t.id)}`, {}); await loadMachine(true); });
+  act(async () => {
+    if (!await askAction(`Install ${t.name} on this computer?\n\n${t.install.how}`)) return;
+    await api(`/api/machine/install/${encodeURIComponent(t.id)}`, {}); await loadMachine(true); });
 });
 
 async function loadOperations() {
@@ -1018,7 +1060,7 @@ document.addEventListener("click", e => {
   const ka = e.target.closest("[data-key-add]");
   if (ka) { keyProject = Number(ka.dataset.keyAdd); $("key-name").value = ""; $("key-value").value = ""; $("key-dlg").showModal(); $("key-name").focus(); return; }
   const kr = e.target.closest("[data-key-remove]");
-  if (kr) { if (confirm(`Remove the key ${kr.dataset.keyRemove}?`)) act(async () => { await api(`/api/projects/${kr.dataset.project}/keys/${encodeURIComponent(kr.dataset.keyRemove)}/delete`, {}); }); return; }
+  if (kr) { act(async () => { if (!await askAction(`Remove the key ${kr.dataset.keyRemove}?`)) return; await api(`/api/projects/${kr.dataset.project}/keys/${encodeURIComponent(kr.dataset.keyRemove)}/delete`, {}); }); return; }
   if (e.target.closest("[data-new-idea]")) { $("idea-dlg").showModal(); $("p-name").focus(); return; }
   if (e.target.closest("[data-hire]")) { $("hire-dlg").showModal(); return; }
   const cl = e.target.closest("[data-close]");
@@ -1144,12 +1186,14 @@ document.addEventListener("click", e => {
   const t = e.target, d = t.dataset;
   if (d.review) act(() => openReview(Number(d.review)));
   else if (d.file) showFile(d.file).catch(err => { $("review-viewer").textContent = err.message; });
-  else if (d.download) download(Number(d.download)).catch(err => alert(err.message));
+  else if (d.download) download(Number(d.download)).catch(err => { $("error").textContent = err.message; });
   else if (d.report) act(() => openReports(Number(d.report)));
   else if (d.feedback) act(() => openFeedback(Number(d.feedback)));
   else if (d.budget) {
-    const v = prompt("New budget in US dollars (0 means no limit):", d.amount);
-    if (v !== null && v.trim() !== "" && !isNaN(Number(v))) act(() => api(`/api/projects/${d.budget}/budget`, { amount: Number(v) }));
+    act(async () => {
+      const v = await askAction("0 means no limit.", { title: "Change budget", label: "Budget in US dollars", value: d.amount, type: "number", min: 0 });
+      if (v !== null) await api(`/api/projects/${d.budget}/budget`, { amount: Number(v) });
+    });
   }
   else if (t.id === "review-close") $("review-dlg").close();
   else if (t.id === "report-close") $("report-dlg").close();
@@ -1293,8 +1337,10 @@ document.addEventListener("click", e => {
   else if (d.run) act(() => api(`/api/projects/${d.run}/run`, {}));
   else if (d.rehire) act(() => api(`/api/agents/${d.rehire}/rehire`, {}));
   else if (d.fire) {
-    const reason = prompt(`Why is ${d.name} being replaced? A successor takes the seat and inherits the lessons.`);
-    if (reason) act(() => api(`/api/agents/${d.fire}/fire`, { reason, replace: true }));
+    act(async () => {
+      const reason = await askAction(`A successor takes ${d.name}'s seat and inherits the lessons.`, { title: "Replace agent", label: "Reason for replacement" });
+      if (reason !== null) await api(`/api/agents/${d.fire}/fire`, { reason, replace: true });
+    });
   }
 });
 $("p-idea").onchange = () => { $("p-start").textContent = $("p-idea").checked ? "Submit idea" : "Start building"; };
@@ -1311,7 +1357,7 @@ $("signout").onclick = () => signOut();
 $("ai-key-form").onsubmit = e => {
   e.preventDefault();
   const value = $("ai-key").value.trim();
-  if (!value) return;
+  if (!value) { $("ai-test-result").textContent = "Enter an API key before saving."; return; }
   act(async () => { await api("/api/ai/key", { value }); $("ai-key").value = ""; $("ai-test-result").textContent = "Key saved. Choose Anthropic API key above to use it."; });
 };
 $("ai-test").onclick = () => act(async () => {
@@ -1321,8 +1367,10 @@ $("ai-test").onclick = () => act(async () => {
 });
 document.addEventListener("click", e => {
   const u = e.target.closest("[data-ai-use]");
-  if (u && confirm(`Move every agent to ${state.ai.choices[u.dataset.aiUse].label}?`))
-    act(async () => { await api("/api/ai/use", { choice: u.dataset.aiUse }); });
+  if (u) act(async () => {
+    if (!await askAction(`Move every agent to ${state.ai.choices[u.dataset.aiUse].label}?`, { title: "Change team engine" })) return;
+    await api("/api/ai/use", { choice: u.dataset.aiUse });
+  });
 });
 let keyProject = null;
 $("key-dlg").addEventListener("close", () => {
@@ -1334,7 +1382,7 @@ $("key-dlg").addEventListener("close", () => {
 $("build-form").onsubmit = e => {
   e.preventDefault();
   const brief = $("build-brief").value.trim();
-  if (!brief) return;
+  if (!brief) { $("error").textContent = "Describe what you want to build."; return; }
   act(async () => {
     const p = await api("/api/build", { brief, autopilot: $("build-level").value });
     $("build-brief").value = "";
@@ -1349,7 +1397,7 @@ $("switch-role").onclick = () => act(async () => {
   const r = await api("/api/desktop/switch", {});
   token = r.token; sessionStorage.setItem("vittics-token", token);
 });
-$("signin-btn").onclick = () => { token = $("token").value.trim(); sessionStorage.setItem("vittics-token", token); $("token").value = ""; refresh(true); };
+$("signin-btn").onclick = () => { if (!$("token").value.trim()) { $("signin-error").textContent = "Enter your CEO or CTO token."; return; } token = $("token").value.trim(); sessionStorage.setItem("vittics-token", token); $("token").value = ""; refresh(true); };
 $("token").onkeydown = e => { if (e.key === "Enter") $("signin-btn").click(); };
 
 let openChatId = null, chatShown = "";
@@ -1383,7 +1431,8 @@ async function loadChat(id, opening) {
 
 async function sendChat() {
   const body = $("chat-input").value.trim();
-  if (!body || !openChatId) return;
+  if (!body) { $("chat-error").textContent = "Enter a message before sending."; return; }
+  if (!openChatId) return;
   $("chat-error").textContent = "";
   try {
     await api(`/api/agents/${openChatId}/messages`, { body, project_id: Number($("chat-project").value) || null });
@@ -1454,7 +1503,8 @@ async function openConsole(agentId) {
 }
 async function sendSteer() {
   const body = $("con-steer").value.trim();
-  if (!body || !watching) return;
+  if (!body) { $("con-note").textContent = "Enter a message before sending."; return; }
+  if (!watching) return;
   try { await api(`/api/agents/${watching}/steer`, { body }); $("con-steer").value = ""; await openConsole(watching); }
   catch (e) { if (e.message !== "unauthorized") $("con-note").textContent = e.message; }
 }

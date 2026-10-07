@@ -147,3 +147,25 @@ def test_idea_api_and_cli(co, capsys):
     assert "Idea" in out and "submitted" in out
     chatbot = co.db.one("SELECT * FROM projects WHERE name='Chatbot'")
     assert chatbot["author"] == co.s.cto_name and chatbot["stage"] == "idea_review"
+
+
+def test_idea_retry_preserves_completed_consultations(co, monkeypatch):
+    """A partial assessment can resume after an engine failure without redoing Sony's work."""
+    p = co.pipeline.create_project('Retry idea', 'A small calculator', idea=True)
+    original = co.runtime.run
+    calls = []
+    def run(agent, *args, **kwargs):
+        calls.append(agent['name'])
+        if agent['name'] == 'Anshu':
+            raise RuntimeError('engine unavailable')
+        return original(agent, *args, **kwargs)
+    monkeypatch.setattr(co.runtime, 'run', run)
+    with pytest.raises(RuntimeError, match='engine unavailable'):
+        co.pipeline._idea(co.pipeline.project(p['id']))
+    sony = next(t for t in co.tickets.search(p['id']) if t['assignee'] == 'Sony')
+    assert sony['status'] == 'done'
+    monkeypatch.setattr(co.runtime, 'run', original)
+    co.pipeline._idea(co.pipeline.project(p['id']))
+    assert co.tickets.get(sony['id'])['status'] == 'done'
+    assert not any(h['body'] == 'Started again.' for h in co.tickets.get(sony['id'])['history'])
+    assert co.pipeline.project(p['id'])['stage'] == 'idea_review'

@@ -365,6 +365,8 @@ vittics-builder skills add ~/notes/house-style.md         # or a URL, e.g. a CLA
 - **Install it as an app.** In Chrome or Edge, use the install icon in the address bar (Safari:
   File → Add to Dock). Or run `vittics-builder app` to start the dashboard in its own window.
 
+The dashboard uses in-app dialogs for provider changes, worker pairing, budget edits and agent replacement. Cancel or press Escape to dismiss them; empty required fields stay open for correction.
+
 ## Running the company day to day
 
 **Costs and budgets.** Every model call is recorded with its estimated cost
