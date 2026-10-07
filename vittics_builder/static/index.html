@@ -241,7 +241,7 @@
 <div id="app" hidden>
   <div class="shell">
     <nav class="side" aria-label="Main">
-      <div class="brand"><span class="logo" id="logo" aria-hidden="true">O</span><div><b id="company"></b><span>Vittics Builder</span></div></div>
+      <div class="brand"><span class="logo" id="logo" aria-hidden="true">V</span><div><b id="company"></b><span>Vittics Builder</span></div></div>
       <button class="nav" data-go="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
       <button class="nav" data-go="office"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 12h18M12 3v18"/></svg>Office<span class="badge soft" id="b-office" hidden></span></button>
       <button class="nav" data-go="decisions"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg>Decisions<span class="badge" id="b-decisions" hidden></span></button>
@@ -964,7 +964,7 @@ function renderActivity() {
 function render() {
   const me = state.you.role, mine = state.approvals.filter(a => a.required_role === me);
   $("company").textContent = state.company;
-  $("logo").textContent = (state.company[0] || "O").toUpperCase();
+  $("logo").textContent = (state.company[0] || "V").toUpperCase();
   $("whoami").innerHTML = `<b>${esc(state.you.name)}</b> · ${me.toUpperCase()}`;
   $("switch-role").hidden = !state.desktop;
   const ai = state.ai || { ready: true };

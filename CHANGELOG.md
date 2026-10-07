@@ -9,6 +9,9 @@
 - The desktop workflow now checks the macOS app's signature (built and inside the `.dmg`) and starts
   its backend from inside the app before uploading the installers.
 - Corrected the first-open instructions: Control-click → Open does not work on current macOS.
+- If macOS stops the app's backend before it starts, the loading screen now says so and shows how to
+  allow it (Open Anyway, or one Terminal command) instead of an empty "could not start".
+- The loading screen and dashboard logo placeholder said "O" (from OrgForge); now "V".
 
 ## 0.20.1 — 2026-10-06
 - **Choose how your agents think, in the app.** A new install could not be set up without a terminal:

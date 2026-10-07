@@ -59,10 +59,21 @@ fn main() {
                                 errors = errors[start..].to_string();
                             }
                         }
-                        CommandEvent::Terminated(_) if !ready => {
+                        CommandEvent::Terminated(end) if !ready => {
                             let tail: String = errors.lines().rev().take(6).collect::<Vec<_>>().into_iter().rev()
                                 .collect::<Vec<_>>().join("\n");
-                            show_status(&handle, &format!("Vittics Builder could not start.\n\n{tail}"));
+                            // Killed before saying anything: on macOS, Gatekeeper stopping code it has not approved.
+                            let stopped = end.signal == Some(9) && tail.trim().is_empty();
+                            let hint = if stopped && cfg!(target_os = "macos") {
+                                "macOS stopped it before it could start. Open System Settings > Privacy & Security \
+                                 and click Open Anyway for Vittics Builder, or run in Terminal:\n\n\
+                                 xattr -dr com.apple.quarantine \"/Applications/Vittics Builder.app\"\n\n\
+                                 then open Vittics Builder again."
+                                    .to_string()
+                            } else {
+                                tail
+                            };
+                            show_status(&handle, &format!("Vittics Builder could not start.\n\n{hint}"));
                         }
                         CommandEvent::Error(message) if !ready => {
                             show_status(&handle, &format!("Vittics Builder could not start: {message}"));
