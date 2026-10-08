@@ -22,7 +22,8 @@ import time
 from pathlib import Path
 
 EXTRA_PATHS = ["/opt/homebrew/bin", "/usr/local/bin", str(Path.home() / ".local" / "bin"),
-               str(Path.home() / ".npm-global" / "bin"), str(Path.home() / ".cargo" / "bin")]
+               str(Path.home() / ".npm-global" / "bin"), str(Path.home() / ".cargo" / "bin"),
+               str(Path.home() / ".docker" / "bin")]     # Docker Desktop's CLI when it is not linked into /usr/local/bin
 
 
 def login_path() -> str:

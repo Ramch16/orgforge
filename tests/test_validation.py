@@ -6,7 +6,9 @@ import pytest
 from vittics_builder.agent import RunResult
 from vittics_builder.pipeline import PipelineError
 from vittics_builder.tools import Workspace
-from vittics_builder.validation import validate_plan, verify_product
+from vittics_builder.company import Company
+from vittics_builder.llm import MockProvider
+from vittics_builder.validation import evidence, validate_plan, verify_product
 from test_pipeline import decide_next
 
 
@@ -205,3 +207,65 @@ def test_exhausted_builder_cannot_pass_even_when_reviewers_approve(co, monkeypat
     monkeypatch.setattr(co.runtime, 'run', run)
     start_build(co)
     assert decide_next(co, 'cto')['stage'] == 'escalation'
+
+
+def test_checks_may_run_longer_than_the_agents_command_limit(tmp_path):
+    ws = Workspace(tmp_path, timeout=1)
+    contract(ws, 'python -c "import time; time.sleep(1.5)"')
+    assert not verify_product(ws)['passed']                      # the sandbox's 1s limit
+    assert verify_product(ws, timeout=5)['passed']
+
+
+def test_evidence_shows_failures_and_is_optional_on_disk(tmp_path):
+    ws = Workspace(tmp_path)
+    contract(ws, 'python -c "raise SystemExit(7)"')
+    report = verify_product(ws, record=False)
+    assert not (tmp_path / 'docs/VERIFICATION.json').exists()
+    text = evidence(report)
+    assert 'flow: FAILED' in text and 'exit code 7' in text and 'outside your sandbox' in text
+    assert 'docs/VERIFICATION.json' not in text
+    assert 'docs/VERIFICATION.json' in evidence(verify_product(ws))
+
+
+class Recording(MockProvider):
+    """The mock company, remembering every prompt an agent was given."""
+
+    def __init__(self):
+        super().__init__()
+        self.prompts = []
+
+    def complete(self, **kwargs):
+        self.prompts.append((kwargs.get("meta") or {}, json.dumps(kwargs["messages"][:1])))
+        return super().complete(**kwargs)
+
+
+def test_reviewers_and_release_qa_get_the_checks_run_on_this_computer(tmp_path):
+    from test_parallel import plan_approved
+    provider = Recording()
+    co = Company(tmp_path, provider=provider, create=True)
+    p = plan_approved(co)
+    assert co.pipeline.advance(p["id"])["stage"] == "release_approval"
+    sandbox_note = 'outside your sandbox'
+    reviews = [text for meta, text in provider.prompts if meta.get("author")]
+    assert reviews and all(sandbox_note in text for text in reviews)
+    assert any(sandbox_note in text for meta, text in provider.prompts if meta.get("purpose") == "integration")
+    notes = co.db.all("SELECT body FROM ticket_comments WHERE body LIKE 'Ran the acceptance checks on this computer%'")
+    assert notes and all('passed' in n["body"] for n in notes)
+
+
+def test_failing_checks_on_this_computer_skip_qa_and_go_back_to_engineering(tmp_path):
+    from test_parallel import plan_approved
+    provider = Recording()
+    co = Company(tmp_path, provider=provider, create=True)
+    co.s.review_checks = False
+    p = plan_approved(co)
+    ws = Workspace(p["workspace"])
+    data = json.loads(ws.read_file('product.json'))
+    data['checks'][0]['command'] = 'python -c "raise SystemExit(3)"'
+    ws.write_file('product.json', json.dumps(data))
+    assert co.pipeline.advance(p["id"])["stage"] == "contract_review"     # changed checks need the CTO first
+    decide_next(co, "cto")
+    repair = co.db.one("SELECT feedback, description FROM tasks WHERE project_id=? AND key='verify-1'", p["id"])
+    assert repair and 'failed when run on this computer' in repair["description"] and 'exit code 3' in repair["description"]
+    first_repair = min(i for i, (meta, _) in enumerate(provider.prompts) if meta.get("task_key") == "verify-1")
+    assert not any(meta.get("purpose") == "integration" for meta, _ in provider.prompts[:first_repair])

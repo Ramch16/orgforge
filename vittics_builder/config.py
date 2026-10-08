@@ -40,6 +40,8 @@ class Settings:
     docker_image: str = "python:3.12-slim"
     docker_network: bool = False
     command_timeout: int = 300
+    check_timeout: int = 1800
+    review_checks: bool = True
     max_rework: int = 2
     max_delegation_depth: int = 2
     max_parallel: int = 3
@@ -104,6 +106,8 @@ def load_settings(root: str | os.PathLike | None = None) -> Settings:
     s.docker_network = bool(sandbox.get("docker_network", s.docker_network))
     s.command_timeout = int(sandbox.get("command_timeout", s.command_timeout))
     s.max_rework = int(pipeline.get("max_rework", s.max_rework))
+    s.check_timeout = int(pipeline.get("check_timeout", s.check_timeout))
+    s.review_checks = bool(pipeline.get("review_checks", s.review_checks))
     s.max_delegation_depth = int(pipeline.get("max_delegation_depth", s.max_delegation_depth))
     s.max_parallel = max(1, int(pipeline.get("max_parallel", s.max_parallel)))
     s.review_mode = str(pipeline.get("review_mode", s.review_mode))

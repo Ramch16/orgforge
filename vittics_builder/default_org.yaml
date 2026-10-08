@@ -118,7 +118,9 @@ sandbox:
 
 pipeline:
   max_rework: 2                  # times a task is sent back before escalating to the CTO
-  max_delegation_depth: 2        # how deep agents may delegate to other agents
+  check_timeout: 1800            # seconds for each product.json check; they run on this computer, outside agents' sandboxes
+  review_checks: true            # run the product.json checks before each ticket review and show reviewers the results
+  max_delegation_depth: 2       # how deep agents may delegate to other agents
   max_parallel: 3                # tickets worked at the same time per project, each on its own git branch
   review_mode: standard          # who checks each ticket: thorough (every reviewer and QA role),
                                  # standard (one code reviewer and QA), light (one reviewer).
