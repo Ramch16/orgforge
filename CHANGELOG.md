@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.21.0 — 2026-10-08
 - **Checks run on this computer, not in the agents' sandboxes.** Codex's sandbox (and similar ones) cannot
   reach Docker, databases, local ports or browsers, so QA reported "permission denied" instead of results,
   releases were blocked forever and agents were fired for it. Now Vittics Builder runs the `product.json`
