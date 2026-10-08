@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.21.0 — 2026-10-08
+- **Checks run on this computer, not in the agents' sandboxes.** Codex's sandbox (and similar ones) cannot
+  reach Docker, databases, local ports or browsers, so QA reported "permission denied" instead of results,
+  releases were blocked forever and agents were fired for it. Now Vittics Builder runs the `product.json`
+  checks itself before release QA: real failures go straight back to Engineering with the real output,
+  and QA reviews with the results in hand. Ticket reviewers get the same results and are told not to send
+  work back only because their own sandbox could not run something. Only the checks the CTO approved run.
+- Each check may run up to `pipeline.check_timeout` seconds (default 1800) instead of the agents' 300.
+  `pipeline.review_checks: false` turns off the checks before ticket reviews.
+- The desktop app also looks for Docker Desktop's CLI in `~/.docker/bin`.
+
 ## 0.20.3 — 2026-10-07
 - Fixed desktop buttons for AI provider selection, worker pairing, tool installation, budget changes, agent replacement and key/node removal by using in-app dialogs.
 - Empty sign-in, build, message and key submissions now show validation instead of silently doing nothing.

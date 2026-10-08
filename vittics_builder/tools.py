@@ -248,12 +248,15 @@ class Workspace:
                     return "\n".join(found) + "\n... (more files not shown)"
         return "\n".join(found) or "(empty)"
 
-    def run_command(self, command: str, timeout_seconds: int | None = None, extra_env: dict | None = None) -> str:
-        """Run a command in the workspace. `extra_env` (the product's own keys) is for acceptance checks only."""
+    def run_command(self, command: str, timeout_seconds: int | None = None, extra_env: dict | None = None,
+                    max_seconds: int | None = None) -> str:
+        """Run a command in the workspace. `extra_env` (the product's own keys) and `max_seconds` (a limit above
+        the sandbox's) are for acceptance checks only."""
         for pattern, why in DENIED:
             if re.search(pattern, command):
                 raise ToolError(f"Command refused by company policy ({why}).")
-        timeout = min(int(timeout_seconds or self.timeout), self.timeout)
+        cap = int(max_seconds or self.timeout)
+        timeout = min(int(timeout_seconds or cap), cap)
         env = {k: v for k, v in os.environ.items() if not SECRET_ENV.search(k)}
         env.update(extra_env or {})
         if self.mode == "docker":

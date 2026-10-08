@@ -73,8 +73,11 @@ def read_contract(ws: Workspace) -> dict:
     return data
 
 
-def verify_product(ws: Workspace, env: dict | None = None, redact=None) -> dict:
-    """Run the acceptance checks. `env`: the project's keys; `redact` hides their values before anything is saved."""
+def verify_product(ws: Workspace, env: dict | None = None, redact=None, timeout: int | None = None,
+                   record: bool = True) -> dict:
+    """Run the acceptance checks on this computer. `env`: the project's keys; `redact` hides their values before
+    anything is saved; `timeout`: seconds per check, which may exceed the agents' command limit; `record`: save
+    docs/VERIFICATION.json (not for ticket reviews, whose parallel branches would conflict on it)."""
     report = {'checked_at': now(), 'passed': False, 'checks': [], 'errors': []}
     try:
         contract = read_contract(ws)
@@ -84,7 +87,7 @@ def verify_product(ws: Workspace, env: dict | None = None, redact=None) -> dict:
                 report['errors'].append(f'Missing delivery documentation: {path}')
         for check in contract['checks']:
             try:
-                output = ws.run_command(check['command'], extra_env=env)
+                output = ws.run_command(check['command'], extra_env=env, timeout_seconds=timeout, max_seconds=timeout)
                 if redact:
                     output = redact(output)
                 passed = output.splitlines()[0] == 'exit code 0'
@@ -94,5 +97,24 @@ def verify_product(ws: Workspace, env: dict | None = None, redact=None) -> dict:
     except (OSError, ValueError, ToolError) as exc:
         report['errors'].append(f'Invalid acceptance contract: {exc}')
     report['passed'] = bool(report['checks']) and not report['errors'] and all(c['passed'] for c in report['checks'])
-    ws.write_file('docs/VERIFICATION.json', json.dumps(report, indent=2))
+    report['recorded'] = record
+    if record:
+        ws.write_file('docs/VERIFICATION.json', json.dumps(report, indent=2))
     return report
+
+
+HOST_EVIDENCE = ("Vittics Builder ran the product's acceptance checks (product.json) on this computer, outside "
+                 "your sandbox, on the current files:\n{results}\n{saved}"
+                 "Treat these results as the runtime evidence. Your own sandbox may block Docker, databases, local "
+                 "ports or browsers: never request changes only because you could not run something yourself.")
+
+
+def evidence(report: dict, tail: int = 1500) -> str:
+    """The checks' results for an agent's prompt: each check's outcome, and the end of a failing check's output."""
+    lines = [f"- Not checked: {e}" for e in report['errors']]
+    for c in report['checks']:
+        lines.append(f"- {c['id']}: {'PASSED' if c['passed'] else 'FAILED'} (`{c['command']}`)")
+        if not c['passed']:
+            lines.append("  " + c['output'][-tail:].replace("\n", "\n  "))
+    return HOST_EVIDENCE.format(results="\n".join(lines) or "- No checks are defined yet.",
+                                saved="Full output: docs/VERIFICATION.json.\n" if report.get('recorded') else "")

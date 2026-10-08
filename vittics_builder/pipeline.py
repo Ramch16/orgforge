@@ -27,7 +27,7 @@ from .org import Org
 from .performance import Performance
 from .tickets import PRIORITY_ORDER, WORK_KINDS, note, ticket_key, where
 from .tools import Workspace
-from .validation import CONTRACT, CONTRACT_GUIDE, validate_plan, verify_product
+from .validation import CONTRACT, CONTRACT_GUIDE, evidence, validate_plan, verify_product
 
 IDEA_STAGES = ["idea", "idea_review", "idea_decision", "plan", "plan_approval"]
 STAGES = [*IDEA_STAGES, "prd", "prd_approval", "architecture", "architecture_approval", "build",
@@ -668,6 +668,18 @@ class Pipeline:
             self._task_finish(p, ws)
             return
         release_findings = []
+        # Agents' sandboxes cannot reach Docker, databases, local ports or browsers, so the checks run here first:
+        # real failures go straight back to Engineering, and QA reviews with the real results in hand.
+        # Only the checks the CTO approved are run.
+        if not self._contract_unchanged(p, ws):
+            return
+        self.db.log("work", "Running the product's acceptance checks on this computer.", p["id"])
+        checked = self._host_checks(p, ws)
+        ws.commit("Executable product verification")
+        checked_head = ws.git("rev-parse", "HEAD").strip()
+        if not checked["passed"]:
+            self._release_failure(p, self._check_findings(checked))
+            return
         qa = self.org.pick(kind="qa")
         if qa:
             self.db.log("work", f"{qa['name']} is running the release check.", p["id"], actor=qa["name"])
@@ -677,7 +689,8 @@ class Pipeline:
             integration = self.runtime.run(qa, "All build tasks are complete. Check the product as a whole against docs/PRD.md: "
                              "install it, run the full test suite and try the main flows. Write what you ran and "
                              "what you found to docs/QA_REPORT.md, including anything that does not work. "
-                             "Finish by calling submit_review; request_changes if any required flow fails.",
+                             "Finish by calling submit_review; request_changes if any required flow fails.\n\n"
+                             + evidence(checked),
                              ws, project_id=p["id"], meta={"purpose": "integration", "ticket_id": qa_ticket})
             ws.commit(f"Release check ({qa['name']})")
             if not integration.completed or not integration.review or integration.review["verdict"] != "approve" or not self._read(ws, "docs/QA_REPORT.md"):
@@ -700,14 +713,12 @@ class Pipeline:
             return
         if not self._contract_unchanged(p, ws):
             return
-        vault = getattr(self.runtime, "vault", None)
-        verification = verify_product(ws, vault.env(p["id"]) if vault else None,
-                                      (lambda text: vault.redact(p["id"], text)) if vault else None)
-        ws.commit("Executable product verification")
-        if not verification["passed"]:
-            release_findings.extend(verification["errors"])
-            release_findings.extend(f"Check {c['id']}: {c['output']}" for c in verification["checks"] if not c["passed"])
-            self._release_failure(p, release_findings)
+        changed = [f for f in ws.git("diff", "--name-only", checked_head, "HEAD").splitlines() if f.strip()]
+        if any(not f.startswith("docs/") for f in changed):    # QA or the audits changed the product: check again
+            checked = self._host_checks(p, ws)
+            ws.commit("Executable product verification")
+        if not checked["passed"]:
+            self._release_failure(p, self._check_findings(checked))
             return
         report = self._read(ws, "docs/QA_REPORT.md") or "No QA report was produced."
         audits = sorted((ws.root / "docs" / "audits").glob("*.md")) if (ws.root / "docs" / "audits").is_dir() else []
@@ -773,6 +784,18 @@ class Pipeline:
                        {"contract": current, "approved": approved})
         self._stage(p["id"], "contract_review")
         return False
+
+    def _host_checks(self, p: dict, ws: Workspace, record: bool = True) -> dict:
+        """Run product.json's checks on this computer (not in an agent's sandbox), with the project's keys."""
+        vault = getattr(self.runtime, "vault", None)
+        return verify_product(ws, vault.env(p["id"]) if vault else None,
+                              (lambda text: vault.redact(p["id"], text)) if vault else None,
+                              timeout=self.s.check_timeout, record=record)
+
+    @staticmethod
+    def _check_findings(report: dict) -> list[str]:
+        return [*report["errors"], *(f"Check {c['id']} failed when run on this computer: {c['output']}"
+                                     for c in report["checks"] if not c["passed"])]
 
     def _release_failure(self, p: dict, findings: list[str]) -> None:
         pid = p["id"]
@@ -987,6 +1010,14 @@ class Pipeline:
             findings, approved, scores = [], res.completed, []
             if not res.completed:
                 findings.append("Builder did not finish within its turn budget.")
+            checked = ""
+            if self.s.review_checks and ws.resolve(CONTRACT).is_file():
+                report = self._host_checks(p, ws, record=False)
+                checked = ("\n\n" + evidence(report) + "\nA check may fail only because a later ticket has not built "
+                           "its part yet: judge this task's part.")
+                note(self.db, task["id"], "Vittics Builder", "Ran the acceptance checks on this computer: "
+                     + ", ".join(f"{c['id']} {'passed' if c['passed'] else 'FAILED'}" for c in report["checks"])
+                     + ("" if report["checks"] else "none defined") + ".", kind="comment")
             for check_role in self._checkers():
                 checker = self.org.pick(role=check_role["id"], exclude=agent["id"])
                 if not checker:
@@ -1000,7 +1031,7 @@ class Pipeline:
                     f"\"{p['name']}\", done by {agent['name']}.\n\nTask:\n{task['description']}\n\n"
                     f"{agent['name']}'s summary:\n{res.text}\n\nFiles changed (git status):\n{changed}\n\n"
                     "Requirements are in docs/PRD.md and the design in docs/ARCHITECTURE.md. "
-                    "Finish by calling submit_review.",
+                    "Finish by calling submit_review." + checked,
                     ws, project_id=pid, meta={**meta, "author": agent["name"],
                                                "author_model": self.db.one('SELECT model FROM routing_decisions WHERE id=?',
                                                                            res.route_id)['model'] if res.route_id else agent['model']})
