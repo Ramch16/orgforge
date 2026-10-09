@@ -53,6 +53,8 @@ def _obj(props: dict, required: list[str]) -> dict:
 _STR = {"type": "string"}
 
 TOOL_SPECS: dict[str, dict] = {
+    "run_approved_checks": {"description": "Run selected CTO-approved product.json checks through Vittics on this computer, outside the coding CLI sandbox. Use when local execution is blocked; results are runtime evidence.",
+        "input_schema": {"type": "object", "properties": {"ids": {"type": "array", "items": {"type": "string"}, "minItems": 1}}, "required": ["ids"], "additionalProperties": False}},
     "read_file": {
         "description": "Read a text file from the project workspace.",
         "input_schema": _obj({"path": _STR}, ["path"]),

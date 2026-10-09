@@ -57,6 +57,7 @@ BUILTIN_ENGINES: dict[str, dict] = {
 }
 
 ACTIONS = {
+    "run_approved_checks": ("run_checks", '{"ids": ["core-flow"]}'),
     'submit_journey': ('journey','{"steps": [{"action": "click|fill|assert_text|screenshot|goto", "selector": "...", "value": "..."}], "rationale": "customer goal"}'),
     # vittics-builder tool -> (key in the JSON block, how to describe its value)
     'submit_evaluation': ('evaluation','{"scores": {"functionality": 0, "ux": 0, "security": 0, "cost": 0, "architecture": 0, "scalability": 0, "customer_value": 0, "maintainability": 0}, "findings": [{"title": "...", "body": "evidence", "severity": "error"}]}'),
@@ -97,7 +98,11 @@ def protocol(names: list[str]) -> str:
     rows = [f'  "{ACTIONS[n][0]}": {ACTIONS[n][1]}' for n in names if n in ACTIONS]
     if not rows:
         return "Finish with a short plain summary of what you did."
-    return ("When you are finished, reply with a short plain summary, then end with exactly one fenced block "
+    guidance = ("If your sandbox blocks Docker, ports or dependencies, request checks with run_checks instead of retrying blocked commands. "
+                "Use only IDs from the CTO-approved product.json. Finish that reply with run_checks alone; Vittics will run them "
+                "on this computer and resume you with the actual results before you submit work.\n"
+                if "run_approved_checks" in names else "")
+    return guidance + ("When you are finished, reply with a short plain summary, then end with exactly one fenced block "
             "tagged vittics-builder holding a JSON object with only the keys you use:\n```vittics-builder\n{\n"
             + ",\n".join(rows) + "\n}\n```\nUse the block for these company actions; do your file and command work "
             "with your own tools in the working directory.")
@@ -119,6 +124,8 @@ def parse_block(text: str) -> tuple[str, dict, str | None]:
 def actions_to_calls(data: dict) -> list[tuple[str, dict]]:
     """Turn a parsed block into (tool name, arguments) calls Vittics Builder already knows how to run."""
     calls: list[tuple[str, dict]] = []
+    if isinstance(data.get("run_checks"), dict):
+        calls.append(("run_approved_checks", data["run_checks"]))
     if "plan" in data:
         calls.append(("submit_plan", {"tasks": data["plan"]}))
     for key, tool in (("journey", "submit_journey"), ("evaluation", "submit_evaluation"), ("review", "submit_review"), ("assessment", "submit_assessment"),

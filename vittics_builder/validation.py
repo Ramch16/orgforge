@@ -74,7 +74,7 @@ def read_contract(ws: Workspace) -> dict:
 
 
 def verify_product(ws: Workspace, env: dict | None = None, redact=None, timeout: int | None = None,
-                   record: bool = True) -> dict:
+                   record: bool = True, ids: list[str] | None = None) -> dict:
     """Run the acceptance checks on this computer. `env`: the project's keys; `redact` hides their values before
     anything is saved; `timeout`: seconds per check, which may exceed the agents' command limit; `record`: save
     docs/VERIFICATION.json (not for ticket reviews, whose parallel branches would conflict on it)."""
@@ -82,6 +82,11 @@ def verify_product(ws: Workspace, env: dict | None = None, redact=None, timeout:
     try:
         contract = read_contract(ws)
         report['contract_sha256'] = hashlib.sha256(ws.resolve(CONTRACT).read_bytes()).hexdigest()
+        if ids is not None:
+            available = {c['id'] for c in contract['checks']}
+            if not isinstance(ids, list) or not ids or any(not isinstance(i, str) or i not in available for i in ids):
+                raise ValueError('Use existing product.json check IDs.')
+            contract['checks'] = [c for c in contract['checks'] if c['id'] in ids]
         for path in ('README.md', 'docs/OPERATIONS.md'):
             if not ws.resolve(path).is_file() or not ws.resolve(path).read_text(encoding="utf-8").strip():
                 report['errors'].append(f'Missing delivery documentation: {path}')

@@ -168,6 +168,8 @@ class AgentRuntime:
             names += [n for n in enabled if n not in names and (only_tools is None or n in only_tools)]
         if depth >= self.s.max_delegation_depth:
             names = [n for n in names if n != "delegate"]
+        if ws and project_id and not chat_with and "run_command" in names:
+            names.append("run_approved_checks")
         tools = [self.integrations.schema(role['id'], n) if self.integrations and
                  n in ('browser_journey', 'mcp_call', 'mcp_list_tools') else tool_schema(n) for n in names]
         if project_id and self.tickets:
@@ -249,6 +251,9 @@ class AgentRuntime:
             result.text = f"(Unknown engine '{engine_name}'. Configure it under engines: in org.yaml.)"
             return result
         system = self._system(agent, role, bool(project_id), chat_with, memories) + "\n\n" + protocol(names)
+        if project_id and self.tickets:
+            system += ("\n\nUse these staffed role IDs for ticket ownership (never department names): "
+                       + ", ".join(r["id"] for r in self.tickets.work_roles()))
         prompt = instructions
         if history:
             prompt = "Conversation so far:\n" + "\n".join(
@@ -289,6 +294,30 @@ class AgentRuntime:
             self.runs.event(meta["run_id"], "text", f"(through {engine_name}, {out['turns']} turns"
                             + (f", on worker machine '{out['node']}')" if out.get("node") else ")"))
         result.turns, result.completed = out["turns"], not out["is_error"]
+        if "run_checks" in data:
+            # Do not submit a review or file tickets before the requester consumes the runtime result.
+            if "run_approved_checks" not in names or chat_with:
+                result.completed = False
+                result.text = text + "\nApproved checks are not available in this assignment."
+                return result
+            round_number = meta.get("check_round", 0)
+            if round_number >= 2 or out["is_error"]:
+                result.completed = False
+                result.text = text + "\nCheck/repair continuation limit reached; report the unresolved check and owner."
+                return result
+            try:
+                checked = self._execute(agent, "run_approved_checks", data["run_checks"], ws, result, project_id, meta, 0)
+            except (ToolError, KeyError, TypeError, ValueError) as exc:
+                checked = "Approved checks were not run: " + str(exc)
+            resumed = self._run_cli(agent, role, names,
+                instructions + "\n\nYour previous work summary:\n" + text +
+                "\n\nVittics check result on the current workspace:\n" + checked +
+                "\nRead the result, repair demonstrated failures within your ticket, and finish with observed evidence. "
+                "Do not treat sandbox denial as an application failure. At most two check requests are allowed per assignment.",
+                ws, project_id, {**meta, "check_round": round_number + 1}, history, chat_with, memories)
+            resumed.turns += result.turns
+            resumed.tool_log.insert(0, "run_approved_checks")
+            return resumed
         notes = [problem] if problem else []
         for name, args in actions_to_calls(data):
             if name not in names:
@@ -304,6 +333,33 @@ class AgentRuntime:
         return result
 
     def _execute(self, agent, name, args, ws, result, project_id, meta, depth) -> str:
+        if name == "run_approved_checks":
+            if (not isinstance(args, dict) or not isinstance(args.get("ids"), list) or not args["ids"]
+                    or any(not isinstance(i, str) for i in args["ids"])):
+                raise ToolError("Request a nonempty list of approved check IDs.")
+            if not ws or not project_id:
+                raise ToolError("Approved checks require a project workspace.")
+            from .validation import CONTRACT, verify_product, evidence
+            row = self.db.one("SELECT payload FROM approvals WHERE project_id=? AND status='approved' "
+                              "AND kind IN ('architecture', 'contract') ORDER BY id DESC LIMIT 1", project_id)
+            approved = json.loads(row["payload"]).get("contract") if row else None
+            current = ws.resolve(CONTRACT)
+            if not approved or not current.is_file() or current.read_text(encoding="utf-8") != approved:
+                raise ToolError("product.json must match the CTO-approved contract before host execution.")
+            if meta.get("host_check_requests", 0) >= 2:
+                raise ToolError("Check/repair continuation limit reached; report the unresolved check and owner.")
+            meta["host_check_requests"] = meta.get("host_check_requests", 0) + 1
+            vault = self.vault
+            self.db.log("work", "Running approved checks on this computer: " + ", ".join(args["ids"]),
+                        project_id, actor=agent["name"])
+            report = verify_product(ws, vault.env(project_id) if vault else None,
+                (lambda value: vault.redact(project_id, value)) if vault else None,
+                timeout=self.s.check_timeout, record=False, ids=args.get("ids", []))
+            output = evidence(report) + "\n\nCheck output:\n" + json.dumps(report, indent=2)
+            if self.runs and meta.get("run_id"):
+                for offset in range(0, len(output), 3500):
+                    self.runs.event(meta["run_id"], "tool_result", output[offset:offset + 3500])
+            return output
         if name in ('browser_journey', 'mcp_call', 'mcp_list_tools') and self.integrations:
             return self.integrations.call(agent['role'], name, args, ws)
         if name == "remember" and self.memory:
