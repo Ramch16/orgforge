@@ -49,5 +49,5 @@ jobs:
         run: |
           git config --global user.email "ci@vittics.local"
           git config --global user.name "Vittics Builder CI"
-      - name: Test desktop dialog interactions
-        run: python -m pytest tests/test_dashboard_dialogs.py -q -p no:cacheprovider
+      - name: Test browser integrations, operations and desktop dialogs
+        run: python -m pytest tests/test_dashboard_dialogs.py tests/test_integrations.py tests/test_company_os.py -q -p no:cacheprovider
