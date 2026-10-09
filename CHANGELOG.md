@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.22.0
+- Builders and QA can request selected CTO-approved acceptance checks through Vittics while working, then consume the actual output before submission. Coding CLI sandbox permissions stay unchanged.
+- Bound check/repair continuations, retain check output in run history, show valid staffed ticket roles, and preserve failure tails in long approval summaries.
+- Reject unapproved acceptance-contract changes before ticket-review host execution.
+
 ## 0.21.0 — 2026-10-08
 - **Checks run on this computer, not in the agents' sandboxes.** Codex's sandbox (and similar ones) cannot
   reach Docker, databases, local ports or browsers, so QA reported "permission denied" instead of results,

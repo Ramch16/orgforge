@@ -447,6 +447,10 @@ vittics-builder build "A customer support app with login, a database and Stripe 
   release review is only created once audits, acceptance checks and executable verification pass.
   The sign-off lists everything autopilot decided, and why. Change the level on the project page or
   with `vittics-builder autopilot <project> <level>`.
+- **Checks during repairs.** Builders and QA can request named checks from the CTO-approved
+  `product.json` through Vittics, outside their coding CLI sandbox. Vittics resumes the CLI
+  with the actual output before submission (at most two check requests per assignment).
+  Changed contracts need approval; chat cannot run checks. Docker Desktop must be running.
 - **This computer is checked before building.** If it lacks what the project needs (Node.js,
   PostgreSQL, Docker...), building waits at *Preparing this computer* with the install commands.
 - **Keys for the product.** API keys and database URLs go in the project's keys (project page, or

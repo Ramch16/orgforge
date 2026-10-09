@@ -109,9 +109,11 @@ class Pipeline:
 
     def _approval(self, pid: int | None, kind: str, role: str, title: str, summary: str, payload: dict) -> int:
         self.db.log("approval", f"Waiting for the {role.upper()}: {title}", pid)
+        if len(summary) > 6000:
+            summary = summary[:2800] + "\n… middle omitted; failure tail follows …\n" + summary[-3100:]
         return self.db.run(
             "INSERT INTO approvals (project_id, kind, required_role, title, summary, payload, created_at) "
-            "VALUES (?,?,?,?,?,?,?)", pid, kind, role, title, summary[:6000], json.dumps(payload), now())
+            "VALUES (?,?,?,?,?,?,?)", pid, kind, role, title, summary, json.dumps(payload), now())
 
     def _stage_ticket(self, pid: int, key: str, title: str, agent: dict, description: str,
                       reporter: str = "Vittics Builder", handoff: str = "") -> int:
@@ -788,6 +790,9 @@ class Pipeline:
     def _host_checks(self, p: dict, ws: Workspace, record: bool = True) -> dict:
         """Run product.json's checks on this computer (not in an agent's sandbox), with the project's keys."""
         vault = getattr(self.runtime, "vault", None)
+        current = ws.resolve(CONTRACT)
+        if not current.is_file() or current.read_text(encoding="utf-8") != self._approved_contract(p["id"]):
+            return {"passed": False, "checks": [], "errors": ["Acceptance contract changed or has not been approved; no host commands ran."], "recorded": False}
         return verify_product(ws, vault.env(p["id"]) if vault else None,
                               (lambda text: vault.redact(p["id"], text)) if vault else None,
                               timeout=self.s.check_timeout, record=record)
